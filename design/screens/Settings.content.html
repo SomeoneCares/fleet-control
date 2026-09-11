@@ -1,0 +1,82 @@
+      <!-- Page header -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px;">
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="font-size:12px;color:#3f4850;">Workspace</div>
+          <h1 style="margin:0;font-size:24px;line-height:32px;font-weight:600;letter-spacing:-0.02em;">Settings</h1>
+        </div>
+      </div>
+
+      <!-- Body: tabs + panel -->
+      <div style="display:flex;gap:20px;align-items:flex-start;">
+        <!-- Vertical tabs -->
+        <div style="width:220px;flex-shrink:0;display:flex;flex-direction:column;gap:2px;">
+          <div style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h10M3 8h10M3 12h6"></path></svg>General</div>
+          <div style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;background:#cce5ff;color:#006194;font-weight:600;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12l3.5-4 2.5 2.5L11 6l3 3.5"></path><path d="M2 14h12"></path></svg>Observability</div>
+          <div style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"></circle><path d="M5.5 8.2 7.2 9.9 10.8 6.3"></path></svg>Approvals</div>
+          <div style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="10.5" r="3"></circle><path d="M7.6 8.4 13.5 2.5M11 5l2 2M9.5 6.5l2 2"></path></svg>API tokens</div>
+          <div style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11V7a4 4 0 0 1 8 0v4l1 1.5H3z"></path><path d="M6.5 14a1.5 1.5 0 0 0 3 0"></path></svg>Notifications</div>
+        </div>
+
+        <!-- Panel -->
+        <div style="flex:1;max-width:720px;min-width:0;background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;overflow:hidden;">
+          <div style="padding:16px 20px;border-bottom:1px solid #dbe3ee;display:flex;flex-direction:column;gap:2px;">
+            <div style="font-size:15px;font-weight:600;">Observability</div>
+            <div style="font-size:12px;color:#3f4850;">Where run traces and metrics go. Evidence checks in Assurance depend on traces being available.</div>
+          </div>
+
+          <!-- Langfuse toggle row -->
+          <div style="padding:16px 20px;border-bottom:1px solid #dbe3ee;display:flex;align-items:flex-start;justify-content:space-between;gap:24px;">
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <div style="font-weight:500;">Send run traces to Langfuse</div>
+              <div style="font-size:12px;color:#3f4850;line-height:16px;">Uses the Hermes Langfuse plugin on each instance; Fleet Control reads traces for evidence checks.</div>
+            </div>
+            <div style="width:40px;height:22px;border-radius:999px;background:#006194;position:relative;flex-shrink:0;margin-top:1px;"><div style="position:absolute;top:3px;right:3px;width:16px;height:16px;border-radius:999px;background:#ffffff;"></div></div>
+          </div>
+
+          <!-- Fields -->
+          <div style="padding:16px 20px;border-bottom:1px solid #dbe3ee;display:flex;flex-direction:column;gap:14px;">
+            <div style="display:grid;grid-template-columns:160px 1fr;gap:16px;align-items:center;">
+              <div style="font-size:13px;font-weight:500;">Langfuse host</div>
+              <div style="height:36px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;padding:0 12px;font-family:'JetBrains Mono',monospace;font-size:12px;">https://langfuse.meridian.internal</div>
+            </div>
+            <div style="display:grid;grid-template-columns:160px 1fr;gap:16px;align-items:center;">
+              <div style="font-size:13px;font-weight:500;">Public key</div>
+              <div style="display:flex;gap:8px;">
+                <div style="flex:1;height:36px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;padding:0 12px;font-family:'JetBrains Mono',monospace;font-size:12px;">pk-lf-••••••••••••••••••••7f2a</div>
+                <div style="height:36px;padding:0 12px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;gap:6px;font-weight:500;font-size:13px;white-space:nowrap;">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"></path><circle cx="8" cy="8" r="2"></circle></svg>Reveal
+                </div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:160px 1fr;gap:16px;align-items:center;">
+              <div style="font-size:13px;font-weight:500;">Secret key</div>
+              <div style="font-size:12px;color:#3f4850;line-height:16px;">Stored on each instance, never read back by Fleet Control. Rotate from the instance.</div>
+            </div>
+          </div>
+
+          <!-- Per-instance status -->
+          <div style="padding:16px 20px;border-bottom:1px solid #dbe3ee;display:flex;flex-direction:column;gap:8px;">
+            <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Plugin status per instance</div>
+            <div style="display:flex;flex-direction:column;border:1px solid #dbe3ee;border-radius:8px;overflow:hidden;">
+              <div style="display:flex;align-items:center;gap:12px;padding:9px 12px;border-bottom:1px solid #dbe3ee;font-size:13px;"><span style="flex:1;">hermes-prod-eu-01</span><span style="font-size:12px;color:#3f4850;">Last trace 40 s ago</span><span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;">Enabled</span></div>
+              <div style="display:flex;align-items:center;gap:12px;padding:9px 12px;border-bottom:1px solid #dbe3ee;font-size:13px;"><span style="flex:1;">hermes-staging-eu-01</span><span style="font-size:12px;color:#3f4850;">Last trace 3 min ago</span><span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;">Enabled</span></div>
+              <div style="display:flex;align-items:center;gap:12px;padding:6px 12px 6px 12px;font-size:13px;"><span style="flex:1;">hermes-lab-01</span><span style="font-size:12px;color:#3f4850;">Evidence checks unavailable</span><span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#dce9ff;color:#3f4850;font-size:12px;font-weight:600;">Not enabled</span><div style="height:30px;padding:0 12px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;font-weight:500;font-size:13px;">Enable</div></div>
+            </div>
+            <div style="font-size:12px;color:#3f4850;line-height:16px;">Enabling creates a plan to install the plugin on that instance. Nothing changes until you apply it.</div>
+          </div>
+
+          <!-- OTLP toggle row -->
+          <div style="padding:16px 20px;border-bottom:1px solid #dbe3ee;display:flex;align-items:flex-start;justify-content:space-between;gap:24px;">
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <div style="font-weight:500;">Export OTLP metrics</div>
+              <div style="font-size:12px;color:#3f4850;line-height:16px;">Run counts, latency and token usage per agent, pushed to your collector every 60 s.</div>
+            </div>
+            <div style="width:40px;height:22px;border-radius:999px;background:#bfc7d2;position:relative;flex-shrink:0;margin-top:1px;"><div style="position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:999px;background:#ffffff;"></div></div>
+          </div>
+
+          <!-- Footer -->
+          <div style="padding:12px 20px;display:flex;align-items:center;justify-content:flex-end;gap:8px;background:#f8f9ff;">
+            <div style="height:36px;padding:0 16px;border-radius:8px;background:#006194;color:#ffffff;display:flex;align-items:center;font-weight:600;">Save</div>
+          </div>
+        </div>
+      </div>

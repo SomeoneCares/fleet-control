@@ -1,0 +1,169 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #006194; } a:hover { color: #007bb9; }
+  </style>
+</helmet>
+<div style="width:1440px;min-height:960px;background:#f8f9ff;font-family:Inter,system-ui,sans-serif;color:#0b1c30;display:flex;flex-direction:column;font-size:14px;line-height:20px;">
+
+  <!-- TOP BAR -->
+  <div style="height:56px;background:#ffffff;border-bottom:1px solid #dbe3ee;display:flex;align-items:center;padding:0 20px;gap:16px;flex-shrink:0;">
+    <div style="display:flex;align-items:center;gap:10px;width:212px;">
+      <div style="width:28px;height:28px;border-radius:8px;background:#006194;display:flex;align-items:center;justify-content:center;">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="3.5" r="1.8"></circle><circle cx="3.5" cy="12" r="1.8"></circle><circle cx="12.5" cy="12" r="1.8"></circle><path d="M7 5.2 4.4 10.3M9 5.2l2.6 5.1M5.3 12h5.4"></path></svg>
+      </div>
+      <div style="display:flex;flex-direction:column;line-height:14px;">
+        <span style="font-weight:700;font-size:14px;letter-spacing:-0.01em;">Fleet Control</span>
+        <span style="font-size:11px;color:#3f4850;">for Hermes Agent</span>
+      </div>
+    </div>
+    <div style="flex:1;display:flex;justify-content:center;">
+      <div style="width:360px;height:32px;border:1px solid #bfc7d2;border-radius:8px;background:#f8f9ff;display:flex;align-items:center;gap:8px;padding:0 10px;color:#707881;font-size:13px;">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#707881" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="4.5"></circle><path d="M10.5 10.5 14 14"></path></svg>
+        <span style="flex:1;">Search decisions, outputs…</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;border:1px solid #bfc7d2;border-radius:4px;padding:0 5px;">⌘K</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;">
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11V7a4 4 0 0 1 8 0v4l1 1.5H3z"></path><path d="M6.5 14a1.5 1.5 0 0 0 3 0"></path></svg>
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"></circle><path d="M6.2 6.2a1.8 1.8 0 1 1 2.6 1.6c-.6.3-.8.7-.8 1.2"></path><circle cx="8" cy="11.4" r=".4"></circle></svg>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div style="width:28px;height:28px;border-radius:999px;background:#e1e0ff;color:#4648d4;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;">MO</div>
+        <span style="font-size:13px;font-weight:500;">Marcus Okafor</span>
+        <span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;background:#dce9ff;color:#3f4850;font-size:11px;font-weight:600;">Compliance officer</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex:1;">
+    <!-- SIDEBAR -->
+    <div style="width:232px;background:#eff4ff;border-right:1px solid #dbe3ee;padding:16px 12px;display:flex;flex-direction:column;gap:20px;flex-shrink:0;">
+
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div data-nav="home" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 7.5 8 3l5.5 4.5"></path><path d="M4 6.8V13h8V6.8"></path><path d="M6.5 13V9.5h3V13"></path></svg>Home</div>
+        <div data-nav="decisions" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5 13 3.5v4c0 3-2.2 5.3-5 6.5-2.8-1.2-5-3.5-5-6.5v-4z"></path><path d="M5.8 8l1.6 1.6L10.5 6.5"></path></svg>My decisions<span style="margin-left:auto;display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:#e1e0ff;color:#4648d4;font-size:11px;font-weight:700;">3</span></div>
+        <div data-nav="rooms" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h12v7H6l-3 2.5V11H2z"></path></svg>Decision Rooms</div>
+        <div data-nav="outputs" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;background:#cce5ff;color:#006194;font-weight:600;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h6l3 3v9H4z"></path><path d="M10 2v3h3M6.5 8h4M6.5 11h4"></path></svg>Fleet outputs</div>
+        <div data-nav="ask" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11v7h-5l-3 2.5V10.5h-3z"></path><path d="M5.5 7h5"></path></svg>Ask the fleet</div>
+      </div>
+
+      <div style="flex:1;"></div>
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div data-nav="settings" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2"></circle><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"></path></svg>Settings</div>
+        <div style="padding:10px 10px 0;font-size:11px;color:#3f4850;line-height:16px;">Meridian Bank · Compliance workspace<br>Fleet: AML Investigation</div>
+      </div>
+    </div>
+
+    <!-- MAIN -->
+    <div style="flex:1;padding:28px 32px;display:flex;flex-direction:column;gap:20px;min-width:0;">
+      <!-- Page header -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px;">
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="font-size:12px;color:#3f4850;">Workspace</div>
+          <h1 style="margin:0;font-size:24px;line-height:32px;font-weight:600;letter-spacing:-0.02em;">Fleet outputs</h1>
+          <div style="color:#3f4850;">Documents and results the fleet has shared with your role.</div>
+        </div>
+      </div>
+
+      <!-- Outputs table -->
+      <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid #dbe3ee;">
+          <div style="height:32px;flex:1;max-width:280px;border:1px solid #bfc7d2;border-radius:8px;background:#f8f9ff;display:flex;align-items:center;gap:8px;padding:0 10px;color:#707881;font-size:13px;">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#707881" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="4.5"></circle><path d="M10.5 10.5 14 14"></path></svg>Search outputs…
+          </div>
+          <div style="height:32px;padding:0 10px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;gap:6px;font-size:13px;">Type: All <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg></div>
+          <div style="height:32px;padding:0 10px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;gap:6px;font-size:13px;">Case: All <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg></div>
+        </div>
+        <!-- header row -->
+        <div style="display:grid;grid-template-columns:2.4fr 1.1fr 1.2fr 1fr 1fr;gap:12px;padding:10px 16px;border-bottom:1px solid #dbe3ee;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">
+          <div>Output</div><div>Case</div><div>Produced by</div><div>When</div><div>Classification</div>
+        </div>
+        <!-- row 1 -->
+        <div style="display:grid;grid-template-columns:2.4fr 1.1fr 1.2fr 1fr 1fr;gap:12px;padding:12px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+          <div style="display:flex;align-items:center;gap:12px;min-width:0;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 2h6l3 3v9H4z"></path><path d="M10 2v3h3M6.5 8h4M6.5 11h4"></path></svg><div style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">SAR draft v1 (AML-2026-0412).docx</span><span style="font-size:12px;color:#3f4850;">Word document</span></div></div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:12px;">AML-2026-0412</div>
+          <div style="font-size:13px;">SAR Writer</div>
+          <div style="font-size:13px;color:#3f4850;">14:20 today</div>
+          <div><span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;background:#ffdad6;color:#93000a;font-size:11px;font-weight:600;">Restricted</span></div>
+        </div>
+        <!-- row 2 -->
+        <div style="display:grid;grid-template-columns:2.4fr 1.1fr 1.2fr 1fr 1fr;gap:12px;padding:12px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+          <div style="display:flex;align-items:center;gap:12px;min-width:0;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M5 3H3.5v10H5M11 3h1.5v10H11"></path><path d="M6.5 9.5 8 8l1.5 1.5"></path></svg><div style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Screening result 0412.json</span><span style="font-size:12px;color:#3f4850;">Structured result</span></div></div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:12px;">AML-2026-0412</div>
+          <div style="font-size:13px;">Sanctions Screener</div>
+          <div style="font-size:13px;color:#3f4850;">13:51 today</div>
+          <div><span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;background:#fff1cc;color:#8a5a00;font-size:11px;font-weight:600;">Confidential</span></div>
+        </div>
+        <!-- row 3 -->
+        <div style="display:grid;grid-template-columns:2.4fr 1.1fr 1.2fr 1fr 1fr;gap:12px;padding:12px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+          <div style="display:flex;align-items:center;gap:12px;min-width:0;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="3.5" cy="8" r="1.5"></circle><circle cx="12.5" cy="4" r="1.5"></circle><circle cx="12.5" cy="12" r="1.5"></circle><path d="M5 8h3l3-4M8 8l3 4"></path></svg><div style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Ownership graph 0412.json</span><span style="font-size:12px;color:#3f4850;">Graph</span></div></div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:12px;">AML-2026-0412</div>
+          <div style="font-size:13px;">Ownership Tracer</div>
+          <div style="font-size:13px;color:#3f4850;">13:48 today</div>
+          <div><span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;background:#fff1cc;color:#8a5a00;font-size:11px;font-weight:600;">Confidential</span></div>
+        </div>
+        <!-- row 4 -->
+        <div style="display:grid;grid-template-columns:2.4fr 1.1fr 1.2fr 1fr 1fr;gap:12px;padding:12px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+          <div style="display:flex;align-items:center;gap:12px;min-width:0;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 2h6l3 3v9H4z"></path><path d="M10 2v3h3M6.5 8h4M6.5 11h4"></path></svg><div style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Weekly watchlist changes.md</span><span style="font-size:12px;color:#3f4850;">Markdown</span></div></div>
+          <div style="color:#707881;">—</div>
+          <div style="font-size:13px;">Watchlist Monitor</div>
+          <div style="font-size:13px;color:#3f4850;">08:05 today</div>
+          <div><span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;background:#dce9ff;color:#3f4850;font-size:11px;font-weight:600;">Internal</span></div>
+        </div>
+        <!-- row 5 -->
+        <div style="display:grid;grid-template-columns:2.4fr 1.1fr 1.2fr 1fr 1fr;gap:12px;padding:12px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+          <div style="display:flex;align-items:center;gap:12px;min-width:0;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 2h6l3 3v9H4z"></path><path d="M10 2v3h3M6.5 8h4M6.5 11h4"></path></svg><div style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Challenge memo 0412.md</span><span style="font-size:12px;color:#3f4850;">Markdown</span></div></div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:12px;">AML-2026-0412</div>
+          <div style="font-size:13px;">Challenger</div>
+          <div style="font-size:13px;color:#3f4850;">Yesterday 14:06</div>
+          <div><span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;background:#fff1cc;color:#8a5a00;font-size:11px;font-weight:600;">Confidential</span></div>
+        </div>
+        <!-- row 6 -->
+        <div style="display:grid;grid-template-columns:2.4fr 1.1fr 1.2fr 1fr 1fr;gap:12px;padding:12px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+          <div style="display:flex;align-items:center;gap:12px;min-width:0;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 2h6l3 3v9H4z"></path><path d="M10 2v3h3M6.5 8h4M6.5 11h4"></path></svg><div style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Case brief 0415.md</span><span style="font-size:12px;color:#3f4850;">Markdown</span></div></div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:12px;">AML-2026-0415</div>
+          <div style="font-size:13px;">Case Orchestrator</div>
+          <div style="font-size:13px;color:#3f4850;">Yesterday 11:32</div>
+          <div><span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;background:#dce9ff;color:#3f4850;font-size:11px;font-weight:600;">Internal</span></div>
+        </div>
+        <!-- row 7 -->
+        <div style="display:grid;grid-template-columns:2.4fr 1.1fr 1.2fr 1fr 1fr;gap:12px;padding:12px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+          <div style="display:flex;align-items:center;gap:12px;min-width:0;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 2h6l3 3v9H4z"></path><path d="M10 2v3h3M6.5 8h4M6.5 11h4"></path></svg><div style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Weekly report summary.md</span><span style="font-size:12px;color:#3f4850;">Markdown</span></div></div>
+          <div style="color:#707881;">—</div>
+          <div style="font-size:13px;">Case Orchestrator</div>
+          <div style="font-size:13px;color:#3f4850;">Yesterday 09:40</div>
+          <div><span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;background:#dce9ff;color:#3f4850;font-size:11px;font-weight:600;">Internal</span></div>
+        </div>
+        <!-- row 8 -->
+        <div style="display:grid;grid-template-columns:2.4fr 1.1fr 1.2fr 1fr 1fr;gap:12px;padding:12px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+          <div style="display:flex;align-items:center;gap:12px;min-width:0;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 2h6l3 3v9H4z"></path><path d="M10 2v3h3M6.5 8h4M6.5 11h4"></path></svg><div style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">KYC refresh checklist 0398.md</span><span style="font-size:12px;color:#3f4850;">Markdown</span></div></div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:12px;">KYC-2026-0398</div>
+          <div style="font-size:13px;">KYC Reviewer</div>
+          <div style="font-size:13px;color:#3f4850;">8 Sep 16:12</div>
+          <div><span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;background:#fff1cc;color:#8a5a00;font-size:11px;font-weight:600;">Confidential</span></div>
+        </div>
+        <!-- footer -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;font-size:12px;color:#3f4850;">
+          <span>Showing 8 of 31</span>
+          <div style="display:flex;gap:6px;">
+            <div style="height:28px;padding:0 10px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;font-size:12px;font-weight:500;color:#707881;">Previous</div>
+            <div style="height:28px;padding:0 10px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;font-size:12px;font-weight:500;color:#0b1c30;">Next</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

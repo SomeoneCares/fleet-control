@@ -1,0 +1,359 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #006194; } a:hover { color: #007bb9; }
+  </style>
+</helmet>
+<div style="width:1440px;min-height:960px;background:#f8f9ff;font-family:Inter,system-ui,sans-serif;color:#0b1c30;display:flex;flex-direction:column;font-size:14px;line-height:20px;">
+
+  <!-- TOP BAR -->
+  <div style="height:56px;background:#ffffff;border-bottom:1px solid #dbe3ee;display:flex;align-items:center;padding:0 20px;gap:16px;flex-shrink:0;">
+    <div style="display:flex;align-items:center;gap:10px;width:212px;">
+      <div style="width:28px;height:28px;border-radius:8px;background:#006194;display:flex;align-items:center;justify-content:center;">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="3.5" r="1.8"></circle><circle cx="3.5" cy="12" r="1.8"></circle><circle cx="12.5" cy="12" r="1.8"></circle><path d="M7 5.2 4.4 10.3M9 5.2l2.6 5.1M5.3 12h5.4"></path></svg>
+      </div>
+      <div style="display:flex;flex-direction:column;line-height:14px;">
+        <span style="font-weight:700;font-size:14px;letter-spacing:-0.01em;">Fleet Control</span>
+        <span style="font-size:11px;color:#3f4850;">for Hermes Agent</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div style="height:32px;padding:0 12px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;">
+        <span style="width:8px;height:8px;border-radius:999px;background:#1b6b3a;display:inline-block;"></span>
+        <span>Production · eu-west-1</span>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg>
+      </div>
+      <div style="height:32px;padding:0 12px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;">
+        <span>AML Investigation v3</span>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg>
+      </div>
+    </div>
+    <div style="flex:1;display:flex;justify-content:center;">
+      <div style="width:360px;height:32px;border:1px solid #bfc7d2;border-radius:8px;background:#f8f9ff;display:flex;align-items:center;gap:8px;padding:0 10px;color:#707881;font-size:13px;">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#707881" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="4.5"></circle><path d="M10.5 10.5 14 14"></path></svg>
+        <span style="flex:1;">Search fleets, agents, runs…</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;border:1px solid #bfc7d2;border-radius:4px;padding:0 5px;">⌘K</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;">
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11V7a4 4 0 0 1 8 0v4l1 1.5H3z"></path><path d="M6.5 14a1.5 1.5 0 0 0 3 0"></path></svg>
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"></circle><path d="M6.2 6.2a1.8 1.8 0 1 1 2.6 1.6c-.6.3-.8.7-.8 1.2"></path><circle cx="8" cy="11.4" r=".4"></circle></svg>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div style="width:28px;height:28px;border-radius:999px;background:#e1e0ff;color:#4648d4;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;">DW</div>
+        <span style="font-size:13px;font-weight:500;">Dana Whitfield</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex:1;">
+    <!-- SIDEBAR -->
+    <div style="width:232px;background:#eff4ff;border-right:1px solid #dbe3ee;padding:16px 12px;display:flex;flex-direction:column;gap:20px;flex-shrink:0;">
+
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;padding:0 10px 6px;">Design</div>
+        <div data-nav="architect" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2l1.2 3 3 1.2-3 1.2L8 10.4 6.8 7.4l-3-1.2 3-1.2z"></path><path d="M3 11l.6 1.4L5 13l-1.4.6L3 15l-.6-1.4L1 13l1.4-.6z"></path></svg>Fleet Architect</div>
+        <div data-nav="designer" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;background:#cce5ff;color:#006194;font-weight:600;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="4" height="4" rx="1"></rect><rect x="10" y="2" width="4" height="4" rx="1"></rect><rect x="6" y="10" width="4" height="4" rx="1"></rect><path d="M4 6v2h8V6M8 8v2"></path></svg>Fleet Designer</div>
+        <div data-nav="agents" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="10" height="8" rx="2"></rect><path d="M8 2v2M6 8h.01M10 8h.01M6 12v2M10 12v2"></path></svg>Agent Studio</div>
+        <div data-nav="workflows" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="3.5" cy="8" r="1.5"></circle><circle cx="12.5" cy="4" r="1.5"></circle><circle cx="12.5" cy="12" r="1.5"></circle><path d="M5 8h3l3-4M8 8l3 4"></path></svg>Workflows</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;padding:0 10px 6px;">Operate</div>
+        <div data-nav="rooms" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h12v7H6l-3 2.5V11H2z"></path></svg>Decision Rooms</div>
+        <div data-nav="assurance" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5 13 3.5v4c0 3-2.2 5.3-5 6.5-2.8-1.2-5-3.5-5-6.5v-4z"></path><path d="M5.8 8l1.6 1.6L10.5 6.5"></path></svg>Assurance</div>
+        <div data-nav="tests" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h4M7 2v4.5L3.5 12a1.5 1.5 0 0 0 1.3 2.3h6.4a1.5 1.5 0 0 0 1.3-2.3L9 6.5V2"></path><path d="M5 10h6"></path></svg>Test Lab</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;padding:0 10px 6px;">Estate</div>
+        <div data-nav="instances" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2.5" width="12" height="4.5" rx="1.2"></rect><rect x="2" y="9" width="12" height="4.5" rx="1.2"></rect><path d="M4.5 4.75h.01M4.5 11.25h.01"></path></svg>Instances</div>
+        <div data-nav="integrations" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v3M10 2v3M4 5h8v3a4 4 0 0 1-8 0zM8 12v2.5"></path></svg>Integrations</div>
+        <div data-nav="messaging" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3.5h12v9H2z"></path><path d="M2 4l6 4.5L14 4"></path></svg>Messaging</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;padding:0 10px 6px;">Govern</div>
+        <div data-nav="access" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="10" height="7" rx="1.5"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path></svg>Access</div>
+        <div data-nav="audit" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h6l3 3v9H4z"></path><path d="M10 2v3h3M6.5 8h4M6.5 11h4"></path></svg>Audit log</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;padding:0 10px 6px;">Library</div>
+        <div data-nav="blueprints" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"></rect><path d="M2.5 6.5h11M6.5 6.5v7"></path></svg>Blueprints</div>
+        <div data-nav="content" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12z"></path></svg>Content</div>
+      </div>
+
+      <div style="flex:1;"></div>
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div data-nav="settings" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2"></circle><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"></path></svg>Settings</div>
+        <div style="padding:10px 10px 0;font-size:11px;color:#3f4850;line-height:16px;">Connected to 3 Hermes instances<br>Capability level: v2.4 · <span style="color:#1b6b3a;font-weight:600;">All healthy</span></div>
+      </div>
+    </div>
+
+    <!-- MAIN -->
+    <div style="flex:1;padding:28px 32px;display:flex;flex-direction:column;gap:20px;min-width:0;">
+      <!-- Page header -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px;">
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="font-size:12px;color:#3f4850;">Design</div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <h1 style="margin:0;font-size:24px;line-height:32px;font-weight:600;letter-spacing:-0.02em;">AML Investigation</h1>
+            <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;background:#e1e0ff;color:#4648d4;font-size:12px;font-weight:600;">Blueprint v3 · draft</span>
+          </div>
+          <div style="color:#3f4850;">Applied: v2 on hermes-prod-eu-01 · 4 changes since</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <div style="height:36px;padding:0 14px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;gap:8px;font-weight:500;">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="5" height="10" rx="1"></rect><rect x="9" y="3" width="5" height="10" rx="1"></rect><path d="M4.5 6v4M11.5 6v4"></path></svg>Compare with applied
+          </div>
+          <div style="height:36px;padding:0 14px;border-radius:8px;background:#006194;color:#ffffff;display:flex;align-items:center;gap:8px;font-weight:600;">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h6l3 3v9H4z"></path><path d="M10 2v3h3M6.5 9l1.5 1.5L10.5 7"></path></svg>Create plan
+          </div>
+        </div>
+      </div>
+
+      <!-- Body: outline + topology + inspector -->
+      <div style="display:flex;gap:20px;align-items:flex-start;">
+
+        <!-- LEFT: blueprint outline -->
+        <div style="width:240px;flex-shrink:0;background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;display:flex;flex-direction:column;overflow:hidden;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #dbe3ee;">
+            <div style="font-size:15px;font-weight:600;">Blueprint</div>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3f4850;">v3</span>
+          </div>
+          <div style="display:flex;flex-direction:column;padding:8px;gap:2px;font-size:13px;">
+            <!-- Agents -->
+            <div style="height:32px;display:flex;align-items:center;gap:8px;padding:0 8px;border-radius:8px;font-weight:600;">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"></path></svg>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#4648d4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="10" height="8" rx="2"></rect><path d="M8 2v2M6 8h.01M10 8h.01M6 12v2M10 12v2"></path></svg>
+              <span style="flex:1;">Agents</span><span style="font-weight:400;color:#3f4850;">5</span>
+            </div>
+            <div style="height:30px;display:flex;align-items:center;padding:0 8px 0 44px;border-radius:8px;">Case Orchestrator</div>
+            <div style="height:30px;display:flex;align-items:center;padding:0 8px 0 44px;border-radius:8px;">Sanctions Screener</div>
+            <div style="height:30px;display:flex;align-items:center;padding:0 8px 0 44px;border-radius:8px;">Ownership Tracer</div>
+            <div style="height:30px;display:flex;align-items:center;padding:0 8px 0 44px;border-radius:8px;background:#e1e0ff;color:#4648d4;font-weight:600;">Challenger</div>
+            <div style="height:30px;display:flex;align-items:center;padding:0 8px 0 44px;border-radius:8px;">SAR Drafter</div>
+            <!-- Groups -->
+            <div style="height:32px;display:flex;align-items:center;gap:8px;padding:0 8px;border-radius:8px;font-weight:600;margin-top:4px;">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"></path></svg>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="6" r="2"></circle><circle cx="10.5" cy="6" r="2"></circle><path d="M2 13c0-2 1.6-3.2 3.5-3.2S9 11 9 13M9 12c.3-1.5 1.4-2.2 2.8-2.2 1.4 0 2.2.9 2.2 3.2"></path></svg>
+              <span style="flex:1;">Groups</span><span style="font-weight:400;color:#3f4850;">1</span>
+            </div>
+            <div style="height:30px;display:flex;align-items:center;padding:0 8px 0 44px;border-radius:8px;">Investigation</div>
+            <!-- Workflows -->
+            <div style="height:32px;display:flex;align-items:center;gap:8px;padding:0 8px;border-radius:8px;font-weight:600;margin-top:4px;">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"></path></svg>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="3.5" cy="8" r="1.5"></circle><circle cx="12.5" cy="4" r="1.5"></circle><circle cx="12.5" cy="12" r="1.5"></circle><path d="M5 8h3l3-4M8 8l3 4"></path></svg>
+              <span style="flex:1;">Workflows</span><span style="font-weight:400;color:#3f4850;">1</span>
+            </div>
+            <div style="height:30px;display:flex;align-items:center;padding:0 8px 0 44px;border-radius:8px;">Case to SAR draft</div>
+            <!-- Tests (collapsed) -->
+            <div style="height:32px;display:flex;align-items:center;gap:8px;padding:0 8px;border-radius:8px;font-weight:600;margin-top:4px;">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h4M7 2v4.5L3.5 12a1.5 1.5 0 0 0 1.3 2.3h6.4a1.5 1.5 0 0 0 1.3-2.3L9 6.5V2"></path><path d="M5 10h6"></path></svg>
+              <span style="flex:1;">Tests</span><span style="font-weight:400;color:#3f4850;">9</span>
+            </div>
+            <!-- Policies (collapsed) -->
+            <div style="height:32px;display:flex;align-items:center;gap:8px;padding:0 8px;border-radius:8px;font-weight:600;">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5 13 3.5v4c0 3-2.2 5.3-5 6.5-2.8-1.2-5-3.5-5-6.5v-4z"></path><path d="M5.8 8l1.6 1.6L10.5 6.5"></path></svg>
+              <span style="flex:1;">Policies</span><span style="font-weight:400;color:#3f4850;">3</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- CENTER: topology -->
+        <div style="flex:1;min-width:0;min-height:620px;background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;display:flex;flex-direction:column;overflow:hidden;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #dbe3ee;">
+            <div style="font-size:15px;font-weight:600;">Topology</div>
+            <div style="font-size:12px;color:#3f4850;">Group: Investigation · Workflow: Case to SAR draft</div>
+          </div>
+          <div style="position:relative;height:640px;background-color:#ffffff;background-image:radial-gradient(#dbe3ee 1px, transparent 1px);background-size:16px 16px;">
+            <!-- Edges -->
+            <svg width="522" height="640" viewBox="0 0 522 640" style="position:absolute;left:0;top:0;" fill="none" stroke="#707881" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <defs>
+                <marker id="fd-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M1 1 7 4 1 7" fill="none" stroke="#707881" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></marker>
+              </defs>
+              <!-- Orchestrator to the three specialists -->
+              <path d="M261 78 V158 H91 V175" marker-end="url(#fd-arrow)"></path>
+              <path d="M261 78 V175" marker-end="url(#fd-arrow)"></path>
+              <path d="M261 78 V158 H431 V175" marker-end="url(#fd-arrow)"></path>
+              <!-- Specialists to Challenger -->
+              <path d="M91 238 V318 H261"></path>
+              <path d="M431 238 V318 H261"></path>
+              <path d="M261 238 V335" marker-end="url(#fd-arrow)"></path>
+              <!-- Challenger to human gate -->
+              <path d="M261 398 V478 H150 V495" marker-end="url(#fd-arrow)"></path>
+              <!-- Human gate to output -->
+              <path d="M231 558 H288" marker-end="url(#fd-arrow)"></path>
+            </svg>
+
+            <!-- Case Orchestrator -->
+            <div style="position:absolute;left:181px;top:16px;width:160px;height:124px;background:#ffffff;border:1px solid #bfc7d2;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;">
+              <div style="height:24px;display:flex;align-items:center;gap:6px;padding:0 10px;background:#eff4ff;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="10" height="8" rx="2"></rect><path d="M8 2v2M6 8h.01M10 8h.01"></path></svg>Agent
+              </div>
+              <div style="flex:1;padding:8px 10px;display:flex;flex-direction:column;gap:4px;">
+                <div style="font-size:13px;line-height:18px;font-weight:600;">Case Orchestrator</div>
+                <div style="font-size:12px;line-height:16px;color:#3f4850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Routes and assembles</div>
+                <span style="display:inline-flex;align-self:flex-start;align-items:center;height:22px;white-space:nowrap;margin-top:auto;padding:0 8px;border-radius:999px;background:#e1e0ff;color:#4648d4;font-size:12px;font-weight:600;">Claude Sonnet</span>
+              </div>
+            </div>
+
+            <!-- Sanctions Screener -->
+            <div style="position:absolute;left:11px;top:176px;width:160px;height:124px;background:#ffffff;border:1px solid #bfc7d2;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;">
+              <div style="height:24px;display:flex;align-items:center;gap:6px;padding:0 10px;background:#eff4ff;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="10" height="8" rx="2"></rect><path d="M8 2v2M6 8h.01M10 8h.01"></path></svg>Agent
+              </div>
+              <div style="flex:1;padding:8px 10px;display:flex;flex-direction:column;gap:4px;">
+                <div style="font-size:13px;line-height:18px;font-weight:600;">Sanctions Screener</div>
+                <div style="font-size:12px;line-height:16px;color:#3f4850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">OFAC, EU, UN lists</div>
+                <span style="display:inline-flex;align-self:flex-start;align-items:center;height:22px;white-space:nowrap;margin-top:auto;padding:0 8px;border-radius:999px;background:#e1e0ff;color:#4648d4;font-size:12px;font-weight:600;">Llama 4 (local)</span>
+              </div>
+            </div>
+
+            <!-- Ownership Tracer -->
+            <div style="position:absolute;left:181px;top:176px;width:160px;height:124px;background:#ffffff;border:1px solid #bfc7d2;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;">
+              <div style="height:24px;display:flex;align-items:center;gap:6px;padding:0 10px;background:#eff4ff;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="10" height="8" rx="2"></rect><path d="M8 2v2M6 8h.01M10 8h.01"></path></svg>Agent
+              </div>
+              <div style="flex:1;padding:8px 10px;display:flex;flex-direction:column;gap:4px;">
+                <div style="font-size:13px;line-height:18px;font-weight:600;">Ownership Tracer</div>
+                <div style="font-size:12px;line-height:16px;color:#3f4850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Ownership chains</div>
+                <span style="display:inline-flex;align-self:flex-start;align-items:center;height:22px;white-space:nowrap;margin-top:auto;padding:0 8px;border-radius:999px;background:#e1e0ff;color:#4648d4;font-size:12px;font-weight:600;">Llama 4 (local)</span>
+              </div>
+            </div>
+
+            <!-- SAS Viya Risk Bridge (integration) -->
+            <div style="position:absolute;left:351px;top:176px;width:160px;height:124px;background:#ffffff;border:1px solid #bfc7d2;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;">
+              <div style="height:24px;display:flex;align-items:center;gap:6px;padding:0 10px;background:#dae2fd;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#545c72;">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#545c72" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v3M10 2v3M4 5h8v3a4 4 0 0 1-8 0zM8 12v2.5"></path></svg>Integration
+              </div>
+              <div style="flex:1;padding:8px 10px;display:flex;flex-direction:column;gap:4px;">
+                <div style="font-size:13px;line-height:18px;font-weight:600;">SAS Viya Risk Bridge</div>
+                <div style="font-size:12px;line-height:16px;color:#3f4850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Anomaly scores</div>
+                <span style="display:inline-flex;align-self:flex-start;align-items:center;height:22px;white-space:nowrap;margin-top:auto;padding:0 8px;border-radius:999px;background:#dae2fd;color:#545c72;font-size:12px;font-weight:600;">MCP · SAS Viya</span>
+              </div>
+            </div>
+
+            <!-- Challenger (selected) -->
+            <div style="position:absolute;left:181px;top:336px;width:160px;height:124px;background:#ffffff;border:2px solid #4648d4;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;">
+              <div style="height:23px;display:flex;align-items:center;gap:6px;padding:0 9px;background:#e1e0ff;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#4648d4;">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#4648d4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="10" height="8" rx="2"></rect><path d="M8 2v2M6 8h.01M10 8h.01"></path></svg>Agent
+              </div>
+              <div style="flex:1;padding:8px 9px;display:flex;flex-direction:column;gap:4px;">
+                <div style="font-size:13px;line-height:18px;font-weight:600;">Challenger</div>
+                <div style="font-size:12px;line-height:16px;color:#3f4850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Argues the counter-case</div>
+                <span style="display:inline-flex;align-self:flex-start;align-items:center;height:22px;white-space:nowrap;margin-top:auto;padding:0 8px;border-radius:999px;background:#e1e0ff;color:#4648d4;font-size:12px;font-weight:600;">GPT-5 · redacted</span>
+              </div>
+            </div>
+
+            <!-- Compliance officers (human gate) -->
+            <div style="position:absolute;left:70px;top:496px;width:160px;height:124px;background:#ffffff;border:1px solid #bfc7d2;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;">
+              <div style="height:24px;display:flex;align-items:center;gap:6px;padding:0 10px;background:#fff1cc;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#8a5a00;">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#8a5a00" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5" r="2.5"></circle><path d="M3 14c0-2.8 2.2-4.5 5-4.5s5 1.7 5 4.5"></path></svg>Human gate
+              </div>
+              <div style="flex:1;padding:8px 10px;display:flex;flex-direction:column;gap:4px;">
+                <div style="font-size:13px;line-height:18px;font-weight:600;">Compliance officers (2)</div>
+                <div style="font-size:12px;line-height:16px;color:#3f4850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Both must sign</div>
+                <span style="display:inline-flex;align-self:flex-start;align-items:center;height:22px;white-space:nowrap;margin-top:auto;padding:0 8px;border-radius:999px;background:#fff1cc;color:#8a5a00;font-size:12px;font-weight:600;">Approval required</span>
+              </div>
+            </div>
+
+            <!-- SAR draft (output) -->
+            <div style="position:absolute;left:290px;top:496px;width:160px;height:124px;background:#ffffff;border:1px solid #bfc7d2;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;">
+              <div style="height:24px;display:flex;align-items:center;gap:6px;padding:0 10px;background:#dce9ff;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#006194;">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#006194" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h6l3 3v9H4z"></path><path d="M10 2v3h3M6.5 8h4M6.5 11h4"></path></svg>Output
+              </div>
+              <div style="flex:1;padding:8px 10px;display:flex;flex-direction:column;gap:4px;">
+                <div style="font-size:13px;line-height:18px;font-weight:600;">SAR draft</div>
+                <div style="font-size:12px;line-height:16px;color:#3f4850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Document · Case store</div>
+                <span style="display:inline-flex;align-self:flex-start;align-items:center;height:22px;white-space:nowrap;margin-top:auto;padding:0 8px;border-radius:999px;background:#dce9ff;color:#006194;font-size:12px;font-weight:600;">Not submitted</span>
+              </div>
+            </div>
+          </div>
+          <!-- Legend -->
+          <div style="display:flex;align-items:center;gap:18px;padding:10px 16px;border-top:1px solid #dbe3ee;font-size:12px;color:#3f4850;">
+            <span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:12px;height:12px;border-radius:3px;background:#eff4ff;border:1px solid #bfc7d2;display:inline-block;"></span>Agent</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:12px;height:12px;border-radius:3px;background:#dae2fd;border:1px solid #bfc7d2;display:inline-block;"></span>Integration</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:12px;height:12px;border-radius:3px;background:#fff1cc;border:1px solid #bfc7d2;display:inline-block;"></span>Human gate</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:12px;height:12px;border-radius:3px;background:#dce9ff;border:1px solid #bfc7d2;display:inline-block;"></span>Output</span>
+          </div>
+        </div>
+
+        <!-- RIGHT: inspector -->
+        <div style="width:340px;flex-shrink:0;background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:16px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+            <div style="display:flex;flex-direction:column;gap:2px;">
+              <div style="font-size:15px;font-weight:600;">Inspector · Challenger</div>
+              <div style="font-size:12px;color:#3f4850;">Agent in group Investigation</div>
+            </div>
+            <span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#e1e0ff;color:#4648d4;font-size:12px;font-weight:600;">Agent</span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Role</div>
+            <div style="font-size:13px;line-height:18px;">Argues against the orchestrator's recommendation before it reaches a compliance officer. Must cite the case file for every objection.</div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Model</div>
+            <span style="display:inline-flex;align-self:flex-start;align-items:center;height:22px;white-space:nowrap;margin-top:auto;padding:0 8px;border-radius:999px;background:#e1e0ff;color:#4648d4;font-size:12px;font-weight:600;">GPT-5 · redacted input only</span>
+            <div style="display:flex;gap:8px;padding:8px 10px;border-radius:8px;background:#fff1cc;color:#8a5a00;font-size:12px;line-height:16px;">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#8a5a00" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M8 2.5 14 13H2z"></path><path d="M8 6.5v3M8 11.5h.01"></path></svg>
+              <span>Cloud model: may only receive redacted summaries (policy: data residency)</span>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Skills</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              <span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:#eff4ff;color:#0b1c30;font-size:12px;font-weight:500;">counter-argument</span>
+              <span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:#eff4ff;color:#0b1c30;font-size:12px;font-weight:500;">redaction-check</span>
+              <span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:#eff4ff;color:#0b1c30;font-size:12px;font-weight:500;">citation-check</span>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">MCPs</div>
+            <div style="font-size:13px;color:#707881;">None</div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Boundaries</div>
+            <div style="display:flex;flex-direction:column;border:1px solid #dbe3ee;border-radius:8px;overflow:hidden;">
+              <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #dbe3ee;font-size:13px;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="8" cy="8" r="6"></circle><path d="M3.8 3.8l8.4 8.4"></path></svg>May not contact external systems</div>
+              <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:13px;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="7" width="10" height="7" rx="1.5"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path></svg>Disagreement blocks SAR draft</div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Tests attached</div>
+            <div style="display:flex;flex-direction:column;border:1px solid #dbe3ee;border-radius:8px;overflow:hidden;">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #dbe3ee;font-size:13px;"><span>Objects to unsupported claim</span><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;flex-shrink:0;">Passed</span></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #dbe3ee;font-size:13px;"><span>Rejects raw customer data</span><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;flex-shrink:0;">Passed</span></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 12px;font-size:13px;"><span>Blocks draft on disagreement</span><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:#dce9ff;color:#3f4850;font-size:12px;font-weight:600;flex-shrink:0;">Not run</span></div>
+            </div>
+          </div>
+
+          <div style="border-top:1px solid #dbe3ee;padding-top:12px;">
+            <a href="#" style="font-size:13px;font-weight:500;color:#006194;text-decoration:none;display:inline-flex;align-items:center;gap:6px;">Open in Agent Studio<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#006194" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h7v7M13 3 5 11"></path></svg></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

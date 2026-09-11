@@ -1,0 +1,232 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #006194; } a:hover { color: #007bb9; }
+  </style>
+</helmet>
+<div style="width:1440px;min-height:960px;background:#f8f9ff;font-family:Inter,system-ui,sans-serif;color:#0b1c30;display:flex;flex-direction:column;font-size:14px;line-height:20px;">
+
+  <!-- TOP BAR -->
+  <div style="height:56px;background:#ffffff;border-bottom:1px solid #dbe3ee;display:flex;align-items:center;padding:0 20px;gap:16px;flex-shrink:0;">
+    <div style="display:flex;align-items:center;gap:10px;width:212px;">
+      <div style="width:28px;height:28px;border-radius:8px;background:#006194;display:flex;align-items:center;justify-content:center;">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="3.5" r="1.8"></circle><circle cx="3.5" cy="12" r="1.8"></circle><circle cx="12.5" cy="12" r="1.8"></circle><path d="M7 5.2 4.4 10.3M9 5.2l2.6 5.1M5.3 12h5.4"></path></svg>
+      </div>
+      <div style="display:flex;flex-direction:column;line-height:14px;">
+        <span style="font-weight:700;font-size:14px;letter-spacing:-0.01em;">Fleet Control</span>
+        <span style="font-size:11px;color:#3f4850;">for Hermes Agent</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div style="height:32px;padding:0 12px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;">
+        <span style="width:8px;height:8px;border-radius:999px;background:#1b6b3a;display:inline-block;"></span>
+        <span>Production · eu-west-1</span>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg>
+      </div>
+      <div style="height:32px;padding:0 12px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;">
+        <span>AML Investigation v3</span>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg>
+      </div>
+    </div>
+    <div style="flex:1;display:flex;justify-content:center;">
+      <div style="width:360px;height:32px;border:1px solid #bfc7d2;border-radius:8px;background:#f8f9ff;display:flex;align-items:center;gap:8px;padding:0 10px;color:#707881;font-size:13px;">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#707881" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="4.5"></circle><path d="M10.5 10.5 14 14"></path></svg>
+        <span style="flex:1;">Search fleets, agents, runs…</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;border:1px solid #bfc7d2;border-radius:4px;padding:0 5px;">⌘K</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;">
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11V7a4 4 0 0 1 8 0v4l1 1.5H3z"></path><path d="M6.5 14a1.5 1.5 0 0 0 3 0"></path></svg>
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"></circle><path d="M6.2 6.2a1.8 1.8 0 1 1 2.6 1.6c-.6.3-.8.7-.8 1.2"></path><circle cx="8" cy="11.4" r=".4"></circle></svg>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div style="width:28px;height:28px;border-radius:999px;background:#e1e0ff;color:#4648d4;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;">DW</div>
+        <span style="font-size:13px;font-weight:500;">Dana Whitfield</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex:1;">
+    <!-- SIDEBAR -->
+    <div style="width:232px;background:#eff4ff;border-right:1px solid #dbe3ee;padding:16px 12px;display:flex;flex-direction:column;gap:20px;flex-shrink:0;">
+
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;padding:0 10px 6px;">Design</div>
+        <div data-nav="architect" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2l1.2 3 3 1.2-3 1.2L8 10.4 6.8 7.4l-3-1.2 3-1.2z"></path><path d="M3 11l.6 1.4L5 13l-1.4.6L3 15l-.6-1.4L1 13l1.4-.6z"></path></svg>Fleet Architect</div>
+        <div data-nav="designer" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="4" height="4" rx="1"></rect><rect x="10" y="2" width="4" height="4" rx="1"></rect><rect x="6" y="10" width="4" height="4" rx="1"></rect><path d="M4 6v2h8V6M8 8v2"></path></svg>Fleet Designer</div>
+        <div data-nav="agents" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="10" height="8" rx="2"></rect><path d="M8 2v2M6 8h.01M10 8h.01M6 12v2M10 12v2"></path></svg>Agent Studio</div>
+        <div data-nav="workflows" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="3.5" cy="8" r="1.5"></circle><circle cx="12.5" cy="4" r="1.5"></circle><circle cx="12.5" cy="12" r="1.5"></circle><path d="M5 8h3l3-4M8 8l3 4"></path></svg>Workflows</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;padding:0 10px 6px;">Operate</div>
+        <div data-nav="rooms" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h12v7H6l-3 2.5V11H2z"></path></svg>Decision Rooms</div>
+        <div data-nav="assurance" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5 13 3.5v4c0 3-2.2 5.3-5 6.5-2.8-1.2-5-3.5-5-6.5v-4z"></path><path d="M5.8 8l1.6 1.6L10.5 6.5"></path></svg>Assurance</div>
+        <div data-nav="tests" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h4M7 2v4.5L3.5 12a1.5 1.5 0 0 0 1.3 2.3h6.4a1.5 1.5 0 0 0 1.3-2.3L9 6.5V2"></path><path d="M5 10h6"></path></svg>Test Lab</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;padding:0 10px 6px;">Estate</div>
+        <div data-nav="instances" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;background:#cce5ff;color:#006194;font-weight:600;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2.5" width="12" height="4.5" rx="1.2"></rect><rect x="2" y="9" width="12" height="4.5" rx="1.2"></rect><path d="M4.5 4.75h.01M4.5 11.25h.01"></path></svg>Instances</div>
+        <div data-nav="integrations" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v3M10 2v3M4 5h8v3a4 4 0 0 1-8 0zM8 12v2.5"></path></svg>Integrations</div>
+        <div data-nav="messaging" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3.5h12v9H2z"></path><path d="M2 4l6 4.5L14 4"></path></svg>Messaging</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;padding:0 10px 6px;">Govern</div>
+        <div data-nav="access" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="10" height="7" rx="1.5"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path></svg>Access</div>
+        <div data-nav="audit" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h6l3 3v9H4z"></path><path d="M10 2v3h3M6.5 8h4M6.5 11h4"></path></svg>Audit log</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;padding:0 10px 6px;">Library</div>
+        <div data-nav="blueprints" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"></rect><path d="M2.5 6.5h11M6.5 6.5v7"></path></svg>Blueprints</div>
+        <div data-nav="content" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12z"></path></svg>Content</div>
+      </div>
+
+      <div style="flex:1;"></div>
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div data-nav="settings" style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2"></circle><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"></path></svg>Settings</div>
+        <div style="padding:10px 10px 0;font-size:11px;color:#3f4850;line-height:16px;">Connected to 3 Hermes instances<br>Capability level: v2.4 · <span style="color:#1b6b3a;font-weight:600;">All healthy</span></div>
+      </div>
+    </div>
+
+    <!-- MAIN -->
+    <div style="flex:1;padding:28px 32px;display:flex;flex-direction:column;gap:20px;min-width:0;">
+      <!-- Page header -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px;">
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="font-size:12px;color:#3f4850;">Estate</div>
+          <h1 style="margin:0;font-size:24px;line-height:32px;font-weight:600;letter-spacing:-0.02em;">Instances</h1>
+          <div style="color:#3f4850;">Hermes installations Fleet Control can read from and apply blueprints to.</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <div style="height:36px;padding:0 14px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;gap:8px;font-weight:500;">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8A5 5 0 0 1 4 11M3 8a5 5 0 0 1 9-3"></path><path d="M12 2v3H9M4 14v-3h3"></path></svg>Re-check all
+          </div>
+          <div style="height:36px;padding:0 14px;border-radius:8px;background:#006194;color:#ffffff;display:flex;align-items:center;gap:8px;font-weight:600;">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"></path></svg>Connect instance
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI row -->
+      <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:16px;">
+        <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:6px;">
+          <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Connected</div>
+          <div style="font-size:28px;line-height:34px;font-weight:600;letter-spacing:-0.02em;">3 <span style="font-size:14px;font-weight:400;color:#3f4850;">instances</span></div>
+          <div style="font-size:12px;color:#1b6b3a;font-weight:500;">All reachable · last check 40s ago</div>
+        </div>
+        <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:6px;">
+          <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Profiles under management</div>
+          <div style="font-size:28px;line-height:34px;font-weight:600;letter-spacing:-0.02em;">14 <span style="font-size:14px;font-weight:400;color:#3f4850;">of 19 discovered</span></div>
+          <div style="font-size:12px;color:#3f4850;">5 unmanaged profiles found on hermes-lab-01</div>
+        </div>
+        <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:6px;">
+          <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Drift from blueprint</div>
+          <div style="font-size:28px;line-height:34px;font-weight:600;letter-spacing:-0.02em;color:#8a5a00;">1 <span style="font-size:14px;font-weight:400;color:#3f4850;">instance</span></div>
+          <div style="font-size:12px;color:#8a5a00;font-weight:500;">Skill changed outside Fleet Control · review</div>
+        </div>
+        <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:6px;">
+          <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Hermes versions</div>
+          <div style="font-size:28px;line-height:34px;font-weight:600;letter-spacing:-0.02em;">2 <span style="font-size:14px;font-weight:400;color:#3f4850;">in use</span></div>
+          <div style="font-size:12px;color:#3f4850;">v2.4.1 (×2), v2.3.8 (×1)</div>
+        </div>
+      </div>
+
+      <!-- Body: table + rail -->
+      <div style="display:flex;gap:20px;align-items:flex-start;">
+        <!-- Table -->
+        <div style="flex:1;min-width:0;background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;overflow:hidden;">
+          <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid #dbe3ee;">
+            <div style="height:32px;flex:1;max-width:280px;border:1px solid #bfc7d2;border-radius:8px;background:#f8f9ff;display:flex;align-items:center;gap:8px;padding:0 10px;color:#707881;font-size:13px;">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#707881" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="4.5"></circle><path d="M10.5 10.5 14 14"></path></svg>Filter instances
+            </div>
+            <div style="height:32px;padding:0 10px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;gap:6px;font-size:13px;">Environment: All <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg></div>
+            <div style="height:32px;padding:0 10px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;gap:6px;font-size:13px;">Status: All <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg></div>
+          </div>
+          <!-- header row -->
+          <div style="display:grid;grid-template-columns:2fr 1.1fr 1fr 1.4fr 1fr;gap:12px;padding:10px 16px;border-bottom:1px solid #dbe3ee;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">
+            <div>Instance</div><div>Environment</div><div>Hermes</div><div>Managed profiles</div><div>Status</div>
+          </div>
+          <!-- row 1 (selected) -->
+          <div style="display:grid;grid-template-columns:2fr 1.1fr 1fr 1.4fr 1fr;gap:12px;padding:14px 16px;border-bottom:1px solid #dbe3ee;background:#eff4ff;align-items:center;">
+            <div style="display:flex;flex-direction:column;gap:2px;"><span style="font-weight:600;">hermes-prod-eu-01</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3f4850;">https://hermes-prod-eu-01.meridian.internal:8642</span></div>
+            <div>Production</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:12px;">v2.4.1</div>
+            <div>8 profiles · AML Investigation v3</div>
+            <div><span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;">Healthy</span></div>
+          </div>
+          <!-- row 2 -->
+          <div style="display:grid;grid-template-columns:2fr 1.1fr 1fr 1.4fr 1fr;gap:12px;padding:14px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+            <div style="display:flex;flex-direction:column;gap:2px;"><span style="font-weight:600;">hermes-staging-eu-01</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3f4850;">https://hermes-staging-eu-01.meridian.internal:8642</span></div>
+            <div>Staging</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:12px;">v2.4.1</div>
+            <div>6 profiles · AML Investigation v3-rc2</div>
+            <div><span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;background:#fff1cc;color:#8a5a00;font-size:12px;font-weight:600;">Drift</span></div>
+          </div>
+          <!-- row 3 -->
+          <div style="display:grid;grid-template-columns:2fr 1.1fr 1fr 1.4fr 1fr;gap:12px;padding:14px 16px;align-items:center;">
+            <div style="display:flex;flex-direction:column;gap:2px;"><span style="font-weight:600;">hermes-lab-01</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3f4850;">http://10.40.2.17:8642</span></div>
+            <div>Lab</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:12px;">v2.3.8</div>
+            <div>0 managed · <span style="color:#3f4850;">5 unmanaged</span></div>
+            <div><span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;">Healthy</span></div>
+          </div>
+        </div>
+
+        <!-- Detail rail -->
+        <div style="width:380px;flex-shrink:0;display:flex;flex-direction:column;gap:16px;">
+          <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:14px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+              <div style="display:flex;flex-direction:column;gap:2px;">
+                <div style="font-size:15px;font-weight:600;">hermes-prod-eu-01</div>
+                <div style="font-size:12px;color:#3f4850;">Owner: Platform Eng · Added 12 Aug 2026</div>
+              </div>
+              <span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;">Healthy</span>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">What Fleet Control can do here</div>
+              <div style="display:flex;flex-direction:column;border:1px solid #dbe3ee;border-radius:8px;overflow:hidden;">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-bottom:1px solid #dbe3ee;font-size:13px;"><span>Read profiles, skills, MCPs</span><span style="color:#1b6b3a;font-weight:600;font-size:12px;">Stable API</span></div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-bottom:1px solid #dbe3ee;font-size:13px;"><span>Submit runs, stream events</span><span style="color:#1b6b3a;font-weight:600;font-size:12px;">Stable API</span></div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-bottom:1px solid #dbe3ee;font-size:13px;"><span>Write profiles &amp; config</span><span style="color:#8a5a00;font-weight:600;font-size:12px;">Dashboard API</span></div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-bottom:1px solid #dbe3ee;font-size:13px;"><span>Tool-call evidence</span><span style="color:#8a5a00;font-weight:600;font-size:12px;">Via Langfuse plugin</span></div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;font-size:13px;"><span>Restart / upgrade</span><span style="color:#707881;font-weight:600;font-size:12px;">Not available</span></div>
+              </div>
+              <div style="font-size:12px;color:#3f4850;line-height:16px;">Based on <span style="font-family:'JetBrains Mono',monospace;">/v1/capabilities</span> and dashboard reachability. Re-checked on every apply.</div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Inventory</div>
+              <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:8px;">
+                <div style="background:#eff4ff;border-radius:8px;padding:10px 12px;"><div style="font-size:18px;font-weight:600;">8</div><div style="font-size:12px;color:#3f4850;">Profiles</div></div>
+                <div style="background:#eff4ff;border-radius:8px;padding:10px 12px;"><div style="font-size:18px;font-weight:600;">23</div><div style="font-size:12px;color:#3f4850;">Skills</div></div>
+                <div style="background:#eff4ff;border-radius:8px;padding:10px 12px;"><div style="font-size:18px;font-weight:600;">4</div><div style="font-size:12px;color:#3f4850;">MCP servers</div></div>
+                <div style="background:#eff4ff;border-radius:8px;padding:10px 12px;"><div style="font-size:18px;font-weight:600;">3</div><div style="font-size:12px;color:#3f4850;">Model providers</div></div>
+              </div>
+            </div>
+
+            <div style="display:flex;gap:8px;">
+              <div style="flex:1;height:36px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;justify-content:center;font-weight:500;font-size:13px;">Open in Fleet Designer</div>
+              <div style="flex:1;height:36px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;justify-content:center;font-weight:500;font-size:13px;">Instance settings</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

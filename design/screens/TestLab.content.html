@@ -1,0 +1,136 @@
+      <!-- Page header -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px;">
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="font-size:12px;color:#3f4850;">Operate</div>
+          <h1 style="margin:0;font-size:24px;line-height:32px;font-weight:600;letter-spacing:-0.02em;">Test Lab</h1>
+          <div style="color:#3f4850;">Tests run against a lab or staging instance and gate every plan.</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <div style="height:36px;padding:0 14px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;gap:8px;font-weight:500;">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v8M5 7.5l3 3 3-3"></path><path d="M3 11v2.5h10V11"></path></svg>Import suite
+          </div>
+          <div style="height:36px;padding:0 14px;border-radius:8px;background:#006194;color:#ffffff;display:flex;align-items:center;gap:8px;font-weight:600;">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"></path></svg>New test
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI row -->
+      <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:16px;">
+        <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:6px;">
+          <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Last run</div>
+          <div style="font-size:28px;line-height:34px;font-weight:600;letter-spacing:-0.02em;color:#1b6b3a;">9 <span style="font-size:14px;font-weight:400;color:#3f4850;">of 9 passed</span></div>
+          <div style="font-size:12px;color:#3f4850;">on hermes-lab-01, 12 min ago</div>
+        </div>
+        <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:6px;">
+          <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Suites</div>
+          <div style="font-size:28px;line-height:34px;font-weight:600;letter-spacing:-0.02em;">3</div>
+          <div style="font-size:12px;color:#3f4850;">13 tests across AML Investigation, KYC refresh, Smoke</div>
+        </div>
+        <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:6px;">
+          <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Gating plans</div>
+          <div style="font-size:28px;line-height:34px;font-weight:600;letter-spacing:-0.02em;">1</div>
+          <div style="font-size:12px;color:#3f4850;">AML Investigation v3 · must pass before apply</div>
+        </div>
+      </div>
+
+      <!-- Body: suites + editor + runs -->
+      <div style="display:flex;gap:20px;align-items:flex-start;">
+        <!-- Suites tree -->
+        <div style="width:300px;flex-shrink:0;background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;overflow:hidden;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid #dbe3ee;">
+            <div style="font-size:15px;font-weight:600;">Suites</div>
+            <div style="font-size:12px;color:#3f4850;">13 tests</div>
+          </div>
+          <div style="padding:8px;display:flex;flex-direction:column;gap:2px;">
+            <div style="height:34px;display:flex;align-items:center;gap:8px;padding:0 10px;border-radius:8px;font-size:13px;font-weight:600;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12z"></path></svg>AML Investigation<span style="font-weight:400;color:#3f4850;">· 9</span></div>
+            <div style="height:34px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 10px 0 38px;border-radius:8px;font-size:13px;background:#cce5ff;color:#006194;font-weight:600;"><span style="display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="10" height="8" rx="2"></rect><path d="M8 2v2M6 8h.01M10 8h.01M6 12v2M10 12v2"></path></svg>Sanctions Screener</span><span style="font-weight:600;font-size:12px;">3</span></div>
+            <div style="height:34px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 10px 0 38px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><span style="display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="10" height="8" rx="2"></rect><path d="M8 2v2M6 8h.01M10 8h.01M6 12v2M10 12v2"></path></svg>Ownership Tracer</span><span style="color:#3f4850;font-size:12px;">2</span></div>
+            <div style="height:34px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 10px 0 38px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><span style="display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="10" height="8" rx="2"></rect><path d="M8 2v2M6 8h.01M10 8h.01M6 12v2M10 12v2"></path></svg>Challenger</span><span style="color:#3f4850;font-size:12px;">3</span></div>
+            <div style="height:34px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 10px 0 38px;border-radius:8px;font-size:13px;color:#0b1c30;font-weight:500;"><span style="display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="3.5" cy="8" r="1.5"></circle><circle cx="12.5" cy="4" r="1.5"></circle><circle cx="12.5" cy="12" r="1.5"></circle><path d="M5 8h3l3-4M8 8l3 4"></path></svg>Workflow: case-to-SAR</span><span style="color:#3f4850;font-size:12px;">1</span></div>
+            <div style="height:34px;display:flex;align-items:center;gap:8px;padding:0 10px;border-radius:8px;font-size:13px;font-weight:600;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"></path></svg><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12z"></path></svg>KYC refresh<span style="font-weight:400;color:#3f4850;">· 2</span></div>
+            <div style="height:34px;display:flex;align-items:center;gap:8px;padding:0 10px;border-radius:8px;font-size:13px;font-weight:600;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"></path></svg><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12z"></path></svg>Smoke tests<span style="font-weight:400;color:#3f4850;">· 2</span></div>
+          </div>
+        </div>
+
+        <!-- Test editor -->
+        <div style="flex:1;min-width:0;background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:16px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+            <div style="display:flex;flex-direction:column;gap:2px;">
+              <div style="font-size:15px;font-weight:600;">Sanctions screening returns evidence</div>
+              <div style="font-size:12px;color:#3f4850;">Sanctions Screener · <span style="font-family:'JetBrains Mono',monospace;">test-aml-ss-01</span></div>
+            </div>
+            <div style="height:28px;padding:0 10px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;flex-shrink:0;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3.5v9l8-4.5z"></path></svg>Run now</div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;border:1px solid #dbe3ee;border-radius:8px;overflow:hidden;">
+            <div style="display:grid;grid-template-columns:118px 1fr;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid #dbe3ee;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Target</div>
+              <div style="display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#4648d4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="10" height="8" rx="2"></rect><path d="M8 2v2M6 8h.01M10 8h.01M6 12v2M10 12v2"></path></svg><span style="font-weight:500;">Sanctions Screener</span></div>
+            </div>
+            <div style="display:grid;grid-template-columns:118px 1fr;gap:12px;align-items:start;padding:10px 14px;border-bottom:1px solid #dbe3ee;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;padding-top:10px;">Scenario input</div>
+              <div style="border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;padding:8px 12px;font-size:13px;line-height:20px;">Screen "Zephyr Maritime Ltd" (Cyprus) and its two directors for case MB-4471.</div>
+            </div>
+            <div style="display:grid;grid-template-columns:118px 1fr;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid #dbe3ee;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Required tool calls</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;"><span style="display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:500;font-family:'JetBrains Mono',monospace;">opensanctions.search</span><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;border:1px dashed #bfc7d2;background:#ffffff;color:#3f4850;font-size:12px;font-weight:500;">+ Add</span></div>
+            </div>
+            <div style="display:grid;grid-template-columns:118px 1fr;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid #dbe3ee;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Forbidden tools</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;"><span style="display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:999px;background:#ffdad6;color:#93000a;font-size:12px;font-weight:500;font-family:'JetBrains Mono',monospace;">web.fetch</span><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;border:1px dashed #bfc7d2;background:#ffffff;color:#3f4850;font-size:12px;font-weight:500;">+ Add</span></div>
+            </div>
+            <div style="display:grid;grid-template-columns:118px 1fr;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid #dbe3ee;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Expected artifact</div>
+              <div style="font-size:13px;"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;">screening-result.json</span> matches schema</div>
+            </div>
+            <div style="display:grid;grid-template-columns:118px 1fr;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid #dbe3ee;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Limits</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;"><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:#eff4ff;color:#0b1c30;font-size:12px;font-weight:500;">≤ 60 s</span><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:#eff4ff;color:#0b1c30;font-size:12px;font-weight:500;">≤ 20k tokens</span><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:#eff4ff;color:#0b1c30;font-size:12px;font-weight:500;">≤ $0.10</span></div>
+            </div>
+            <div style="display:grid;grid-template-columns:118px 1fr;gap:12px;align-items:center;padding:10px 14px;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Evaluator</div>
+              <div style="display:flex;flex-direction:column;gap:1px;font-size:13px;"><span style="font-weight:500;">Schema + exact list match</span><span style="font-size:12px;color:#3f4850;">Deterministic, no model judge</span></div>
+            </div>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#3f4850;">
+            <span>Edited by Dana Whitfield · 3 Sep 2026</span>
+            <span>Gates: <span style="font-weight:600;color:#0b1c30;">AML Investigation v3</span></span>
+          </div>
+        </div>
+
+        <!-- Recent runs -->
+        <div style="width:320px;flex-shrink:0;background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;overflow:hidden;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid #dbe3ee;">
+            <div style="font-size:15px;font-weight:600;">Recent runs</div>
+            <div style="font-size:12px;color:#3f4850;">this test</div>
+          </div>
+          <div style="display:flex;flex-direction:column;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:11px 16px;border-bottom:1px solid #dbe3ee;">
+              <div style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-size:13px;font-weight:500;">11 Sep 2026 · 09:42</span><span style="font-size:12px;color:#3f4850;">hermes-lab-01 · <span style="font-family:'JetBrains Mono',monospace;">38 s</span></span></div>
+              <span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;flex-shrink:0;">Passed</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:11px 16px;border-bottom:1px solid #dbe3ee;">
+              <div style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-size:13px;font-weight:500;">10 Sep 2026 · 17:05</span><span style="font-size:12px;color:#3f4850;">hermes-lab-01 · <span style="font-family:'JetBrains Mono',monospace;">41 s</span></span></div>
+              <span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;flex-shrink:0;">Passed</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;padding:11px 16px;border-bottom:1px solid #dbe3ee;background:#fff8e6;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+                <div style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-size:13px;font-weight:500;">9 Sep 2026 · 14:18</span><span style="font-size:12px;color:#3f4850;">hermes-staging-eu-01 · <span style="font-family:'JetBrains Mono',monospace;">52 s</span></span></div>
+                <span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:#ffdad6;color:#93000a;font-size:12px;font-weight:600;flex-shrink:0;">Failed</span>
+              </div>
+              <div style="font-size:12px;color:#93000a;line-height:16px;">Forbidden tool <span style="font-family:'JetBrains Mono',monospace;">web.fetch</span> was called</div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:11px 16px;border-bottom:1px solid #dbe3ee;">
+              <div style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-size:13px;font-weight:500;">8 Sep 2026 · 10:30</span><span style="font-size:12px;color:#3f4850;">hermes-lab-01 · <span style="font-family:'JetBrains Mono',monospace;">36 s</span></span></div>
+              <span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;flex-shrink:0;">Passed</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:11px 16px;border-bottom:1px solid #dbe3ee;">
+              <div style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-size:13px;font-weight:500;">5 Sep 2026 · 16:52</span><span style="font-size:12px;color:#3f4850;">hermes-lab-01 · <span style="font-family:'JetBrains Mono',monospace;">39 s</span></span></div>
+              <span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;flex-shrink:0;">Passed</span>
+            </div>
+          </div>
+          <div style="padding:12px 16px;font-size:13px;"><a href="#" style="text-decoration:none;font-weight:500;">Compare with previous run</a></div>
+        </div>
+      </div>

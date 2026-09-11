@@ -1,0 +1,124 @@
+      <!-- Main area as a row: page + open drawer. Negative margins cancel the shell's main padding so the drawer runs full height. -->
+      <div style="flex:1;display:flex;margin:-28px -32px;min-width:0;">
+
+        <!-- Page (header + empty state) -->
+        <div style="flex:1;min-width:0;padding:28px 32px;display:flex;flex-direction:column;gap:20px;">
+
+          <!-- Page header -->
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px;">
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <div style="font-size:12px;color:#3f4850;">Estate</div>
+              <h1 style="margin:0;font-size:24px;line-height:32px;font-weight:600;letter-spacing:-0.02em;">Instances</h1>
+              <div style="color:#3f4850;">Hermes installations Fleet Control can read from and apply blueprints to.</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-shrink:0;white-space:nowrap;">
+              <div style="height:36px;padding:0 14px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;gap:8px;font-weight:500;">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8A5 5 0 0 1 4 11M3 8a5 5 0 0 1 9-3"></path><path d="M12 2v3H9M4 14v-3h3"></path></svg>Re-check all
+              </div>
+              <div style="height:36px;padding:0 14px;border-radius:8px;background:#006194;color:#ffffff;display:flex;align-items:center;gap:8px;font-weight:600;">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"></path></svg>Connect instance
+              </div>
+            </div>
+          </div>
+
+          <!-- Empty state -->
+          <div style="flex:1;display:flex;align-items:flex-start;justify-content:center;padding-top:48px;">
+            <div style="width:100%;max-width:640px;background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:40px 40px 32px;display:flex;flex-direction:column;align-items:center;gap:20px;text-align:center;">
+              <!-- 3-node illustration -->
+              <svg width="160" height="96" viewBox="0 0 160 96" fill="none" stroke="#006194" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M80 30 44 68M80 30l36 38M56 72h48" stroke="#bfc7d2" stroke-dasharray="4 4"></path>
+                <rect x="60" y="10" width="40" height="24" rx="6" fill="#cce5ff"></rect>
+                <path d="M68 18h24M68 26h14"></path>
+                <rect x="14" y="62" width="40" height="24" rx="6" fill="#ffffff" stroke="#bfc7d2"></rect>
+                <path d="M22 70h24M22 78h14" stroke="#bfc7d2"></path>
+                <rect x="106" y="62" width="40" height="24" rx="6" fill="#ffffff" stroke="#bfc7d2"></rect>
+                <path d="M114 70h24M114 78h14" stroke="#bfc7d2"></path>
+                <circle cx="80" cy="30" r="3" fill="#006194" stroke="none"></circle>
+              </svg>
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                <div style="font-size:18px;line-height:24px;font-weight:600;letter-spacing:-0.01em;">No Hermes instances connected yet</div>
+                <div style="color:#3f4850;max-width:440px;">Point Fleet Control at a running Hermes Agent and it will read what is already there before you change anything.</div>
+              </div>
+              <div style="height:36px;padding:0 14px;border-radius:8px;background:#006194;color:#ffffff;display:flex;align-items:center;gap:8px;font-weight:600;">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"></path></svg>Connect instance
+              </div>
+              <div style="width:100%;border-top:1px solid #dbe3ee;padding-top:20px;display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:16px;text-align:left;">
+                <div style="display:flex;gap:10px;align-items:flex-start;">
+                  <span style="width:22px;height:22px;border-radius:999px;background:#cce5ff;color:#006194;font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">1</span>
+                  <span style="font-size:13px;line-height:18px;color:#3f4850;padding-top:2px;">Connect</span>
+                </div>
+                <div style="display:flex;gap:10px;align-items:flex-start;">
+                  <span style="width:22px;height:22px;border-radius:999px;background:#cce5ff;color:#006194;font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">2</span>
+                  <span style="font-size:13px;line-height:18px;color:#3f4850;padding-top:2px;">Fleet Control discovers profiles, skills and MCPs</span>
+                </div>
+                <div style="display:flex;gap:10px;align-items:flex-start;">
+                  <span style="width:22px;height:22px;border-radius:999px;background:#cce5ff;color:#006194;font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">3</span>
+                  <span style="font-size:13px;line-height:18px;color:#3f4850;padding-top:2px;">Design a fleet or import what's running</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Drawer: Connect a Hermes instance -->
+        <div style="width:420px;flex-shrink:0;background:#ffffff;border-left:1px solid #dbe3ee;display:flex;flex-direction:column;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid #dbe3ee;">
+            <div style="font-size:15px;font-weight:600;">Connect a Hermes instance</div>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l8 8M12 4l-8 8"></path></svg>
+          </div>
+
+          <div style="flex:1;padding:20px 24px;display:flex;flex-direction:column;gap:16px;">
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Display name</div>
+              <div style="height:36px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;padding:0 12px;font-size:13px;">hermes-prod-eu-01</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Endpoint URL</div>
+              <div style="height:36px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;padding:0 12px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#707881;">https://…:8642</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">API key</div>
+              <div style="height:36px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;justify-content:space-between;padding:0 12px;font-family:'JetBrains Mono',monospace;font-size:12px;">
+                <span>••••••••••••••••••••••••</span>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"></path><circle cx="8" cy="8" r="2"></circle></svg>
+              </div>
+              <div style="font-size:12px;color:#3f4850;line-height:16px;">Stored in the Fleet Control secret store; never shown again after save.</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Environment</div>
+              <div style="height:36px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;justify-content:space-between;padding:0 12px;font-size:13px;">
+                <span>Production</span>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg>
+              </div>
+              <div style="font-size:12px;color:#707881;">Production · Staging · Lab</div>
+            </div>
+
+            <!-- Test connection result -->
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;">
+                <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Test connection</div>
+                <div style="height:28px;padding:0 10px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8A5 5 0 0 1 4 11M3 8a5 5 0 0 1 9-3"></path><path d="M12 2v3H9M4 14v-3h3"></path></svg>Run again
+                </div>
+              </div>
+              <div style="border:1px solid #dbe3ee;border-radius:8px;overflow:hidden;">
+                <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#d7f2e0;border-bottom:1px solid #dbe3ee;">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#1b6b3a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"></circle><path d="M5.3 8.2l1.8 1.8 3.6-4"></path></svg>
+                  <span style="font-size:13px;font-weight:600;color:#1b6b3a;flex:1;">Reachable · Hermes <span style="font-family:'JetBrains Mono',monospace;font-size:12px;">v2.4.1</span></span>
+                  <span style="font-size:12px;color:#1b6b3a;">212 ms</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-bottom:1px solid #dbe3ee;font-size:13px;"><span>Read profiles, skills, MCPs</span><span style="color:#1b6b3a;font-weight:600;font-size:12px;">Stable API</span></div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-bottom:1px solid #dbe3ee;font-size:13px;"><span>Submit runs, stream events</span><span style="color:#1b6b3a;font-weight:600;font-size:12px;">Stable API</span></div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-bottom:1px solid #dbe3ee;font-size:13px;"><span>Write profiles &amp; config</span><span style="color:#8a5a00;font-weight:600;font-size:12px;">Dashboard API</span></div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;font-size:13px;"><span>Restart / upgrade</span><span style="color:#707881;font-weight:600;font-size:12px;">Not available</span></div>
+              </div>
+              <div style="font-size:12px;color:#3f4850;line-height:16px;">Based on <span style="font-family:'JetBrains Mono',monospace;">/v1/capabilities</span> and dashboard reachability. Re-checked on every apply.</div>
+            </div>
+          </div>
+
+          <div style="display:flex;justify-content:flex-end;gap:8px;padding:16px 24px;border-top:1px solid #dbe3ee;">
+            <div style="height:36px;padding:0 14px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;font-weight:500;">Cancel</div>
+            <div style="height:36px;padding:0 14px;border-radius:8px;background:#006194;color:#ffffff;display:flex;align-items:center;gap:8px;font-weight:600;">Connect and discover</div>
+          </div>
+        </div>
+      </div>

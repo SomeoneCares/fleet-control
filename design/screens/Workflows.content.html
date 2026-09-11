@@ -1,0 +1,185 @@
+      <!-- Page header -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px;">
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="font-size:12px;color:#3f4850;">Design › AML Investigation</div>
+          <h1 style="margin:0;font-size:24px;line-height:32px;font-weight:600;letter-spacing:-0.02em;">Workflows</h1>
+          <div style="color:#3f4850;">Ordered steps with agents, expected artifacts and human gates. Runs on Hermes Kanban where available.</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <div style="height:36px;padding:0 14px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;gap:8px;font-weight:500;">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h4M7 2v4.5L3.5 12a1.5 1.5 0 0 0 1.3 2.3h6.4a1.5 1.5 0 0 0 1.3-2.3L9 6.5V2"></path><path d="M5 10h6"></path></svg>Run on lab
+          </div>
+          <div style="height:36px;padding:0 14px;border-radius:8px;background:#006194;color:#ffffff;display:flex;align-items:center;gap:8px;font-weight:600;">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h8l2 2v8H3z"></path><path d="M5 3v4h5V3M5 13V9h6v4"></path></svg>Save to draft
+          </div>
+        </div>
+      </div>
+
+      <!-- Body: list + steps + inspector -->
+      <div style="display:flex;gap:20px;align-items:flex-start;">
+
+        <!-- Workflow list -->
+        <div style="width:260px;flex-shrink:0;background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;overflow:hidden;">
+          <div style="padding:14px 16px;border-bottom:1px solid #dbe3ee;font-size:15px;font-weight:600;">Workflows</div>
+          <div style="display:flex;flex-direction:column;gap:2px;padding:8px;">
+            <div style="display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:8px;background:#cce5ff;color:#006194;">
+              <span style="font-size:13px;font-weight:600;">Case to SAR draft</span>
+              <span style="font-size:12px;">6 steps · 1 human gate</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:8px;">
+              <span style="font-size:13px;font-weight:500;">Weekly watchlist refresh</span>
+              <span style="font-size:12px;color:#3f4850;">3 steps</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:8px;">
+              <span style="font-size:13px;font-weight:500;">Model-drift review</span>
+              <span style="font-size:12px;color:#3f4850;">4 steps</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Steps -->
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;">
+
+          <!-- step 1 -->
+          <div style="display:flex;gap:14px;">
+            <div style="width:28px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;">
+              <div style="width:28px;height:28px;border-radius:999px;background:#ffffff;border:1px solid #bfc7d2;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#3f4850;">1</div>
+              <div style="flex:1;width:1px;background:#bfc7d2;"></div>
+            </div>
+            <div style="flex:1;min-width:0;padding-bottom:16px;">
+              <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:4px;">
+                <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Intake</span></div>
+                <div style="font-weight:600;">Case Orchestrator</div>
+                <div style="font-size:13px;color:#3f4850;">Input: flagged transaction · Artifact: case brief</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- step 2: parallel -->
+          <div style="display:flex;gap:14px;">
+            <div style="width:28px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;">
+              <div style="width:28px;height:28px;border-radius:999px;background:#ffffff;border:1px solid #bfc7d2;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#3f4850;">2</div>
+              <div style="flex:1;width:1px;background:#bfc7d2;"></div>
+            </div>
+            <div style="flex:1;min-width:0;padding-bottom:16px;">
+              <div style="border:1px dashed #bfc7d2;border-radius:10px;background:#eff4ff;padding:12px;display:flex;flex-direction:column;gap:10px;">
+                <div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h12M2 11h12"></path></svg>Runs in parallel
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:12px;">
+                  <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:4px;">
+                    <div style="font-weight:600;">Sanctions Screener</div>
+                    <div style="font-size:13px;color:#3f4850;display:flex;align-items:center;gap:6px;">→ <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#0b1c30;">screening-result.json</span></div>
+                  </div>
+                  <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:4px;">
+                    <div style="font-weight:600;">Ownership Tracer</div>
+                    <div style="font-size:13px;color:#3f4850;display:flex;align-items:center;gap:6px;">→ <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#0b1c30;">ownership-graph.json</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- step 3 -->
+          <div style="display:flex;gap:14px;">
+            <div style="width:28px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;">
+              <div style="width:28px;height:28px;border-radius:999px;background:#ffffff;border:1px solid #bfc7d2;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#3f4850;">3</div>
+              <div style="flex:1;width:1px;background:#bfc7d2;"></div>
+            </div>
+            <div style="flex:1;min-width:0;padding-bottom:16px;">
+              <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:4px;">
+                <div style="font-weight:600;color:#4648d4;">Challenger</div>
+                <div style="font-size:13px;color:#3f4850;">Reviews both results · Artifact: challenge memo</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- step 4: human gate (selected) -->
+          <div style="display:flex;gap:14px;">
+            <div style="width:28px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;">
+              <div style="width:28px;height:28px;border-radius:999px;background:#006194;border:1px solid #006194;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#ffffff;">4</div>
+              <div style="flex:1;width:1px;background:#bfc7d2;"></div>
+            </div>
+            <div style="flex:1;min-width:0;padding-bottom:16px;">
+              <div style="background:#ffffff;border:1px solid #006194;border-radius:10px;overflow:hidden;">
+                <div style="background:#fff1cc;color:#8a5a00;padding:8px 16px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#8a5a00" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5" r="2.5"></circle><path d="M3 14c0-2.8 2.2-4.5 5-4.5s5 1.7 5 4.5"></path></svg>Human gate
+                </div>
+                <div style="padding:14px 16px;display:flex;flex-direction:column;gap:4px;">
+                  <div style="font-weight:600;">Compliance officer review</div>
+                  <div style="font-size:13px;color:#3f4850;">Required before drafting</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- step 5 -->
+          <div style="display:flex;gap:14px;">
+            <div style="width:28px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;">
+              <div style="width:28px;height:28px;border-radius:999px;background:#ffffff;border:1px solid #bfc7d2;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#3f4850;">5</div>
+              <div style="flex:1;width:1px;background:#bfc7d2;"></div>
+            </div>
+            <div style="flex:1;min-width:0;padding-bottom:16px;">
+              <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:4px;">
+                <div style="font-weight:600;">SAR Drafter</div>
+                <div style="font-size:13px;color:#3f4850;">Artifact: SAR draft (docx)</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- step 6: output -->
+          <div style="display:flex;gap:14px;">
+            <div style="width:28px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;">
+              <div style="width:28px;height:28px;border-radius:999px;background:#ffffff;border:1px solid #bfc7d2;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#3f4850;">6</div>
+              <div style="flex:1;width:1px;background:#bfc7d2;"></div>
+            </div>
+            <div style="flex:1;min-width:0;padding-bottom:16px;">
+              <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:14px 16px;display:flex;align-items:center;gap:12px;">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h12v7H6l-3 2.5V11H2z"></path></svg>
+                <div style="display:flex;flex-direction:column;gap:2px;">
+                  <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Output</div>
+                  <div style="font-weight:600;">Decision Room opened</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- add step -->
+          <div style="display:flex;gap:14px;">
+            <div style="width:28px;flex-shrink:0;"></div>
+            <div style="flex:1;min-width:0;">
+              <div style="height:40px;border:1px dashed #bfc7d2;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:500;color:#3f4850;">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"></path></svg>Add step
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step inspector -->
+        <div style="width:320px;flex-shrink:0;background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:14px;">
+          <div style="display:flex;flex-direction:column;gap:2px;">
+            <div style="font-size:15px;font-weight:600;">Step 4 · Human gate</div>
+            <div style="font-size:12px;color:#3f4850;">Compliance officer review</div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Who</div>
+            <div style="height:36px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;justify-content:space-between;padding:0 12px;font-size:13px;">Any Compliance officer <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg></div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Timeout</div>
+            <div style="height:36px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;justify-content:space-between;padding:0 12px;font-size:13px;">24 h then escalate to MLRO <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg></div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">On reject</div>
+            <div style="height:36px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;justify-content:space-between;padding:0 12px;font-size:13px;">Return to Challenger with notes <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg></div>
+          </div>
+
+          <div style="display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border-radius:8px;background:#eff4ff;font-size:12px;color:#3f4850;line-height:16px;">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 2h6l3 3v9H4z"></path><path d="M10 2v3h3M6.5 8h4M6.5 11h4"></path></svg>
+            <span style="flex:1;">Approvals are recorded in the audit log.</span>
+          </div>
+        </div>
+      </div>

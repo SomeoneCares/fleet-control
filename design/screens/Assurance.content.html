@@ -1,0 +1,151 @@
+      <!-- Page header -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px;">
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="font-size:12px;color:#3f4850;">Operate</div>
+          <h1 style="margin:0;font-size:24px;line-height:32px;font-weight:600;letter-spacing:-0.02em;">Assurance</h1>
+          <div style="color:#3f4850;">Every claim an agent makes is checked against what actually ran. Evidence comes from Hermes run events and the Langfuse trace when available.</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <div style="height:36px;padding:0 14px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;gap:8px;font-weight:500;white-space:nowrap;">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v8M5 7.5l3 3 3-3"></path><path d="M3 11v2.5h10V11"></path></svg>Export evidence (CSV)
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI row -->
+      <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:16px;">
+        <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:6px;">
+          <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Claims checked (24h)</div>
+          <div style="font-size:28px;line-height:34px;font-weight:600;letter-spacing:-0.02em;">1,284</div>
+          <div style="font-size:12px;color:#3f4850;">Across 3 instances · 96% with evidence</div>
+        </div>
+        <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:6px;">
+          <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">No evidence</div>
+          <div style="font-size:28px;line-height:34px;font-weight:600;letter-spacing:-0.02em;color:#ba1a1a;">7 <span style="font-size:14px;font-weight:400;color:#3f4850;">claims</span></div>
+          <div style="font-size:12px;color:#ba1a1a;font-weight:500;">Needs review</div>
+        </div>
+        <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:6px;">
+          <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Not verifiable</div>
+          <div style="font-size:28px;line-height:34px;font-weight:600;letter-spacing:-0.02em;color:#3f4850;">41 <span style="font-size:14px;font-weight:400;color:#3f4850;">claims</span></div>
+          <div style="font-size:12px;color:#3f4850;">Enable Langfuse on hermes-lab-01 to reduce</div>
+        </div>
+      </div>
+
+      <!-- Body: table + evidence rail -->
+      <div style="display:flex;gap:20px;align-items:flex-start;">
+        <!-- Table -->
+        <div style="flex:1;min-width:0;background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;overflow:hidden;">
+          <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid #dbe3ee;">
+            <div style="height:32px;flex:1;max-width:280px;border:1px solid #bfc7d2;border-radius:8px;background:#f8f9ff;display:flex;align-items:center;gap:8px;padding:0 10px;color:#707881;font-size:13px;">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#707881" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="4.5"></circle><path d="M10.5 10.5 14 14"></path></svg>Filter runs…
+            </div>
+            <div style="height:32px;padding:0 10px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;gap:6px;font-size:13px;">Fleet: All <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg></div>
+            <div style="height:32px;padding:0 10px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;gap:6px;font-size:13px;">Verdict: All <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg></div>
+          </div>
+          <!-- header row -->
+          <div style="display:grid;grid-template-columns:1fr 1.3fr 2.6fr 1.2fr;gap:12px;padding:10px 16px;border-bottom:1px solid #dbe3ee;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">
+            <div>Run</div><div>Agent</div><div>Claim</div><div>Verdict</div>
+          </div>
+          <!-- row 1 -->
+          <div style="display:grid;grid-template-columns:1fr 1.3fr 2.6fr 1.2fr;gap:12px;padding:12px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+            <div style="display:flex;flex-direction:column;gap:2px;"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;">#R-20934</span><span style="font-size:12px;color:#3f4850;">09:51</span></div>
+            <div style="font-size:13px;">Case Orchestrator</div>
+            <div style="font-size:13px;">Assembled the case file for MB-4471.</div>
+            <div><span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;">Evidence found</span></div>
+          </div>
+          <!-- row 2 -->
+          <div style="display:grid;grid-template-columns:1fr 1.3fr 2.6fr 1.2fr;gap:12px;padding:12px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+            <div style="display:flex;flex-direction:column;gap:2px;"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;">#R-20933</span><span style="font-size:12px;color:#3f4850;">09:49</span></div>
+            <div style="font-size:13px;">Ownership Tracer</div>
+            <div style="font-size:13px;">Resolved beneficial ownership to three hops.</div>
+            <div><span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;">Evidence found</span></div>
+          </div>
+          <!-- row 3 (selected) -->
+          <div style="display:grid;grid-template-columns:1fr 1.3fr 2.6fr 1.2fr;gap:12px;padding:12px 16px;border-bottom:1px solid #dbe3ee;align-items:center;background:#eff4ff;box-shadow:inset 3px 0 0 #ba1a1a;">
+            <div style="display:flex;flex-direction:column;gap:2px;"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:500;">#R-20931</span><span style="font-size:12px;color:#3f4850;">09:44</span></div>
+            <div style="font-size:13px;font-weight:600;">Sanctions Screener</div>
+            <div style="font-size:13px;font-weight:500;">Screened 14 counterparties against OFAC.</div>
+            <div><span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#ffdad6;color:#93000a;font-size:12px;font-weight:600;">No evidence</span></div>
+          </div>
+          <!-- row 4 -->
+          <div style="display:grid;grid-template-columns:1fr 1.3fr 2.6fr 1.2fr;gap:12px;padding:12px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+            <div style="display:flex;flex-direction:column;gap:2px;"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;">#R-20929</span><span style="font-size:12px;color:#3f4850;">09:40</span></div>
+            <div style="font-size:13px;">SAR Drafter</div>
+            <div style="font-size:13px;display:flex;flex-direction:column;gap:1px;"><span>Submitted SAR to portal.</span><span style="font-size:12px;color:#8a5a00;">External submission requires approval</span></div>
+            <div><span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#fff1cc;color:#8a5a00;font-size:12px;font-weight:600;">Policy blocked</span></div>
+          </div>
+          <!-- row 5 -->
+          <div style="display:grid;grid-template-columns:1fr 1.3fr 2.6fr 1.2fr;gap:12px;padding:12px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+            <div style="display:flex;flex-direction:column;gap:2px;"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;">#R-20926</span><span style="font-size:12px;color:#3f4850;">09:31</span></div>
+            <div style="font-size:13px;">Challenger</div>
+            <div style="font-size:13px;">Reviewed the recommendation and raised two objections.</div>
+            <div><span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;">Evidence found</span></div>
+          </div>
+          <!-- row 6 -->
+          <div style="display:grid;grid-template-columns:1fr 1.3fr 2.6fr 1.2fr;gap:12px;padding:12px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+            <div style="display:flex;flex-direction:column;gap:2px;"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;">#R-20918</span><span style="font-size:12px;color:#3f4850;">09:12</span></div>
+            <div style="font-size:13px;">Sanctions Screener</div>
+            <div style="font-size:13px;display:flex;flex-direction:column;gap:1px;"><span>Cited list versions for OFAC, EU and UN.</span><span style="font-size:12px;color:#3f4850;">hermes-lab-01 · no Langfuse trace</span></div>
+            <div><span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#dce9ff;color:#3f4850;font-size:12px;font-weight:600;">Not verifiable</span></div>
+          </div>
+          <!-- row 7 -->
+          <div style="display:grid;grid-template-columns:1fr 1.3fr 2.6fr 1.2fr;gap:12px;padding:12px 16px;align-items:center;">
+            <div style="display:flex;flex-direction:column;gap:2px;"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;">#R-20915</span><span style="font-size:12px;color:#3f4850;">09:04</span></div>
+            <div style="font-size:13px;">Ownership Tracer</div>
+            <div style="font-size:13px;">Fetched registry filings for two entities.</div>
+            <div><span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;">Evidence found</span></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-top:1px solid #dbe3ee;font-size:12px;color:#3f4850;">
+            <span>Showing 7 of 1,284 claims · last 24h</span>
+            <a href="#" style="text-decoration:none;font-weight:500;">Show all</a>
+          </div>
+        </div>
+
+        <!-- Evidence rail -->
+        <div style="width:380px;flex-shrink:0;display:flex;flex-direction:column;gap:16px;">
+          <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:14px;">
+            <div style="display:flex;flex-direction:column;gap:2px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+                <div style="font-size:15px;font-weight:600;">Evidence · <span style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:500;">run #R-20931</span></div>
+                <span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#ffdad6;color:#93000a;font-size:12px;font-weight:600;flex-shrink:0;">No evidence</span>
+              </div>
+              <div style="font-size:12px;color:#3f4850;">Sanctions Screener · hermes-prod-eu-01 · today 09:44</div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Claim</div>
+              <div style="border-left:3px solid #bfc7d2;padding:2px 0 2px 12px;font-size:14px;line-height:20px;font-style:italic;color:#0b1c30;">"Screened 14 counterparties against OFAC. No matches found."</div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Checks</div>
+              <div style="display:flex;flex-direction:column;border:1px solid #dbe3ee;border-radius:8px;overflow:hidden;">
+                <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-bottom:1px solid #dbe3ee;font-size:13px;line-height:18px;">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#ba1a1a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="8" cy="8" r="6.5"></circle><path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4"></path></svg>
+                  <div><span style="font-weight:500;">Required tool</span> <span style="font-family:'JetBrains Mono',monospace;font-size:12px;">opensanctions.search</span><br><span style="color:#3f4850;">Not found in run events</span></div>
+                </div>
+                <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-bottom:1px solid #dbe3ee;font-size:13px;line-height:18px;">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#ba1a1a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="8" cy="8" r="6.5"></circle><path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4"></path></svg>
+                  <div><span style="font-weight:500;">Artifact</span> <span style="font-family:'JetBrains Mono',monospace;font-size:12px;">screening-result.json</span><br><span style="color:#3f4850;">Not created</span></div>
+                </div>
+                <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;font-size:13px;line-height:18px;">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><path d="M2 12l3-4 2.5 2 3-5 3.5 7z"></path></svg>
+                  <div><span style="font-weight:500;">Trace</span><br><span style="color:#3f4850;">4 tool calls, none to a sanctions source</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div style="background:#ffdad6;border-radius:8px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start;">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#93000a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:2px;"><path d="M8 2 14.5 13.5h-13z"></path><path d="M8 6.5v3M8 11.5h.01"></path></svg>
+              <div style="font-size:13px;line-height:18px;color:#93000a;"><span style="font-weight:600;">No evidence:</span> the agent reported a screening that did not run.</div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div style="height:36px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;justify-content:center;gap:6px;font-weight:500;font-size:13px;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8A5 5 0 0 1 4 11M3 8a5 5 0 0 1 9-3"></path><path d="M12 2v3H9M4 14v-3h3"></path></svg>Re-run with tool required</div>
+              <div style="height:36px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;justify-content:center;gap:6px;font-weight:500;font-size:13px;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h4v4M13 3 7.5 8.5"></path><path d="M11 9v3.5H3.5V5H7"></path></svg>Open run in Langfuse</div>
+            </div>
+
+            <div style="font-size:12px;color:#3f4850;line-height:16px;">Checked by rule: <span style="font-family:'JetBrains Mono',monospace;">sanctions-evidence-v2</span></div>
+          </div>
+        </div>
+      </div>

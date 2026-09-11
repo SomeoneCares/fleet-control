@@ -1,0 +1,182 @@
+      <!-- Page header -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px;">
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="font-size:12px;color:#3f4850;">Estate</div>
+          <h1 style="margin:0;font-size:24px;line-height:32px;font-weight:600;letter-spacing:-0.02em;">Messaging</h1>
+          <div style="color:#3f4850;">Hermes messaging gateways on each instance, and the rules that decide which fleet events are delivered where. Business users always get a link back into their workspace.</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0;">
+          <div style="height:36px;padding:0 14px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;gap:8px;font-weight:500;white-space:nowrap;">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2 7.5 8.5M14 2 9.8 14l-2.3-5.5L2 6.2z"></path></svg>Send test message
+          </div>
+          <div style="height:36px;padding:0 14px;border-radius:8px;background:#006194;color:#ffffff;display:flex;align-items:center;gap:8px;font-weight:600;white-space:nowrap;">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"></path></svg>Add channel
+          </div>
+        </div>
+      </div>
+
+      <!-- Body: tables + detail -->
+      <div style="display:flex;gap:20px;align-items:flex-start;">
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:20px;">
+
+          <!-- Channels -->
+          <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;overflow:hidden;">
+            <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid #dbe3ee;">
+              <div style="font-size:15px;font-weight:600;">Channels</div>
+              <div style="flex:1;"></div>
+              <div style="font-size:12px;color:#3f4850;">5 channels · 3 instances</div>
+            </div>
+            <!-- header row -->
+            <div style="display:grid;grid-template-columns:3fr 1fr 1.1fr 1.1fr 1.4fr;gap:12px;padding:10px 16px;border-bottom:1px solid #dbe3ee;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">
+              <div>Channel</div><div>Gateway</div><div>Instances</div><div>Audience</div><div>Status</div>
+            </div>
+            <!-- row 1 (selected) -->
+            <div style="display:grid;grid-template-columns:3fr 1fr 1.1fr 1.1fr 1.4fr;gap:12px;padding:14px 16px;border-bottom:1px solid #dbe3ee;background:#eff4ff;align-items:center;">
+              <div style="display:flex;flex-direction:column;gap:2px;min-width:0;overflow-wrap:anywhere;"><span style="font-weight:600;">Microsoft Teams · #aml-investigations</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3f4850;">teams · tenant meridianbank.onmicrosoft.com</span></div>
+              <div>Teams gateway</div>
+              <div>prod, staging</div>
+              <div>Compliance officers</div>
+              <div><span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;">Connected</span></div>
+            </div>
+            <!-- row 2 -->
+            <div style="display:grid;grid-template-columns:3fr 1fr 1.1fr 1.1fr 1.4fr;gap:12px;padding:14px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+              <div style="display:flex;flex-direction:column;gap:2px;min-width:0;overflow-wrap:anywhere;"><span style="font-weight:600;">Email · compliance@meridianbank.com</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3f4850;">smtp · mail.meridian.internal:587</span></div>
+              <div>SMTP</div>
+              <div>prod</div>
+              <div>Approvers</div>
+              <div><span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;">Connected</span></div>
+            </div>
+            <!-- row 3 -->
+            <div style="display:grid;grid-template-columns:3fr 1fr 1.1fr 1.1fr 1.4fr;gap:12px;padding:14px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+              <div style="display:flex;flex-direction:column;gap:2px;min-width:0;overflow-wrap:anywhere;"><span style="font-weight:600;">Slack · #fleet-ops</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3f4850;">slack · workspace meridian-bank</span></div>
+              <div>Slack gateway</div>
+              <div>prod, staging, lab</div>
+              <div>Fleet operators</div>
+              <div><span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;">Connected</span></div>
+            </div>
+            <!-- row 4 -->
+            <div style="display:grid;grid-template-columns:3fr 1fr 1.1fr 1.1fr 1.4fr;gap:12px;padding:14px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+              <div style="display:flex;flex-direction:column;gap:2px;min-width:0;overflow-wrap:anywhere;"><span style="font-weight:600;">Telegram · Ops on-call</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3f4850;">telegram · bot @meridian_fleet_bot</span></div>
+              <div>Telegram gateway</div>
+              <div>prod</div>
+              <div>Operators</div>
+              <div><span style="display:inline-flex;align-items:center;min-height:24px;padding:3px 10px;border-radius:999px;background:#fff1cc;color:#8a5a00;font-size:12px;line-height:16px;font-weight:600;">Not configured on prod</span></div>
+            </div>
+            <!-- row 5 -->
+            <div style="display:grid;grid-template-columns:3fr 1fr 1.1fr 1.1fr 1.4fr;gap:12px;padding:14px 16px;align-items:center;">
+              <div style="display:flex;flex-direction:column;gap:2px;min-width:0;overflow-wrap:anywhere;"><span style="font-weight:600;">Webhook · case-management</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3f4850;">webhook · POST /fleet/events</span></div>
+              <div>HTTP webhook</div>
+              <div>prod</div>
+              <div>Case system</div>
+              <div style="display:flex;flex-direction:column;gap:2px;align-items:flex-start;"><span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#fff1cc;color:#8a5a00;font-size:12px;font-weight:600;">Degraded</span><span style="font-size:12px;color:#8a5a00;">2 failures today</span></div>
+            </div>
+          </div>
+
+          <!-- Delivery rules -->
+          <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;overflow:hidden;">
+            <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid #dbe3ee;">
+              <div style="font-size:15px;font-weight:600;">Delivery rules</div>
+              <div style="flex:1;"></div>
+              <div style="font-size:12px;color:#3f4850;">Rules are part of the blueprint · 4 of 5 enabled</div>
+            </div>
+            <!-- header row -->
+            <div style="display:grid;grid-template-columns:1.6fr 1.6fr 1.3fr 1.2fr 40px;gap:12px;padding:10px 16px;border-bottom:1px solid #dbe3ee;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">
+              <div>When</div><div>Send to</div><div>Message</div><div>Link</div><div></div>
+            </div>
+            <!-- rule 1 -->
+            <div style="display:grid;grid-template-columns:1.6fr 1.6fr 1.3fr 1.2fr 40px;gap:12px;padding:12px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+              <div style="font-weight:600;">Decision Room opened</div>
+              <div style="display:flex;flex-direction:column;gap:2px;"><span>Teams</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3f4850;">#aml-investigations</span></div>
+              <div>Decision request card</div>
+              <div style="color:#006194;font-weight:500;">Opens the room</div>
+              <div style="display:flex;justify-content:flex-end;"><span style="width:32px;height:18px;border-radius:999px;background:#006194;display:inline-flex;align-items:center;justify-content:flex-end;padding:0 2px;"><span style="width:14px;height:14px;border-radius:999px;background:#ffffff;display:inline-block;"></span></span></div>
+            </div>
+            <!-- rule 2 -->
+            <div style="display:grid;grid-template-columns:1.6fr 1.6fr 1.3fr 1.2fr 40px;gap:12px;padding:12px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+              <div style="font-weight:600;">Second approval needed</div>
+              <div style="display:flex;flex-direction:column;gap:2px;"><span>Email</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3f4850;">approvers</span></div>
+              <div>Approval request</div>
+              <div style="color:#006194;font-weight:500;">Opens the room</div>
+              <div style="display:flex;justify-content:flex-end;"><span style="width:32px;height:18px;border-radius:999px;background:#006194;display:inline-flex;align-items:center;justify-content:flex-end;padding:0 2px;"><span style="width:14px;height:14px;border-radius:999px;background:#ffffff;display:inline-block;"></span></span></div>
+            </div>
+            <!-- rule 3 -->
+            <div style="display:grid;grid-template-columns:1.6fr 1.6fr 1.3fr 1.2fr 40px;gap:12px;padding:12px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+              <div style="font-weight:600;">Fleet output shared</div>
+              <div style="display:flex;flex-direction:column;gap:2px;"><span>Teams</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3f4850;">#aml-investigations</span></div>
+              <div>Output summary</div>
+              <div style="color:#006194;font-weight:500;">Opens Fleet outputs</div>
+              <div style="display:flex;justify-content:flex-end;"><span style="width:32px;height:18px;border-radius:999px;background:#006194;display:inline-flex;align-items:center;justify-content:flex-end;padding:0 2px;"><span style="width:14px;height:14px;border-radius:999px;background:#ffffff;display:inline-block;"></span></span></div>
+            </div>
+            <!-- rule 4 -->
+            <div style="display:grid;grid-template-columns:1.6fr 1.6fr 1.3fr 1.2fr 40px;gap:12px;padding:12px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+              <div style="font-weight:600;">Assurance: No evidence</div>
+              <div style="display:flex;flex-direction:column;gap:2px;"><span>Slack</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3f4850;">#fleet-ops</span></div>
+              <div>Alert</div>
+              <div style="color:#006194;font-weight:500;">Opens Assurance</div>
+              <div style="display:flex;justify-content:flex-end;"><span style="width:32px;height:18px;border-radius:999px;background:#006194;display:inline-flex;align-items:center;justify-content:flex-end;padding:0 2px;"><span style="width:14px;height:14px;border-radius:999px;background:#ffffff;display:inline-block;"></span></span></div>
+            </div>
+            <!-- rule 5 (off) -->
+            <div style="display:grid;grid-template-columns:1.6fr 1.6fr 1.3fr 1.2fr 40px;gap:12px;padding:12px 16px;border-bottom:1px solid #dbe3ee;align-items:center;color:#3f4850;">
+              <div style="font-weight:600;">Drift detected</div>
+              <div style="display:flex;flex-direction:column;gap:2px;"><span>Slack</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3f4850;">#fleet-ops</span></div>
+              <div>Alert</div>
+              <div style="color:#006194;font-weight:500;">Opens Instances</div>
+              <div style="display:flex;justify-content:flex-end;"><span style="width:32px;height:18px;border-radius:999px;background:#ffffff;border:1px solid #bfc7d2;display:inline-flex;align-items:center;justify-content:flex-start;padding:0 2px;"><span style="width:12px;height:12px;border-radius:999px;background:#bfc7d2;display:inline-block;"></span></span></div>
+            </div>
+            <!-- add rule -->
+            <div style="margin:10px 16px 12px;height:36px;border:1px dashed #bfc7d2;border-radius:8px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:500;color:#006194;">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#006194" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"></path></svg>Add rule
+            </div>
+          </div>
+        </div>
+
+        <!-- Detail rail -->
+        <div style="width:380px;flex-shrink:0;background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+            <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+              <div style="font-size:15px;font-weight:600;">Microsoft Teams · #aml-investigations</div>
+              <div style="font-size:12px;color:#3f4850;">Channel · added 12 Aug 2026</div>
+            </div>
+            <span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;flex-shrink:0;">Connected</span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;border:1px solid #dbe3ee;border-radius:8px;overflow:hidden;">
+            <div style="display:flex;flex-direction:column;gap:2px;padding:9px 12px;border-bottom:1px solid #dbe3ee;"><span style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Gateway</span><span style="font-size:13px;">Hermes Teams gateway (built-in)</span></div>
+            <div style="display:flex;flex-direction:column;gap:2px;padding:9px 12px;border-bottom:1px solid #dbe3ee;"><span style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Instances</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;">hermes-prod-eu-01 · hermes-staging-eu-01</span></div>
+            <div style="display:flex;flex-direction:column;gap:2px;padding:9px 12px;border-bottom:1px solid #dbe3ee;"><span style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Auth</span><span style="font-size:13px;">App registration · configured 12 Aug</span></div>
+            <div style="display:flex;flex-direction:column;gap:2px;padding:9px 12px;"><span style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Who may reply</span><span style="font-size:13px;">Compliance officers (via workspace only)</span></div>
+          </div>
+
+          <div style="display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border-radius:8px;background:#fff1cc;color:#8a5a00;font-size:12px;line-height:16px;">
+            <svg width="14" height="14" style="flex-shrink:0;margin-top:1px;" viewBox="0 0 16 16" fill="none" stroke="#8a5a00" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"></circle><path d="M8 7v4M8 5h.01"></path></svg>
+            <span>Replies in Teams are not treated as decisions. Decisions are recorded only in the workspace, so the audit trail stays complete.</span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Message preview</div>
+            <div style="background:#eff4ff;border-radius:8px;padding:14px;">
+              <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <div style="width:20px;height:20px;border-radius:6px;background:#006194;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="3.5" r="1.8"></circle><circle cx="3.5" cy="12" r="1.8"></circle><circle cx="12.5" cy="12" r="1.8"></circle><path d="M7 5.2 4.4 10.3M9 5.2l2.6 5.1M5.3 12h5.4"></path></svg>
+                  </div>
+                  <span style="font-size:12px;font-weight:600;">Fleet Control</span>
+                  <span style="font-size:11px;color:#707881;">· AML Investigation v3</span>
+                </div>
+                <div style="font-size:14px;font-weight:600;line-height:20px;">Decision needed: Should we file a SAR for Alpha Trading Ltd?</div>
+                <div style="font-size:13px;line-height:18px;color:#3f4850;">Case Orchestrator has assembled the evidence pack and is waiting for a compliance officer to decide.</div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:2px;">
+                  <span style="height:30px;padding:0 12px;border-radius:8px;background:#006194;color:#ffffff;display:inline-flex;align-items:center;font-size:12px;font-weight:600;">Open in workspace</span>
+                  <span style="font-size:12px;color:#707881;">Due 12 Sep</span>
+                </div>
+              </div>
+            </div>
+            <div style="font-size:12px;color:#3f4850;line-height:16px;">Cards carry a summary and a link. Evidence, context and the decision itself stay in the workspace.</div>
+          </div>
+
+          <div style="display:flex;gap:8px;">
+            <div style="flex:1;height:36px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;justify-content:center;font-weight:500;font-size:13px;">Edit channel</div>
+            <div style="flex:1;height:36px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;justify-content:center;font-weight:500;font-size:13px;">Disable</div>
+          </div>
+        </div>
+      </div>

@@ -1,0 +1,101 @@
+      <!-- Page header -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px;">
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="font-size:12px;color:#3f4850;">Library</div>
+          <h1 style="margin:0;font-size:24px;line-height:32px;font-weight:600;letter-spacing:-0.02em;">Blueprints</h1>
+          <div style="color:#3f4850;">Versioned fleet definitions. Import from YAML or save one from Fleet Designer.</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <div style="height:36px;padding:0 14px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;gap:8px;font-weight:500;">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10V2.5M5 5.5l3-3 3 3"></path><path d="M3 10v3h10v-3"></path></svg>Import YAML
+          </div>
+          <div style="height:36px;padding:0 14px;border-radius:8px;background:#006194;color:#ffffff;display:flex;align-items:center;gap:8px;font-weight:600;">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"></path></svg>New blueprint
+          </div>
+        </div>
+      </div>
+
+      <!-- Blueprint table -->
+      <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;overflow:hidden;">
+        <!-- header row -->
+        <div style="display:grid;grid-template-columns:2.2fr 1fr 1.6fr 1.2fr 0.8fr;gap:12px;padding:10px 16px;border-bottom:1px solid #dbe3ee;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">
+          <div>Blueprint</div><div>Latest version</div><div>Applied on</div><div>Tests</div><div>Updated</div>
+        </div>
+        <!-- row 1 (selected) -->
+        <div style="display:grid;grid-template-columns:2.2fr 1fr 1.6fr 1.2fr 0.8fr;gap:12px;padding:14px 16px;border-bottom:1px solid #dbe3ee;background:#eff4ff;align-items:center;">
+          <div style="display:flex;flex-direction:column;gap:2px;"><span style="font-weight:600;">AML Investigation</span><span style="font-size:12px;color:#3f4850;">5 agents · 2 workflows · owner D. Whitfield</span></div>
+          <div style="display:flex;align-items:center;gap:6px;"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;">v3</span><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:#dce9ff;color:#3f4850;font-size:12px;font-weight:600;">Draft</span></div>
+          <div style="display:flex;flex-direction:column;gap:2px;"><span>hermes-prod-eu-01</span><span style="font-size:12px;color:#3f4850;">v2 applied · 8 Sep</span></div>
+          <div style="display:flex;flex-direction:column;gap:2px;"><span>9 tests</span><span style="font-size:12px;color:#1b6b3a;font-weight:500;">9 passed</span></div>
+          <div style="color:#3f4850;">2 h ago</div>
+        </div>
+        <!-- row 2 -->
+        <div style="display:grid;grid-template-columns:2.2fr 1fr 1.6fr 1.2fr 0.8fr;gap:12px;padding:14px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+          <div style="display:flex;flex-direction:column;gap:2px;"><span style="font-weight:600;">KYC refresh</span><span style="font-size:12px;color:#3f4850;">3 agents · 1 workflow · owner M. Okafor</span></div>
+          <div><span style="font-family:'JetBrains Mono',monospace;font-size:12px;">v1</span></div>
+          <div style="display:flex;flex-direction:column;gap:2px;"><span>hermes-staging-eu-01</span><span style="font-size:12px;color:#3f4850;">v1 applied · 9 Sep</span></div>
+          <div style="display:flex;flex-direction:column;gap:2px;"><span>4 tests</span><span style="font-size:12px;color:#8a5a00;font-weight:500;">3 passed · 1 failed</span></div>
+          <div style="color:#3f4850;">Yesterday</div>
+        </div>
+        <!-- row 3 -->
+        <div style="display:grid;grid-template-columns:2.2fr 1fr 1.6fr 1.2fr 0.8fr;gap:12px;padding:14px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+          <div style="display:flex;flex-direction:column;gap:2px;"><span style="font-weight:600;">Vendor invoice triage</span><span style="font-size:12px;color:#3f4850;">2 agents · 1 workflow · owner R. Lindqvist</span></div>
+          <div><span style="font-family:'JetBrains Mono',monospace;font-size:12px;">v2</span></div>
+          <div style="color:#707881;">Not applied</div>
+          <div style="display:flex;flex-direction:column;gap:2px;"><span>6 tests</span><span style="font-size:12px;color:#3f4850;">Not run yet</span></div>
+          <div style="color:#3f4850;">3 Sep</div>
+        </div>
+        <!-- row 4 -->
+        <div style="display:grid;grid-template-columns:2.2fr 1fr 1.6fr 1.2fr 0.8fr;gap:12px;padding:14px 16px;align-items:center;">
+          <div style="display:flex;flex-direction:column;gap:2px;"><div style="display:flex;align-items:center;gap:8px;"><span style="font-weight:600;">Starter: single research agent</span><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:#dce9ff;color:#3f4850;font-size:12px;font-weight:600;">Template</span></div><span style="font-size:12px;color:#3f4850;">1 agent · no workflows · provided by Fleet Control</span></div>
+          <div><span style="font-family:'JetBrains Mono',monospace;font-size:12px;">v1</span></div>
+          <div style="color:#707881;">Template</div>
+          <div style="display:flex;flex-direction:column;gap:2px;"><span>2 tests</span><span style="font-size:12px;color:#1b6b3a;font-weight:500;">2 passed</span></div>
+          <div style="color:#3f4850;">12 Aug</div>
+        </div>
+      </div>
+
+      <!-- Version history -->
+      <div style="background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;overflow:hidden;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-bottom:1px solid #dbe3ee;">
+          <div style="display:flex;flex-direction:column;gap:2px;">
+            <div style="font-size:15px;font-weight:600;">Version history · AML Investigation</div>
+            <div style="font-size:12px;color:#3f4850;">Each version is immutable once applied. Drafts can be edited in Fleet Designer.</div>
+          </div>
+          <div style="font-size:12px;color:#3f4850;">4 versions</div>
+        </div>
+        <!-- v3 draft -->
+        <div style="display:grid;grid-template-columns:120px 150px 150px 1fr auto;gap:16px;padding:14px 18px;border-bottom:1px solid #dbe3ee;align-items:center;">
+          <div style="display:flex;align-items:center;gap:8px;"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:500;">v3</span><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:#dce9ff;color:#3f4850;font-size:12px;font-weight:600;">Draft</span></div>
+          <div style="color:#3f4850;">11 Sep 2026</div>
+          <div>D. Whitfield</div>
+          <div>Added Challenger agent; SAR Drafter now requires two signatures before submission.</div>
+          <div style="width:112px;"></div>
+        </div>
+        <!-- v2 -->
+        <div style="display:grid;grid-template-columns:120px 150px 150px 1fr auto;gap:16px;padding:14px 18px;border-bottom:1px solid #dbe3ee;align-items:center;">
+          <div style="display:flex;align-items:center;gap:8px;"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:500;">v2</span><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;">Applied</span></div>
+          <div style="color:#3f4850;">8 Sep 2026</div>
+          <div>D. Whitfield</div>
+          <div>Moved Sanctions Screener to Llama 4 (local); added data-residency policy on exports.</div>
+          <div style="width:112px;"></div>
+        </div>
+        <!-- v1 -->
+        <div style="display:grid;grid-template-columns:120px 150px 150px 1fr auto;gap:16px;padding:14px 18px;border-bottom:1px solid #dbe3ee;align-items:center;">
+          <div><span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:500;">v1</span></div>
+          <div style="color:#3f4850;">27 Aug 2026</div>
+          <div>M. Okafor</div>
+          <div>First applied version: orchestrator plus three specialists; human approval on external actions.</div>
+          <div style="width:112px;"></div>
+        </div>
+        <!-- v0 -->
+        <div style="display:grid;grid-template-columns:120px 150px 150px 1fr auto;gap:16px;padding:14px 18px;align-items:center;">
+          <div><span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:500;">v0</span></div>
+          <div style="color:#3f4850;">19 Aug 2026</div>
+          <div>Fleet Architect</div>
+          <div>Saved from Fleet Architect proposal; never applied.</div>
+          <div style="height:32px;padding:0 12px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;gap:6px;font-weight:500;font-size:13px;white-space:nowrap;">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h10M9 2l3 3-3 3M14 11H4M7 8l-3 3 3 3"></path></svg>Compare v3 ↔ v2
+          </div>
+        </div>
+      </div>

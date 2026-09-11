@@ -1,0 +1,115 @@
+      <!-- Page header -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px;">
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="font-size:12px;color:#3f4850;">Estate</div>
+          <h1 style="margin:0;font-size:24px;line-height:32px;font-weight:600;letter-spacing:-0.02em;">Integrations</h1>
+          <div style="color:#3f4850;">MCP servers and model providers discovered on your instances, with who may use them.</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <div style="height:36px;padding:0 14px;border-radius:8px;background:#006194;color:#ffffff;display:flex;align-items:center;gap:8px;font-weight:600;">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"></path></svg>Register MCP server
+          </div>
+        </div>
+      </div>
+
+      <!-- Body: table + detail -->
+      <div style="display:flex;gap:20px;align-items:flex-start;">
+        <!-- Table -->
+        <div style="flex:1;min-width:0;background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;overflow:hidden;">
+          <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid #dbe3ee;">
+            <div style="height:32px;flex:1;max-width:240px;border:1px solid #bfc7d2;border-radius:8px;background:#f8f9ff;display:flex;align-items:center;gap:8px;padding:0 10px;color:#707881;font-size:13px;">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#707881" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="4.5"></circle><path d="M10.5 10.5 14 14"></path></svg>Filter integrations
+            </div>
+            <div style="height:32px;padding:0 10px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;gap:6px;font-size:13px;">Type: All <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#3f4850" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg></div>
+            <div style="flex:1;"></div>
+            <div style="font-size:12px;color:#3f4850;">Last discovery 6 min ago</div>
+          </div>
+          <!-- header row -->
+          <div style="display:grid;grid-template-columns:2.2fr 1.1fr 1.2fr 0.8fr 1.1fr;gap:12px;padding:10px 16px;border-bottom:1px solid #dbe3ee;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">
+            <div>Integration</div><div>Type</div><div>Instances</div><div>Used by</div><div>Health</div>
+          </div>
+          <!-- row 1 (selected) -->
+          <div style="display:grid;grid-template-columns:2.2fr 1.1fr 1.2fr 0.8fr 1.1fr;gap:12px;padding:14px 16px;border-bottom:1px solid #dbe3ee;background:#eff4ff;align-items:center;">
+            <div style="display:flex;flex-direction:column;gap:2px;"><span style="font-weight:600;">SAS Viya</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3f4850;">sas-viya</span></div>
+            <div>MCP</div>
+            <div>prod, staging</div>
+            <div>3 agents</div>
+            <div><span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;">Healthy</span></div>
+          </div>
+          <!-- row 2 -->
+          <div style="display:grid;grid-template-columns:2.2fr 1.1fr 1.2fr 0.8fr 1.1fr;gap:12px;padding:14px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+            <div style="display:flex;flex-direction:column;gap:2px;"><span style="font-weight:600;">OpenSanctions</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3f4850;">opensanctions</span></div>
+            <div>MCP</div>
+            <div>prod, staging, lab</div>
+            <div>1 agent</div>
+            <div><span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;">Healthy</span></div>
+          </div>
+          <!-- row 3 -->
+          <div style="display:grid;grid-template-columns:2.2fr 1.1fr 1.2fr 0.8fr 1.1fr;gap:12px;padding:14px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+            <div style="display:flex;flex-direction:column;gap:2px;"><span style="font-weight:600;">Corporate registry</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3f4850;">corp-registry</span></div>
+            <div>MCP</div>
+            <div>prod</div>
+            <div>1 agent</div>
+            <div style="display:flex;flex-direction:column;gap:2px;align-items:flex-start;"><span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#fff1cc;color:#8a5a00;font-size:12px;font-weight:600;">Degraded</span><span style="font-size:12px;color:#8a5a00;">p95 latency 4.2 s</span></div>
+          </div>
+          <!-- row 4 -->
+          <div style="display:grid;grid-template-columns:2.2fr 1.1fr 1.2fr 0.8fr 1.1fr;gap:12px;padding:14px 16px;border-bottom:1px solid #dbe3ee;align-items:center;">
+            <div style="display:flex;flex-direction:column;gap:2px;"><span style="font-weight:600;">Anthropic (Claude Sonnet)</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3f4850;">anthropic</span></div>
+            <div>Model provider</div>
+            <div>All</div>
+            <div>2 agents</div>
+            <div><span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;">Healthy</span></div>
+          </div>
+          <!-- row 5 -->
+          <div style="display:grid;grid-template-columns:2.2fr 1.1fr 1.2fr 0.8fr 1.1fr;gap:12px;padding:14px 16px;align-items:center;">
+            <div style="display:flex;flex-direction:column;gap:2px;"><span style="font-weight:600;">Local Llama 4</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3f4850;">llama4-local</span></div>
+            <div>Model provider</div>
+            <div>prod, staging</div>
+            <div>2 agents</div>
+            <div><span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;">Healthy</span></div>
+          </div>
+        </div>
+
+        <!-- Detail rail -->
+        <div style="width:380px;flex-shrink:0;background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+            <div style="display:flex;flex-direction:column;gap:2px;">
+              <div style="font-size:15px;font-weight:600;">SAS Viya</div>
+              <div style="font-size:12px;color:#3f4850;">MCP server · registered 12 Aug 2026</div>
+            </div>
+            <span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#d7f2e0;color:#1b6b3a;font-size:12px;font-weight:600;">Healthy</span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;border:1px solid #dbe3ee;border-radius:8px;overflow:hidden;">
+            <div style="display:flex;flex-direction:column;gap:2px;padding:9px 12px;border-bottom:1px solid #dbe3ee;"><span style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Endpoint</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;">https://viya.meridian.internal/mcp</span></div>
+            <div style="display:flex;flex-direction:column;gap:2px;padding:9px 12px;border-bottom:1px solid #dbe3ee;"><span style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Auth</span><span style="font-size:13px;">SAS OAuth, per-agent service account</span></div>
+            <div style="display:flex;flex-direction:column;gap:2px;padding:9px 12px;"><span style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Instances</span><span style="font-size:13px;">hermes-prod-eu-01, hermes-staging-eu-01</span></div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;">Tools exposed</div>
+            <div style="display:flex;flex-direction:column;border:1px solid #dbe3ee;border-radius:8px;overflow:hidden;">
+              <div style="display:grid;grid-template-columns:124px 1fr;gap:10px;padding:8px 12px;border-bottom:1px solid #dbe3ee;background:#f8f9ff;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3f4850;"><div>Tool</div><div>Allowed for</div></div>
+              <div style="display:grid;grid-template-columns:124px 1fr;gap:10px;padding:9px 12px;border-bottom:1px solid #dbe3ee;align-items:center;">
+                <div style="font-family:'JetBrains Mono',monospace;font-size:12px;">risk.score</div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;"><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:#e1e0ff;color:#4648d4;font-size:12px;font-weight:500;">Ownership Tracer</span><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:#e1e0ff;color:#4648d4;font-size:12px;font-weight:500;">Case Orchestrator</span></div>
+              </div>
+              <div style="display:grid;grid-template-columns:124px 1fr;gap:10px;padding:9px 12px;border-bottom:1px solid #dbe3ee;align-items:center;">
+                <div style="font-family:'JetBrains Mono',monospace;font-size:12px;">model.run</div>
+                <div style="font-size:13px;color:#707881;">No one</div>
+              </div>
+              <div style="display:grid;grid-template-columns:124px 1fr;gap:10px;padding:9px 12px;border-bottom:1px solid #dbe3ee;align-items:center;">
+                <div style="font-family:'JetBrains Mono',monospace;font-size:12px;">decision.evaluate</div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;"><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:#e1e0ff;color:#4648d4;font-size:12px;font-weight:500;">Case Orchestrator</span></div>
+              </div>
+              <div style="display:grid;grid-template-columns:124px 1fr;gap:10px;padding:9px 12px;align-items:center;">
+                <div style="font-family:'JetBrains Mono',monospace;font-size:12px;">data.export</div>
+                <div style="display:flex;flex-direction:column;gap:2px;"><span style="font-size:13px;color:#707881;">No one</span><span style="display:flex;align-items:flex-start;gap:4px;font-size:12px;color:#8a5a00;line-height:16px;"><svg width="14" height="14" style="flex-shrink:0;margin-top:1px;" viewBox="0 0 16 16" fill="none" stroke="#8a5a00" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"></circle><path d="M8 7v4M8 5h.01"></path></svg>Blocked by policy: data residency</span></div>
+              </div>
+            </div>
+            <div style="font-size:12px;color:#3f4850;line-height:16px;">Allow-lists are part of the blueprint. Changing them here creates a plan you apply to each instance.</div>
+          </div>
+
+          <div style="height:36px;border:1px solid #bfc7d2;border-radius:8px;background:#ffffff;display:flex;align-items:center;justify-content:center;font-weight:500;font-size:13px;">Edit allowed agents</div>
+        </div>
+      </div>

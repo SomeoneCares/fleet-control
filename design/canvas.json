@@ -1,0 +1,271 @@
+{
+ "pages": [
+  {
+   "id": "page-1",
+   "name": "Core flow"
+  },
+  {
+   "id": "page-2",
+   "name": "Operate, govern, library"
+  },
+  {
+   "id": "page-3",
+   "name": "Business workspace"
+  }
+ ],
+ "artboards": [
+  {
+   "file": "SignIn.dc.html",
+   "title": "Sign in",
+   "x": 0,
+   "y": 0,
+   "w": 1440,
+   "h": 900,
+   "page": "page-1"
+  },
+  {
+   "file": "InstancesEmpty.dc.html",
+   "title": "Instances \u00b7 day one + Connect drawer",
+   "x": 1560,
+   "y": 0,
+   "w": 1440,
+   "h": 1000,
+   "page": "page-1"
+  },
+  {
+   "file": "Main.dc.html",
+   "title": "Instances",
+   "x": 3120,
+   "y": 0,
+   "w": 1440,
+   "h": 1000,
+   "page": "page-1"
+  },
+  {
+   "file": "FleetArchitectEmpty.dc.html",
+   "title": "Fleet Architect \u00b7 first run",
+   "x": 0,
+   "y": 1200,
+   "w": 1440,
+   "h": 1000,
+   "page": "page-1"
+  },
+  {
+   "file": "FleetArchitect.dc.html",
+   "title": "Fleet Architect \u00b7 proposal",
+   "x": 1560,
+   "y": 1200,
+   "w": 1440,
+   "h": 1530,
+   "page": "page-1"
+  },
+  {
+   "file": "FleetDesigner.dc.html",
+   "title": "Fleet Designer \u00b7 topology",
+   "x": 3120,
+   "y": 1200,
+   "w": 1440,
+   "h": 1060,
+   "page": "page-1"
+  },
+  {
+   "file": "ApplyPlan.dc.html",
+   "title": "Plan before apply",
+   "x": 0,
+   "y": 2930,
+   "w": 1440,
+   "h": 1000,
+   "page": "page-1"
+  },
+  {
+   "file": "Drift.dc.html",
+   "title": "Drift resolution",
+   "x": 1560,
+   "y": 2930,
+   "w": 1440,
+   "h": 1000,
+   "page": "page-1"
+  },
+  {
+   "file": "AgentStudio.dc.html",
+   "title": "Agent Studio",
+   "x": 3120,
+   "y": 2930,
+   "w": 1440,
+   "h": 1030,
+   "page": "page-1"
+  },
+  {
+   "file": "Assurance.dc.html",
+   "title": "Assurance \u00b7 evidence",
+   "x": 0,
+   "y": 4160,
+   "w": 1440,
+   "h": 1040,
+   "page": "page-1"
+  },
+  {
+   "file": "TestLab.dc.html",
+   "title": "Test Lab",
+   "x": 0,
+   "y": 0,
+   "w": 1440,
+   "h": 1000,
+   "page": "page-2"
+  },
+  {
+   "file": "Workflows.dc.html",
+   "title": "Workflows",
+   "x": 1560,
+   "y": 0,
+   "w": 1440,
+   "h": 1000,
+   "page": "page-2"
+  },
+  {
+   "file": "Access.dc.html",
+   "title": "Access \u00b7 effective permissions",
+   "x": 3120,
+   "y": 0,
+   "w": 1440,
+   "h": 1060,
+   "page": "page-2"
+  },
+  {
+   "file": "AuditLog.dc.html",
+   "title": "Audit log",
+   "x": 0,
+   "y": 1260,
+   "w": 1440,
+   "h": 1000,
+   "page": "page-2"
+  },
+  {
+   "file": "Blueprints.dc.html",
+   "title": "Blueprints library",
+   "x": 1560,
+   "y": 1260,
+   "w": 1440,
+   "h": 1000,
+   "page": "page-2"
+  },
+  {
+   "file": "Content.dc.html",
+   "title": "Content",
+   "x": 3120,
+   "y": 1260,
+   "w": 1440,
+   "h": 1000,
+   "page": "page-2"
+  },
+  {
+   "file": "Integrations.dc.html",
+   "title": "Integrations \u00b7 MCP",
+   "x": 0,
+   "y": 2460,
+   "w": 1440,
+   "h": 1000,
+   "page": "page-2"
+  },
+  {
+   "file": "Settings.dc.html",
+   "title": "Settings \u00b7 observability",
+   "x": 1560,
+   "y": 2460,
+   "w": 1440,
+   "h": 1000,
+   "page": "page-2"
+  },
+  {
+   "file": "Messaging.dc.html",
+   "title": "Messaging \u00b7 admin",
+   "x": 3120,
+   "y": 2460,
+   "w": 1440,
+   "h": 1300,
+   "page": "page-2"
+  },
+  {
+   "file": "WorkspaceHome.dc.html",
+   "title": "Workspace home \u00b7 business user",
+   "x": 0,
+   "y": 0,
+   "w": 1440,
+   "h": 1000,
+   "page": "page-3"
+  },
+  {
+   "file": "DecisionRoom.dc.html",
+   "title": "Decision Room",
+   "x": 1560,
+   "y": 0,
+   "w": 1440,
+   "h": 1000,
+   "page": "page-3"
+  },
+  {
+   "file": "AskFleet.dc.html",
+   "title": "Ask the fleet",
+   "x": 3120,
+   "y": 0,
+   "w": 1440,
+   "h": 1000,
+   "page": "page-3"
+  },
+  {
+   "file": "FleetOutputs.dc.html",
+   "title": "Fleet outputs",
+   "x": 0,
+   "y": 1200,
+   "w": 1440,
+   "h": 1000,
+   "page": "page-3"
+  }
+ ],
+ "annotations": [
+  {
+   "id": "why",
+   "x": 0,
+   "y": -260,
+   "w": 700,
+   "page": "page-1",
+   "text": "Fleet Control for Hermes Agent \u2014 consolidated redesign\n\nOne shell and one navigation on every screen (Design \u00b7 Operate \u00b7 Estate \u00b7 Govern \u00b7 Library). Neutral product name. Density cut to one primary action, \u22644 KPIs, no tickers.\nDay-one states added (no instances, first Architect run). Missing screens added: Plan before apply, Drift resolution.\nAssurance uses only four honest verdicts: Evidence found / No evidence / Not verifiable / Policy blocked."
+  },
+  {
+   "id": "write-path",
+   "x": 760,
+   "y": -200,
+   "w": 520,
+   "page": "page-1",
+   "text": "Open technical dependency: every write to Hermes (profiles, SOUL, skills, MCPs) currently goes through the dashboard API or CLI, not the stable /v1 API. Each screen that writes shows its method ('via Dashboard API') so this stays visible."
+  },
+  {
+   "id": "p2",
+   "x": 0,
+   "y": -160,
+   "w": 600,
+   "page": "page-2",
+   "text": "Operate, govern and library screens. These are v2 candidates except Test Lab and Access, which the core flow depends on."
+  },
+  {
+   "id": "ws",
+   "x": 0,
+   "y": -220,
+   "w": 720,
+   "page": "page-3",
+   "text": "Business-user experience \u2014 same app, same sign-in, different shell.\nPeople with only Approver/Viewer roles land here: decisions waiting, fleet outputs shared with their role, and a governed chat with the orchestrator. No Design, Estate or Govern navigation. The Decision Room lives here, not in the admin portal."
+  },
+  {
+   "id": "msg",
+   "x": 3120,
+   "y": -160,
+   "w": 520,
+   "page": "page-2",
+   "text": "Messaging (admin): configures the Hermes messaging gateways per instance and the delivery rules that push decision requests and outputs into Teams/Slack/email, always with a link back into the workspace. Replies in chat are never treated as decisions."
+  }
+ ],
+ "launch": {
+  "view": "canvas",
+  "page": "page-3"
+ }
+}

@@ -59,6 +59,46 @@ class WebEndpointsTest(unittest.TestCase):
         self._agent_does({"ok": True, "drift": {"challenger": [{"field": "skills", "blueprint": [], "live": ["x"]}]}})
         self.assertEqual(self._row()["open_drift"], 1)
 
+    def _own_blueprint(self):
+        name = "studio-" + os.urandom(3).hex()
+        with open(EXAMPLE, encoding="utf-8") as f:
+            text = f.read().replace("name: aml-investigation", f"name: {name}", 1)
+        self.assertEqual(self.c.post("/api/v1/blueprints", json={"yaml": text}).status_code, 201)
+        return name, text
+
+    def test_detail_carries_parsed_and_managed(self):
+        name, _ = self._own_blueprint()
+        d = self.c.get(f"/api/v1/blueprints/{name}/3").json()
+        self.assertEqual(len(d["parsed"]["agents"]), 5)
+        self.assertTrue(d["managed"]["challenger"]["soul_sha256"].startswith("sha256:"))
+
+    def test_edit_draft_and_immutable_applied(self):
+        from fleetcontrol_api.main import store
+
+        name, text = self._own_blueprint()
+        r = self.c.put(f"/api/v1/blueprints/{name}/3/agents/challenger", json={"skills": ["counter-argument", "quick-check"]})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["changed"], ["skills"])
+        self.assertIn("quick-check", self.c.get(f"/api/v1/blueprints/{name}/3").json()["yaml"])
+        self.assertEqual(self.c.put(f"/api/v1/blueprints/{name}/3/agents/challenger", json={"delegates_to": ["ghost"]}).status_code, 422)
+        self.assertEqual(self.c.put(f"/api/v1/blueprints/{name}/3/agents/ghost", json={"role": "x"}).status_code, 404)
+
+        store.blueprints[name][3]["status"] = "applied"
+        self.assertEqual(self.c.put(f"/api/v1/blueprints/{name}/3/agents/challenger", json={"role": "x"}).status_code, 409)
+        self.assertEqual(self.c.post("/api/v1/blueprints", json={"yaml": text}).status_code, 409)  # no overwrite of applied
+        draft = self.c.post(f"/api/v1/blueprints/{name}/3/draft").json()
+        self.assertEqual((draft["version"], draft["status"]), (4, "draft"))
+        self.assertEqual(self.c.put(f"/api/v1/blueprints/{name}/4/agents/challenger", json={"role": "Counter-case."}).status_code, 200)
+        actions = [e["action"] for e in self.c.get("/api/v1/audit", params={"limit": 50}).json() if name in e["target"]]
+        self.assertIn("blueprint.edited", actions)
+        self.assertIn("blueprint.draft_created", actions)
+
+    def test_audit_export_is_csv(self):
+        r = self.c.get("/api/v1/audit/export")
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.headers["content-type"].startswith("text/csv"))
+        self.assertTrue(r.text.startswith("time_utc,actor,action,target,detail"))
+
     def test_blueprint_list_and_history(self):
         bp = next(b for b in self.c.get("/api/v1/blueprints").json() if b["name"] == "aml-investigation")
         self.assertEqual((bp["owner"], bp["agents"], bp["workflows"], bp["tests"]), ("dana.whitfield", 5, 1, 5))

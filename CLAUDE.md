@@ -33,8 +33,10 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
 - DONE: `apps/web` Slice 1 screens — Instances (+Connect drawer, empty state), Blueprints, ApplyPlan, Drift — with
   Tailwind tokens generated from `design/` (`apps/web/scripts/tokens.mjs`). `scripts/dev_seed.py` fills a local API
   with demo data and simulated agents; see `apps/web/README.md` to run it. Drift resolution API: accept/revert/ignore/exception.
-- NEXT: the remaining Slice 1 screens — Fleet Designer (read-mostly topology), Agent Studio, Audit log, Access (roles).
-- THEN: PostgreSQL store, sign-in (local then OIDC), Docker Compose packaging, Slice 1 exit test on a lab instance.
+- DONE: Fleet Designer (topology from the workflow), Agent Studio (edits land on drafts; applied versions are immutable,
+  also on re-upload), Audit log (filters, CSV export at `/api/v1/audit/export`).
+- NEXT: sign-in (local accounts, then OIDC) with the five roles and the Access screen; the API still trusts `X-User`.
+- THEN: PostgreSQL store, Docker Compose packaging, Slice 1 exit test on a lab instance.
 
 ## Working agreements
 - Keep tests runnable with `python3 -m unittest` (no pytest-only features). Add tests with every module.

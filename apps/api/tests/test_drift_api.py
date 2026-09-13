@@ -27,8 +27,8 @@ class DriftApiTest(unittest.TestCase):
         tok = self.c.post("/agent/v1/pair", json={"instance_id": self.inst, "agent_version": "0.1.0", "report": {"surfaces": {"api": "ok"}}},
                           headers={"Authorization": f"Bearer {pair}"}).json()["agent_token"]
         self.agent = {"Authorization": f"Bearer {tok}"}
-        with open(EXAMPLE, encoding="utf-8") as f:
-            self.assertEqual(self.c.post("/api/v1/blueprints", json={"yaml": f.read()}).status_code, 201)
+        with open(EXAMPLE, encoding="utf-8") as f:  # 409 once another test has applied v3 (immutable)
+            self.assertIn(self.c.post("/api/v1/blueprints", json={"yaml": f.read()}).status_code, (201, 409))
 
     def _scan(self, drift=DRIFT):
         job = self.c.post(f"/api/v1/instances/{self.inst}/drift-scan", params={"blueprint": "aml-investigation", "version": 3}).json()["job_id"]

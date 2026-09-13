@@ -183,6 +183,13 @@ class Store:
             self.move_drift(instance_id, chosen, "excepted")
 
     # ---- blueprints ----------------------------------------------------------
+    def update_blueprint(self, name: str, version: int, yaml_text: str, parsed: dict, editor: str) -> dict:
+        """Replace a draft's content in place; author and created_at stay as they were."""
+        with self.lock:
+            rec = self.blueprints[name][version]
+            rec.update({"yaml": yaml_text, "parsed": parsed, "updated_at": time.time(), "updated_by": editor})
+            return rec
+
     def save_blueprint(self, name: str, version: int, yaml_text: str, parsed: dict, author: str) -> dict:
         with self.lock:
             rec = {"name": name, "version": version, "yaml": yaml_text, "parsed": parsed, "status": "draft", "author": author, "created_at": time.time()}

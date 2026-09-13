@@ -116,6 +116,105 @@ export interface BlueprintVersion {
   yaml: string;
 }
 
+// ---- the parsed blueprint (packages/blueprint_schema, model_dump(mode="json")) ----
+
+export interface ModelPolicy {
+  provider: string;
+  name: string;
+  fallback?: string | null;
+  data_class: "raw" | "redacted-only";
+}
+
+export interface OutputContract {
+  format: "json" | "markdown" | "text" | "file";
+  required: string[];
+  artifact?: string | null;
+}
+
+export interface SoulDoc {
+  objective: string;
+  principles: string[];
+  boundaries: string[];
+  output_contract?: OutputContract | null;
+  raw?: string | null;
+}
+
+export interface AgentDoc {
+  id: string;
+  role: string;
+  model: ModelPolicy;
+  soul: SoulDoc;
+  skills: string[];
+  toolsets: string[];
+  mcps: string[];
+  delegates_to: string[];
+  content_zones: string[];
+  tests: string[];
+  hermes_profile?: string | null;
+}
+
+export interface TestDoc {
+  id: string;
+  target: string;
+  scenario: string;
+  required_tools: string[];
+  forbidden_tools: string[];
+  expected_artifact?: string | null;
+  evaluator: string;
+  expected?: string | null;
+}
+
+export interface AgentStepDoc { agent: string; artifact?: string | null; input?: string | null }
+export interface ParallelStepDoc { parallel: AgentStepDoc[] }
+export interface HumanGateDoc { human_gate: string; timeout: string; escalate_to?: string | null; on_reject?: string | null }
+export interface DecisionRoomStepDoc { open_decision_room: boolean; question_template?: string | null }
+export type WorkflowStepDoc = AgentStepDoc | ParallelStepDoc | HumanGateDoc | DecisionRoomStepDoc;
+
+export interface WorkflowDoc {
+  id: string;
+  steps: WorkflowStepDoc[];
+  tests: string[];
+}
+
+export interface PolicyDoc {
+  id: string;
+  kind: string;
+  description: string;
+  applies_to: string[];
+  enforcement: "block" | "approve" | "flag";
+}
+
+export interface BlueprintDoc {
+  metadata: { name: string; version: number; owner: string; description?: string | null };
+  mission: string;
+  policies: PolicyDoc[];
+  agents: AgentDoc[];
+  workflows: WorkflowDoc[];
+  tests: TestDoc[];
+  delivery: { when: string; to: string; template: string; enabled: boolean }[];
+  targets: { instance: string; environment: Environment; requires_approvals: number }[];
+}
+
+export interface ManagedFields {
+  description: string;
+  model: { provider: string; name: string };
+  soul_sha256: string;
+  skills: string[];
+  toolsets: string[];
+  mcps: string[];
+}
+
+export interface BlueprintDetail extends BlueprintVersion {
+  parsed: BlueprintDoc;
+  managed: Record<string, ManagedFields>;
+  author: string;
+  created_at: number;
+}
+
+export type AgentPatch = Partial<Pick<AgentDoc, "role" | "model" | "soul" | "skills" | "toolsets" | "mcps" | "delegates_to" | "content_zones" | "tests">>;
+
+export const AUDIT_EXPORT_URL = "/api/v1/audit/export";
+
 export interface PlanRow {
   kind: "create" | "update" | "remove" | "approval";
   symbol: string;
@@ -231,7 +330,12 @@ export const api = {
   ) => call<ResolveResult>("POST", `/api/v1/instances/${enc(id)}/drift/resolve`, body),
   blueprints: () => call<BlueprintSummary[]>("GET", "/api/v1/blueprints"),
   blueprintVersions: (name: string) => call<BlueprintVersionInfo[]>("GET", `/api/v1/blueprints/${enc(name)}`),
-  blueprint: (name: string, version: number) => call<BlueprintVersion>("GET", `/api/v1/blueprints/${enc(name)}/${version}`),
+  blueprint: (name: string, version: number) => call<BlueprintDetail>("GET", `/api/v1/blueprints/${enc(name)}/${version}`),
+  createDraft: (name: string, version: number) =>
+    call<{ name: string; version: number; status: string }>("POST", `/api/v1/blueprints/${enc(name)}/${version}/draft`),
+  editAgent: (name: string, version: number, agentId: string, patch: AgentPatch) =>
+    call<{ name: string; version: number; status: string; changed: string[]; agent: AgentDoc; managed: ManagedFields }>(
+      "PUT", `/api/v1/blueprints/${enc(name)}/${version}/agents/${enc(agentId)}`, patch),
   uploadBlueprint: (yaml: string) =>
     call<{ name: string; version: number; status: string; managed_profiles: string[] }>("POST", "/api/v1/blueprints", { yaml }),
   createPlan: (blueprint: string, version: number, instance_id: string) =>
@@ -240,5 +344,5 @@ export const api = {
   approvePlan: (id: string) => call<{ approvals: string[]; required: number }>("POST", `/api/v1/plans/${enc(id)}/approve`),
   applyPlan: (id: string) => call<{ jobs: string[] }>("POST", `/api/v1/plans/${enc(id)}/apply`),
   job: (id: string) => call<Job>("GET", `/api/v1/jobs/${enc(id)}`),
-  audit: () => call<AuditEvent[]>("GET", "/api/v1/audit"),
+  audit: (limit = 200) => call<AuditEvent[]>("GET", "/api/v1/audit", undefined, { limit }),
 };

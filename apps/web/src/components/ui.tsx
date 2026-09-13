@@ -1,6 +1,6 @@
 // The small in-house component set the redesign shell needs (build document §10: no heavy UI framework).
 // Every colour, radius and type size comes from the generated tokens (src/styles/tokens.css).
-import { useEffect, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import type { Tone } from "../lib/view";
 
 const ICONS = {
@@ -197,3 +197,49 @@ export function Field({ label, hint, children }: { label: string; hint?: ReactNo
 }
 
 export const INPUT = "w-full h-control px-3 rounded-control border border-border bg-white text-body outline-none focus:border-primary focus:ring-1 focus:ring-primary";
+export const TEXTAREA = "w-full px-3 py-2.5 rounded-control border border-border bg-white text-body outline-none focus:border-primary focus:ring-1 focus:ring-primary resize-y";
+
+/** Chips with remove buttons; Enter or comma adds, Backspace on an empty input removes the last one. */
+export function TagInput({ values, onChange, placeholder, label }: { values: string[]; onChange: (v: string[]) => void; placeholder?: string; label: string }) {
+  const [draft, setDraft] = useState("");
+  function add() {
+    const v = draft.trim().replace(/,$/, "");
+    if (v && !values.includes(v)) onChange([...values, v]);
+    setDraft("");
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 min-h-control px-2 py-1.5 rounded-control border border-border bg-white focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">
+      {values.map((v) => (
+        <span key={v} className="inline-flex items-center gap-1 h-6 pl-2 pr-1 rounded-chip bg-container-low font-mono text-[12px]">
+          {v}
+          <button type="button" aria-label={`Remove ${v}`} onClick={() => onChange(values.filter((x) => x !== v))}
+            className="p-0.5 rounded-full text-text-secondary hover:bg-container-high cursor-pointer"><Icon name="close" size={12} /></button>
+        </span>
+      ))}
+      <input aria-label={label} value={draft} placeholder={values.length ? "" : placeholder} onBlur={add}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === ",") {
+            e.preventDefault();
+            add();
+          } else if (e.key === "Backspace" && !draft && values.length) {
+            onChange(values.slice(0, -1));
+          }
+        }}
+        className="flex-1 min-w-[140px] h-6 outline-none text-body bg-transparent" />
+    </div>
+  );
+}
+
+export function Segmented<T extends string>({ value, options, onChange, label }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; label: string }) {
+  return (
+    <div role="radiogroup" aria-label={label} className="inline-flex h-7 rounded-control border border-border bg-white overflow-hidden text-small font-medium">
+      {options.map((o, i) => (
+        <button key={o.value} type="button" role="radio" aria-checked={value === o.value} onClick={() => onChange(o.value)}
+          className={`px-2.5 cursor-pointer ${i ? "border-l border-border" : ""} ${value === o.value ? "bg-primary-tint text-primary font-semibold" : "text-text-secondary hover:bg-container-low"}`}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}

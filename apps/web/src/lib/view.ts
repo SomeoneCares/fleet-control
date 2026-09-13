@@ -22,6 +22,51 @@ export function formatDate(ts: number): string {
   return new Date(ts * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
+export function formatDateTime(ts: number): string {
+  return new Date(ts * 1000).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+const ACRONYMS = new Set(["sar", "mlro", "aml", "kyc", "mcp", "api", "ubo", "soc", "llm"]);
+const SMALL_WORDS = new Set(["a", "and", "for", "in", "of", "on", "or", "the", "to"]);
+
+/** "sar-drafter" -> "SAR Drafter", "case-to-sar-draft" -> "Case to SAR Draft"; ids stay visible in mono where they matter. */
+export function prettyId(id: string): string {
+  return id.split(/[-_]/).filter(Boolean).map((w, i) =>
+    ACRONYMS.has(w) ? w.toUpperCase() : i > 0 && SMALL_WORDS.has(w) ? w : w[0].toUpperCase() + w.slice(1)).join(" ");
+}
+
+// ---------------------------------------------------------------- audit
+
+const AUDIT_LABEL: Record<string, string> = {
+  "instance.created": "Instance connected",
+  "instance.import_requested": "Import requested",
+  "agent.paired": "Agent paired",
+  "blueprint.saved": "Blueprint saved",
+  "blueprint.edited": "Blueprint edited",
+  "blueprint.draft_created": "Draft created",
+  "plan.created": "Plan created",
+  "plan.approved": "Plan approved",
+  "plan.apply_requested": "Apply requested",
+  "job.done": "Agent job done",
+  "job.failed": "Agent job failed",
+  "drift.scan_requested": "Drift scan requested",
+  "drift.ignored_once": "Drift ignored once",
+  "drift.exception_created": "Drift exception created",
+  "drift.revert_planned": "Drift revert planned",
+  "drift.accepted": "Drift accepted",
+  "audit.exported": "Audit log exported",
+};
+
+export function auditLabel(action: string): string {
+  return AUDIT_LABEL[action] ?? action;
+}
+
+export function actorKind(actor: string): "person" | "agent" | "system" {
+  if (actor.startsWith("agent:")) return "agent";
+  if (actor === "fleetcontrol") return "system";
+  return "person";
+}
+
 // ---------------------------------------------------------------- instances
 
 /** The daemon heartbeats every 30 s; three missed beats is offline. */

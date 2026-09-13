@@ -13,7 +13,7 @@ packages/
 apps/
   agent/              fleetctl-agent — host daemon: plugin socket, outbound connection, jobs (import, plan-apply, drift, policy push, snapshot, tests)
   api/                fleetcontrol-api — FastAPI control plane (web routes + agent transport), planner, in-memory store
-  web/                React client: Slice 1 screens (Instances, Blueprints, Plan, Drift); see apps/web/README.md
+  web/                React client: Slice 1 screens (Instances, Blueprints, Plan, Drift, Designer, Studio, Audit); see apps/web/README.md
 scripts/    test.sh · hermes_compat_check.py (nightly against upstream) · install-agent.sh (one-liner on a Hermes host)
 ```
 
@@ -43,6 +43,6 @@ Then: `POST /api/v1/instances` → copy `install_command` → run `scripts/insta
 
 ## Status
 
-Scaffold. Schema, planner, plugin and daemon job logic are unit-tested; the API is smoke-tested in CI. The dashboard routes the daemon uses are verified against a real Hermes 0.21.2 host (`docs/dashboard-capture-0.21.2*.json`). Not yet done: PostgreSQL store, OIDC, the Fleet Designer / Agent Studio / Audit log / Access screens, and everything in Slices 2–5 of the build document.
+Scaffold. Schema, planner, plugin and daemon job logic are unit-tested; the API is smoke-tested in CI. The dashboard routes the daemon uses are verified against a real Hermes 0.21.2 host (`docs/dashboard-capture-0.21.2*.json`). Not yet done: sign-in/OIDC with the Access screen, PostgreSQL store, and everything in Slices 2–5 of the build document.
 
 Design canvas: the "Fleet Control Redesign" artifact on claude.ai. Regenerate a screen with `cd design && python3 build.py <Name> <nav>`.

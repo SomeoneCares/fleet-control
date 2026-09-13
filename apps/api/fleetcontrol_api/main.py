@@ -18,11 +18,13 @@ import uuid
 from typing import Any, Literal, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from fleetcontrol_blueprint import Blueprint, dump_blueprint, json_schema, load_blueprint
 
 from .drift import DriftResolutionError, accept_into_blueprint, live_state_from_drift, select_drift
+from .edits import as_new_version, update_agent
 from .planner import compute_plan, to_agent_job
 from .store import Store
 
@@ -210,6 +212,10 @@ def upload_blueprint(body: BlueprintUpload, user: str = Depends(current_user)) -
         bp = load_blueprint(body.yaml)
     except Exception as exc:
         raise HTTPException(422, f"invalid blueprint: {exc}")
+    existing = store.blueprints.get(bp.metadata.name, {}).get(bp.metadata.version)
+    if existing and existing["status"] != "draft":
+        raise HTTPException(409, f"{bp.metadata.name} v{bp.metadata.version} is {existing['status']} and immutable; "
+                                 "raise metadata.version to upload a new version")
     rec = store.save_blueprint(bp.metadata.name, bp.metadata.version, dump_blueprint(bp), bp.model_dump(mode="json"), user)
     store.record(user, "blueprint.saved", f"{bp.metadata.name} v{bp.metadata.version}")
     return {"name": rec["name"], "version": rec["version"], "status": rec["status"], "managed_profiles": list(bp.managed_fields())}
@@ -246,7 +252,52 @@ def get_blueprint(name: str, version: int, user: str = Depends(current_user)) ->
     rec = store.blueprints.get(name, {}).get(version)
     if not rec:
         raise HTTPException(404)
-    return {"name": name, "version": version, "status": rec["status"], "yaml": rec["yaml"]}
+    return {"name": name, "version": version, "status": rec["status"], "yaml": rec["yaml"], "parsed": rec["parsed"],
+            "managed": Blueprint.model_validate(rec["parsed"]).managed_fields(), "author": rec["author"],
+            "created_at": rec["created_at"]}
+
+
+@app.post("/api/v1/blueprints/{name}/{version}/draft", status_code=201)
+def create_draft(name: str, version: int, user: str = Depends(current_user)) -> dict:
+    """Start a new draft from any version (applied versions are immutable)."""
+    bp = _blueprint(name, version)
+    new_version = max(store.blueprints[name]) + 1
+    new = as_new_version(bp, new_version)
+    rec = store.save_blueprint(name, new_version, dump_blueprint(new), new.model_dump(mode="json"), user)
+    store.record(user, "blueprint.draft_created", f"{name} v{new_version}", f"from v{version}")
+    return {"name": name, "version": new_version, "status": rec["status"]}
+
+
+class AgentEdit(BaseModel):
+    role: Optional[str] = None
+    model: Optional[dict[str, Any]] = None
+    soul: Optional[dict[str, Any]] = None
+    skills: Optional[list[str]] = None
+    toolsets: Optional[list[str]] = None
+    mcps: Optional[list[str]] = None
+    delegates_to: Optional[list[str]] = None
+    content_zones: Optional[list[str]] = None
+    tests: Optional[list[str]] = None
+
+
+@app.put("/api/v1/blueprints/{name}/{version}/agents/{agent_id}")
+def edit_agent(name: str, version: int, agent_id: str, body: AgentEdit, user: str = Depends(current_user)) -> dict:
+    rec = store.blueprints.get(name, {}).get(version)
+    if not rec:
+        raise HTTPException(404, "unknown blueprint version")
+    if rec["status"] != "draft":
+        raise HTTPException(409, f"{name} v{version} is {rec['status']} and immutable; create a draft to edit it")
+    try:
+        new, changed = update_agent(Blueprint.model_validate(rec["parsed"]), agent_id, body.model_dump(exclude_unset=True))
+    except KeyError:
+        raise HTTPException(404, f"no agent {agent_id!r} in {name} v{version}")
+    except ValueError as exc:  # EditError, or the edit makes the blueprint invalid
+        raise HTTPException(422, str(exc))
+    store.update_blueprint(name, version, dump_blueprint(new), new.model_dump(mode="json"), user)
+    store.record(user, "blueprint.edited", f"{name} v{version}", f"{agent_id}: {', '.join(changed) if changed else 'no changes'}")
+    agent = new.agent(agent_id)
+    return {"name": name, "version": version, "status": rec["status"], "changed": changed,
+            "agent": agent.model_dump(mode="json"), "managed": new.managed_fields()[agent.profile_name]}
 
 
 def _blueprint(name: str, version: int) -> Blueprint:
@@ -328,8 +379,24 @@ def get_job(job_id: str, user: str = Depends(current_user)) -> dict:
 
 
 @app.get("/api/v1/audit")
-def audit(user: str = Depends(current_user)) -> list[dict]:
-    return list(reversed(store.audit))[:200]
+def audit(limit: int = 200, user: str = Depends(current_user)) -> list[dict]:
+    return list(reversed(store.audit))[: max(1, min(limit, 5000))]
+
+
+@app.get("/api/v1/audit/export")
+def audit_export(user: str = Depends(current_user)) -> Response:
+    """The whole audit log as CSV (build document §7: export is CSV in v1)."""
+    import csv
+    import io
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["time_utc", "actor", "action", "target", "detail"])
+    for e in store.audit:
+        w.writerow([time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(e["ts"])), e["actor"], e["action"], e["target"], e["detail"]])
+    store.record(user, "audit.exported", "audit log", f"{len(store.audit)} entries")
+    return Response(buf.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="fleetcontrol-audit.csv"'})
 
 
 @app.get("/api/v1/events")

@@ -118,7 +118,7 @@ function YamlModal({ name, version, onClose }: { name: string; version: number; 
   );
 }
 
-function PlanModal({ name, version, onClose }: { name: string; version: number; onClose: () => void }) {
+export function PlanModal({ name, version, onClose }: { name: string; version: number; onClose: () => void }) {
   const navigate = useNavigate();
   const { data: instances } = useLoad(api.instances, []);
   const [target, setTarget] = useState("");

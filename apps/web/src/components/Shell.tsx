@@ -15,8 +15,8 @@ export interface NavItem {
 export const NAV: { group: string; items: NavItem[] }[] = [
   { group: "Design", items: [
     { key: "fleet-architect", label: "Fleet Architect", icon: "spark", slice: 2 },
-    { key: "fleet-designer", label: "Fleet Designer", icon: "graph", slice: 1 },
-    { key: "agent-studio", label: "Agent Studio", icon: "bot", slice: 1 },
+    { key: "fleet-designer", label: "Fleet Designer", icon: "graph", to: "/designer" },
+    { key: "agent-studio", label: "Agent Studio", icon: "bot", to: "/studio" },
     { key: "workflows", label: "Workflows", icon: "flow", slice: 5 },
   ] },
   { group: "Operate", items: [
@@ -31,7 +31,7 @@ export const NAV: { group: string; items: NavItem[] }[] = [
   ] },
   { group: "Govern", items: [
     { key: "access", label: "Access", icon: "lock", slice: 1 },
-    { key: "audit-log", label: "Audit log", icon: "file", slice: 1 },
+    { key: "audit-log", label: "Audit log", icon: "file", to: "/audit" },
   ] },
   { group: "Library", items: [
     { key: "blueprints", label: "Blueprints", icon: "layers", to: "/blueprints" },

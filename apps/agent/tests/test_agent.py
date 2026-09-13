@@ -77,13 +77,22 @@ class PolicyPushTest(unittest.TestCase):
 
 class SocketTest(unittest.TestCase):
     def test_plugin_events_land_in_queue(self):
-        path = os.path.join(tempfile.mkdtemp(), "agent.sock")
         q = queue.Queue()
-        PluginSocketServer(path, q).start()
-        for _ in range(50):
-            if os.path.exists(path): break
-            time.sleep(0.05)
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM); s.connect(path)
+        if hasattr(socket, "AF_UNIX"):
+            path = os.path.join(tempfile.mkdtemp(), "agent.sock")
+            PluginSocketServer(path, q).start()
+            for _ in range(50):
+                if os.path.exists(path): break
+                time.sleep(0.05)
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM); s.connect(path)
+        else:  # Windows: the daemon listens on loopback TCP, as AgentConfig.resolved_socket() does there
+            probe = socket.socket(); probe.bind(("127.0.0.1", 0)); port = probe.getsockname()[1]; probe.close()
+            PluginSocketServer(f"tcp://127.0.0.1:{port}", q).start()
+            for _ in range(50):
+                try:
+                    s = socket.create_connection(("127.0.0.1", port), timeout=1); break
+                except OSError:
+                    time.sleep(0.05)
         s.sendall(b'{"kind":"tool.post","tool":"x"}\n{"kind":"session.end"}\n'); s.close()
         got = [q.get(timeout=2), q.get(timeout=2)]
         self.assertEqual([g["kind"] for g in got], ["tool.post", "session.end"])

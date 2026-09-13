@@ -22,19 +22,28 @@ class PluginTest(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         os.environ["HERMES_HOME"] = self.tmp
         os.makedirs(os.path.join(self.tmp, "fleetcontrol"))
-        self.sock_path = os.path.join(self.tmp, "fleetcontrol", "agent.sock")
-        os.environ["FLEETCONTROL_AGENT_SOCKET"] = self.sock_path
         os.environ["FLEETCONTROL_CAPTURE"] = "sanitized"
 
-        # fake daemon
+        # fake daemon: a Unix socket where the platform has them, loopback TCP otherwise (Windows),
+        # the same two transports the plugin supports
         self.received = []
-        self.server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.server.bind(self.sock_path)
+        if hasattr(socket, "AF_UNIX"):
+            target = os.path.join(self.tmp, "fleetcontrol", "agent.sock")
+            self.server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self.server.bind(target)
+        else:
+            self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.server.bind(("127.0.0.1", 0))
+            target = "tcp://127.0.0.1:%d" % self.server.getsockname()[1]
+        os.environ["FLEETCONTROL_AGENT_SOCKET"] = target
         self.server.listen(1)
         self.server.settimeout(5)
 
         def serve():
-            conn, _ = self.server.accept()
+            try:
+                conn, _ = self.server.accept()
+            except OSError:  # closed by tearDown before the plugin connected (or timed out)
+                return
             buf = b""
             conn.settimeout(3)
             try:

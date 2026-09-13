@@ -31,6 +31,7 @@ scripts/    test.sh · hermes_compat_check.py (nightly against upstream) · inst
 sh scripts/test.sh            # stdlib runner; needs only pydantic + pyyaml
 python3 scripts/hermes_compat_check.py /path/to/hermes-agent
 ```
+On Windows (Git Bash), with a venv: `python -m venv .venv && .venv/Scripts/pip install -e packages/blueprint_schema -e packages/hermes_plugin -e apps/agent -e apps/api[dev]`, then `PYTHON=.venv/Scripts/python sh scripts/test.sh` — or from PowerShell: `$env:PYTHON=".venv/Scripts/python"; & "C:\Program Files\Git\bin\sh.exe" scripts/test.sh`. The plugin/daemon socket tests use loopback TCP there, as the code does.
 
 ## Run the API locally
 

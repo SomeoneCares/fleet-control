@@ -1,10 +1,10 @@
 import { useParams } from "react-router";
-import { NAV } from "../components/Shell";
+import { ALL_NAV_ITEMS } from "../components/Shell";
 import { Card, Icon, PageHeader } from "../components/ui";
 
 export function NotYetScreen() {
   const { key = "" } = useParams();
-  const item = NAV.flatMap((g) => g.items).find((i) => i.key === key);
+  const item = ALL_NAV_ITEMS.find((i) => i.key === key);
   const label = item?.label ?? (key === "settings" ? "Settings" : "This screen");
   const slice = item?.slice ?? 1;
   return (

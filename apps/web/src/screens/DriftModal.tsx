@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { api, type BlueprintVersionInfo, type DriftAction, type ResolveResult } from "../api/client";
+import { useAuth } from "../lib/auth";
 import { errorText, useLoad } from "../lib/hooks";
 import { driftRows, timeAgo, type DriftRow } from "../lib/view";
 import { Banner, Button, Field, INPUT, Icon, Label, Modal, Mono, Spinner } from "../components/ui";
@@ -14,6 +15,7 @@ const key = (r: DriftRow) => `${r.profile}|${r.field}`;
 
 export function DriftModal({ instanceId, onClose }: { instanceId: string; onClose: () => void }) {
   const navigate = useNavigate();
+  const { can } = useAuth();
   const { data: report, error, loading, reload } = useLoad(() => api.drift(instanceId), [instanceId]);
   const blueprint = report?.blueprint ?? null;
   const { data: versions } = useLoad<BlueprintVersionInfo[]>(
@@ -36,7 +38,8 @@ export function DriftModal({ instanceId, onClose }: { instanceId: string; onClos
   const options: { action: DriftAction; title: string; body: string; disabled?: string }[] = [
     { action: "accept", title: `Accept into blueprint (creates v${nextVersion}, draft)`,
       body: "The live values become the desired state. Apply the new version to make it the applied one.",
-      disabled: hasMissing ? "A missing profile cannot be accepted; revert it or create an exception." : undefined },
+      disabled: !can("blueprints.write") ? "Accepting writes a new blueprint version, which your role cannot do."
+        : hasMissing ? "A missing profile cannot be accepted; revert it or create an exception." : undefined },
     { action: "revert", title: `Revert ${instanceId} to the blueprint`,
       body: "Creates a plan that writes the blueprint values back. Nothing changes on Hermes until the plan is applied." },
     { action: "ignore_once", title: "Ignore once", body: "Clears this alert; the same drift is reported again on the next scan." },

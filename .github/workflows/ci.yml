@@ -24,9 +24,14 @@ jobs:
       - run: cd apps/api && python -m unittest discover -s tests -t . -q   # includes the FastAPI drift tests
       - run: |
           python - <<'PY'
+          import os
+          os.environ["FLEETCONTROL_ADMIN_EMAIL"] = "ci@fleetcontrol.local"    # bootstrap admin, test-only values
+          os.environ["FLEETCONTROL_ADMIN_PASSWORD"] = "ci-only password 123"
           from fastapi.testclient import TestClient
           from fleetcontrol_api.main import app
-          c = TestClient(app)
+          c = TestClient(app, headers={"X-Fleet-Control": "1"})
+          assert c.get("/api/v1/instances").status_code == 401
+          r = c.post("/api/v1/auth/login", json={"email": "ci@fleetcontrol.local", "password": "ci-only password 123"}); assert r.status_code == 200, r.text
           r = c.post("/api/v1/instances", json={"id": "lab-01", "environment": "lab", "mode": "agent"}); assert r.status_code == 201, r.text
           pair = r.json()["pairing_token"]
           r = c.post("/agent/v1/pair", json={"instance_id": "lab-01", "agent_version": "0.1.0", "report": {"hermes_version": "0.21.2", "surfaces": {"api": "ok"}, "capabilities": ["runs","profiles.write","hooks"]}}, headers={"Authorization": f"Bearer {pair}"}); assert r.status_code == 200, r.text

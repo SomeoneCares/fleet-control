@@ -1,5 +1,5 @@
 // Pure view logic shared by the screens. No React here, so it is unit-tested directly.
-import type { DriftMap, Environment, Instance, Plan } from "../api/client";
+import type { DriftMap, Environment, Instance, Me, Plan, PlanSummary } from "../api/client";
 
 export type Tone = "success" | "warning" | "error" | "neutral" | "info";
 
@@ -145,6 +145,30 @@ export function planPhase(plan: Plan): PlanPhase {
 
 export function applyLabel(env: Environment): string {
   return `Apply to ${ENV_LABEL[env].toLowerCase()}`;
+}
+
+type ApprovalView = Pick<PlanSummary, "environment" | "approvals" | "approvals_required" | "status"> & { created_by?: string };
+
+/** Mirrors the API's approval rules so the screen explains a missing Approve button instead of hiding it. */
+export function approvalFor(plan: ApprovalView, me: Me): { can: boolean; reason: string | null } {
+  if (plan.status !== "planned") return { can: false, reason: null };
+  if (plan.approvals.length >= plan.approvals_required) return { can: false, reason: null };
+  const production = plan.environment === "production";
+  if (!me.permissions.includes(production ? "plans.approve.production" : "plans.approve.nonprod")) {
+    return { can: false, reason: production ? "Production plans are approved by an Admin or an Approver." : `The ${me.role_label} role cannot approve this plan.` };
+  }
+  if (plan.created_by === me.email) return { can: false, reason: "You created this plan; another person has to approve it." };
+  if (plan.approvals.includes(me.email)) return { can: false, reason: "You have approved this plan; it needs someone else too." };
+  return { can: true, reason: null };
+}
+
+export function canApply(plan: Pick<Plan, "environment">, me: Me): boolean {
+  return me.permissions.includes(plan.environment === "production" ? "plans.apply.production" : "plans.apply.nonprod");
+}
+
+export function initials(nameOrEmail: string): string {
+  const words = nameOrEmail.split("@")[0].split(/[\s._-]+/).filter(Boolean);
+  return (words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? "?").slice(0, 2)).toUpperCase();
 }
 
 // ---------------------------------------------------------------- drift

@@ -39,10 +39,16 @@ On Windows (Git Bash), with a venv: `python -m venv .venv && .venv/Scripts/pip i
 pip install -e packages/blueprint_schema -e apps/api[dev]
 uvicorn fleetcontrol_api.main:app --port 8080
 ```
+Every `/api/v1` route needs a signed-in person (session cookie from `POST /api/v1/auth/login`; writes also send
+`X-Fleet-Control: 1`). On the first start set `FLEETCONTROL_ADMIN_EMAIL` (and optionally `FLEETCONTROL_ADMIN_PASSWORD`;
+otherwise a one-time password is printed), and `FLEETCONTROL_COOKIE_SECURE=1` behind HTTPS. For local development,
+`python scripts/dev_api.py` does this for you and keeps the password in the git-ignored `.fleetcontrol-dev-credentials.json`;
+`python scripts/dev_seed.py` then adds demo data and one person per role.
+
 Then: `POST /api/v1/instances` → copy `install_command` → run `scripts/install-agent.sh` on the Hermes host → `POST /api/v1/instances/{id}/import` → `POST /api/v1/blueprints` → `POST /api/v1/plans` → `POST /api/v1/plans/{id}/apply`.
 
 ## Status
 
-Scaffold. Schema, planner, plugin and daemon job logic are unit-tested; the API is smoke-tested in CI. The dashboard routes the daemon uses are verified against a real Hermes 0.21.2 host (`docs/dashboard-capture-0.21.2*.json`). Not yet done: sign-in/OIDC with the Access screen, PostgreSQL store, and everything in Slices 2–5 of the build document.
+Scaffold. Schema, planner, plugin and daemon job logic are unit-tested; the API is smoke-tested in CI. The dashboard routes the daemon uses are verified against a real Hermes 0.21.2 host (`docs/dashboard-capture-0.21.2*.json`). Not yet done: OIDC single sign-on, PostgreSQL store, and everything in Slices 2–5 of the build document.
 
 Design canvas: the "Fleet Control Redesign" artifact on claude.ai. Regenerate a screen with `cd design && python3 build.py <Name> <nav>`.

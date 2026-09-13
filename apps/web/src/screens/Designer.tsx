@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 import { api, type AgentDoc, type BlueprintDetail, type BlueprintSummary } from "../api/client";
+import { useAuth } from "../lib/auth";
 import { useLoad } from "../lib/hooks";
 import { NODE_H, NODE_W, layoutTopology, modelChip, type TNode } from "../lib/topology";
 import { prettyId } from "../lib/view";
@@ -43,6 +44,7 @@ export function DesignerScreen() {
   const [workflowId, setWorkflowId] = useState<string | null>(null);
   const [sel, setSel] = useState<Selection | null>(null);
   const [planning, setPlanning] = useState(false);
+  const { can } = useAuth();
 
   if (listError) return <Banner tone="error">{listError}</Banner>;
   if (!list) return <div className="flex gap-2 items-center text-text-secondary"><Spinner /> Loading…</div>;
@@ -72,7 +74,7 @@ export function DesignerScreen() {
             onChange={(e) => { setSel(null); setParams({ name, version: e.target.value }); }}>
             {(summary?.versions ?? [version]).slice().reverse().map((v) => <option key={v} value={v}>v{v}</option>)}
           </select>
-          <Button variant="primary" icon="arrowRight" onClick={() => setPlanning(true)}>Create plan</Button>
+          {can("plans.create") && <Button variant="primary" icon="arrowRight" onClick={() => setPlanning(true)}>Create plan</Button>}
         </>} />
 
       <div className="grid grid-cols-[230px_minmax(0,1fr)_330px] gap-5 items-start">

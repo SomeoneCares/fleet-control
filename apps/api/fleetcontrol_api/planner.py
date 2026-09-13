@@ -71,11 +71,9 @@ def compute_plan(bp: Blueprint, live: dict[str, dict], *, target_instance: str, 
 
     unmanaged = sorted(set(live) - set(desired))
 
-    # policies that need approval before production apply
-    approvals_required = 0
-    for t in bp.targets:
-        if t.instance == target_instance:
-            approvals_required = t.requires_approvals
+    # approvals before apply: what the blueprint's target says, else two for production (build document §7)
+    approvals_required = next((t.requires_approvals for t in bp.targets if t.instance == target_instance),
+                              2 if environment == "production" else 0)
     for p in bp.policies:
         if p.enforcement == "approve":
             rows.append(_row("approval", f"policy {p.id}", p.description + " — enforced by the agent's pre_tool_call hook", "Agent" if agent_installed else "not enforced (no agent)", "high"))

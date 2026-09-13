@@ -6,7 +6,7 @@ import unittest
 try:
     from fastapi.testclient import TestClient
 
-    from fleetcontrol_api.main import app
+    from tests.helpers import signed_in
 except ImportError:  # pragma: no cover
     TestClient = None
 
@@ -16,7 +16,7 @@ EXAMPLE = os.path.join(os.path.dirname(__file__), "..", "..", "..", "packages", 
 @unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
 class WebEndpointsTest(unittest.TestCase):
     def setUp(self):
-        self.c = TestClient(app)
+        self.c = signed_in("admin")
         self.inst = "web-" + os.urandom(3).hex()
         pair = self.c.post("/api/v1/instances", json={"id": self.inst, "environment": "lab", "mode": "agent"}).json()["pairing_token"]
         self.agent = {"Authorization": "Bearer " + self.c.post(

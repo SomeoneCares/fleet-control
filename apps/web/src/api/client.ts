@@ -3,6 +3,35 @@
 
 export type Environment = "lab" | "staging" | "production";
 export type InstanceMode = "agent" | "api-only";
+export type RoleName = "admin" | "fleet_architect" | "operator" | "approver" | "viewer";
+
+export interface Me {
+  email: string;
+  name: string;
+  role: RoleName;
+  role_label: string;
+  portal: "admin" | "workspace";
+  permissions: string[];
+}
+
+export interface RoleInfo {
+  role: RoleName;
+  label: string;
+  description: string;
+  members: number;
+  portal: "admin" | "workspace";
+  permissions: string[];
+}
+
+export interface Person {
+  email: string;
+  name: string;
+  role: RoleName;
+  role_label: string;
+  disabled: boolean;
+  created_at: number;
+  last_login: number | null;
+}
 
 export interface CapabilityReport {
   hermes_version?: string | null;
@@ -181,6 +210,7 @@ export interface PolicyDoc {
   kind: string;
   description: string;
   applies_to: string[];
+  params?: Record<string, unknown>;
   enforcement: "block" | "approve" | "flag";
 }
 
@@ -248,6 +278,21 @@ export interface Plan {
   blocked_reason: string | null;
   status: "planned" | "applying" | "applied" | "failed";
   apply_result?: ApplyResult;
+  created_by?: string;
+  created_at?: number;
+}
+
+export interface PlanSummary {
+  id: string;
+  target_instance: string;
+  environment: Environment;
+  blueprint: { name: string; version: number };
+  status: Plan["status"];
+  approvals: string[];
+  approvals_required: number;
+  created_by: string;
+  created_at: number;
+  changes: number;
 }
 
 export interface Job {
@@ -286,13 +331,23 @@ export function detailOf(data: unknown): string | null {
   return null;
 }
 
+/** Fired when the API answers 401: the session ended, so the app shows Sign in again. */
+export const UNAUTHORIZED_EVENT = "fc:unauthorized";
+
 async function call<T>(method: string, path: string, body?: unknown, query?: Record<string, string | number>): Promise<T> {
   const qs = query ? "?" + new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)])).toString() : "";
+  const headers: Record<string, string> = {};
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (method !== "GET") headers["X-Fleet-Control"] = "1"; // the API refuses writes without it (a cross-site form cannot send it)
   const res = await fetch(path + qs, {
     method,
-    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    headers,
+    credentials: "same-origin",
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+  if (res.status === 401 && path !== "/api/v1/auth/login" && typeof window !== "undefined") {
+    window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+  }
   const text = await res.text();
   let data: unknown = null;
   if (text) {
@@ -309,6 +364,18 @@ async function call<T>(method: string, path: string, body?: unknown, query?: Rec
 const enc = encodeURIComponent;
 
 export const api = {
+  me: () => call<Me>("GET", "/api/v1/auth/me"),
+  login: (email: string, password: string) => call<Me>("POST", "/api/v1/auth/login", { email, password }),
+  logout: () => call<{ ok: boolean }>("POST", "/api/v1/auth/logout"),
+  changePassword: (current: string, next: string) => call<{ ok: boolean }>("POST", "/api/v1/auth/password", { current, new: next }),
+  roles: () => call<RoleInfo[]>("GET", "/api/v1/roles"),
+  users: () => call<Person[]>("GET", "/api/v1/users"),
+  createUser: (body: { email: string; name: string; role: RoleName }) =>
+    call<{ user: Person; password: string }>("POST", "/api/v1/users", body),
+  updateUser: (email: string, body: Partial<{ name: string; role: RoleName; disabled: boolean }>) =>
+    call<Person>("PATCH", `/api/v1/users/${encodeURIComponent(email)}`, body),
+  resetPassword: (email: string) => call<{ password: string }>("POST", `/api/v1/users/${encodeURIComponent(email)}/reset-password`),
+  plans: (status?: Plan["status"]) => call<PlanSummary[]>("GET", "/api/v1/plans", undefined, status ? { status } : undefined),
   instances: () => call<Instance[]>("GET", "/api/v1/instances"),
   instance: (id: string) => call<InstanceDetail>("GET", `/api/v1/instances/${enc(id)}`),
   createInstance: (body: { id: string; environment: Environment; mode: InstanceMode }) =>

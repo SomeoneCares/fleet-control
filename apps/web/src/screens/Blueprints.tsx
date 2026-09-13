@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { api, type BlueprintSummary, type BlueprintVersionInfo, type Instance } from "../api/client";
+import { useAuth } from "../lib/auth";
 import { errorText, useLoad } from "../lib/hooks";
 import { ENV_LABEL, formatDate, timeAgo } from "../lib/view";
 import { Banner, Button, Card, Chip, Field, INPUT, Icon, Label, Modal, Mono, PageHeader, Spinner } from "../components/ui";
 
 export function BlueprintsScreen() {
   const [params, setParams] = useSearchParams();
+  const { can } = useAuth();
   const { data: list, error, loading, reload } = useLoad(api.blueprints, []);
   const [importing, setImporting] = useState(false);
   const selectedName = params.get("name") ?? list?.[0]?.name ?? null;
@@ -14,7 +16,7 @@ export function BlueprintsScreen() {
 
   const header = (
     <PageHeader crumb="Library" title="Blueprints" subtitle="Versioned fleet definitions. Import from YAML; each version is immutable once applied."
-      actions={<Button variant="primary" icon="upload" onClick={() => setImporting(true)}>Import YAML</Button>} />
+      actions={can("blueprints.write") ? <Button variant="primary" icon="upload" onClick={() => setImporting(true)}>Import YAML</Button> : undefined} />
   );
   const importModal = importing && (
     <ImportModal onClose={() => setImporting(false)} onImported={(name) => { setImporting(false); void reload(); setParams({ name }); }} />
@@ -30,7 +32,7 @@ export function BlueprintsScreen() {
           <div className="mx-auto mb-5 size-14 rounded-card bg-primary-tint text-primary flex items-center justify-center"><Icon name="layers" size={26} /></div>
           <h2 className="text-section m-0">No blueprints yet</h2>
           <p className="text-text-secondary mt-2 mb-6">Import a Fleet Blueprint (YAML, <Mono>apiVersion: fleetcontrol/v1</Mono>). The example lives in <Mono>packages/blueprint_schema/examples/</Mono>.</p>
-          <Button variant="primary" icon="upload" onClick={() => setImporting(true)}>Import YAML</Button>
+          {can("blueprints.write") && <Button variant="primary" icon="upload" onClick={() => setImporting(true)}>Import YAML</Button>}
         </Card>
         {importModal}
       </>
@@ -80,6 +82,7 @@ function StatusChip({ status }: { status: string }) {
 }
 
 function VersionHistory({ blueprint }: { blueprint: BlueprintSummary }) {
+  const { can } = useAuth();
   const { data: history } = useLoad(() => api.blueprintVersions(blueprint.name), [blueprint.name, blueprint.latest]);
   const [yamlFor, setYamlFor] = useState<number | null>(null);
   const [planFor, setPlanFor] = useState<number | null>(null);
@@ -98,7 +101,7 @@ function VersionHistory({ blueprint }: { blueprint: BlueprintSummary }) {
           <span className="w-32 text-small">{formatDate(v.created_at)}</span>
           <span className="flex-1 text-small text-text-secondary">{v.author}</span>
           <Button onClick={() => setYamlFor(v.version)}>View YAML</Button>
-          <Button variant="primary" icon="arrowRight" onClick={() => setPlanFor(v.version)}>Plan…</Button>
+          {can("plans.create") && <Button variant="primary" icon="arrowRight" onClick={() => setPlanFor(v.version)}>Plan…</Button>}
         </div>
       ))}
       {yamlFor !== null && <YamlModal name={blueprint.name} version={yamlFor} onClose={() => setYamlFor(null)} />}

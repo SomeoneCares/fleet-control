@@ -42,6 +42,12 @@ class PlannerTest(unittest.TestCase):
         self.assertIn(("write_soul", None), ops)
         self.assertEqual(plan["unmanaged_profiles"], ["unmanaged-bot"])
 
+    def test_production_needs_two_approvals_even_when_not_a_target(self):
+        plan = compute_plan(self.bp, {}, target_instance="hermes-prod-us-02", agent_installed=True, environment="production")
+        self.assertEqual(plan["approvals_required"], 2)
+        lab = compute_plan(self.bp, {}, target_instance="hermes-lab-09", agent_installed=True, environment="lab")
+        self.assertEqual(lab["approvals_required"], 0)
+
     def test_api_only_instance_cannot_apply(self):
         plan = compute_plan(self.bp, {}, target_instance="hermes-lab-01", agent_installed=False, environment="lab")
         self.assertFalse(plan["can_apply"])

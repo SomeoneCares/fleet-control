@@ -1,7 +1,10 @@
+import { useState, type FormEvent } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
 import { api } from "../api/client";
-import { useLoad } from "../lib/hooks";
-import { Icon, type IconName } from "./ui";
+import { useAuth, useMe } from "../lib/auth";
+import { errorText, useLoad } from "../lib/hooks";
+import { initials } from "../lib/view";
+import { Banner, Button, Field, INPUT, Icon, Modal, Spinner, type IconName } from "./ui";
 
 export interface NavItem {
   key: string;
@@ -9,6 +12,7 @@ export interface NavItem {
   icon: IconName;
   to?: string; // built screens; the rest open a "not built yet" page naming their slice
   slice?: number;
+  permission?: string; // hidden from roles without it
 }
 
 // Build document §3.1: one shell on every admin screen.
@@ -30,14 +34,30 @@ export const NAV: { group: string; items: NavItem[] }[] = [
     { key: "messaging", label: "Messaging", icon: "message", slice: 4 },
   ] },
   { group: "Govern", items: [
-    { key: "access", label: "Access", icon: "lock", slice: 1 },
-    { key: "audit-log", label: "Audit log", icon: "file", to: "/audit" },
+    { key: "access", label: "Access", icon: "lock", to: "/access", permission: "users.read" },
+    { key: "audit-log", label: "Audit log", icon: "file", to: "/audit", permission: "audit.read" },
   ] },
   { group: "Library", items: [
     { key: "blueprints", label: "Blueprints", icon: "layers", to: "/blueprints" },
     { key: "content", label: "Content", icon: "folder", slice: 4 },
   ] },
 ];
+
+// Build document §3.2: Approvers and Viewers get the Workspace, without Design, Estate or Govern.
+export const WORKSPACE_NAV: { group: string; items: NavItem[] }[] = [
+  { group: "Workspace", items: [
+    { key: "workspace", label: "Home", icon: "chat", to: "/workspace" },
+    { key: "audit-log", label: "Audit log", icon: "file", to: "/audit", permission: "audit.read" },
+  ] },
+  { group: "Arrives in Slice 4", items: [
+    { key: "my-decisions", label: "My decisions", icon: "check", slice: 4 },
+    { key: "decision-rooms", label: "Decision Rooms", icon: "chat", slice: 4 },
+    { key: "fleet-outputs", label: "Fleet outputs", icon: "folder", slice: 4 },
+    { key: "ask-the-fleet", label: "Ask the fleet", icon: "spark", slice: 4 },
+  ] },
+];
+
+export const ALL_NAV_ITEMS: NavItem[] = [...NAV, ...WORKSPACE_NAV].flatMap((g) => g.items);
 
 const ITEM = "h-nav flex items-center gap-2.5 px-2.5 rounded-control text-[13px] no-underline";
 const ACTIVE = "bg-primary-tint text-primary font-semibold";
@@ -46,8 +66,8 @@ const IDLE = "text-text font-medium hover:bg-container-low";
 function SideLink({ item }: { item: NavItem }) {
   const { pathname } = useLocation();
   const to = item.to ?? `/soon/${item.key}`;
-  // a plan belongs to the Blueprints library
-  const forced = item.key === "blueprints" && pathname.startsWith("/plans/");
+  // a plan belongs to the Blueprints library (or, for approvers, to their Workspace home)
+  const forced = pathname.startsWith("/plans/") && (item.key === "blueprints" || item.key === "workspace");
   return (
     <NavLink to={to} className={({ isActive }) => `${ITEM} ${isActive || forced ? ACTIVE : IDLE} ${item.to ? "" : "opacity-60"}`}>
       <Icon name={item.icon} />
@@ -57,8 +77,17 @@ function SideLink({ item }: { item: NavItem }) {
 }
 
 export function Shell() {
-  const { data: instances } = useLoad(api.instances, [], 15_000);
+  const me = useMe();
+  const { can } = useAuth();
+  const [menu, setMenu] = useState(false);
+  const [changing, setChanging] = useState(false);
+  const { signOut } = useAuth();
+  const { data: instances } = useLoad(() => (can("instances.read") ? api.instances() : Promise.resolve(null)), [me.role], 15_000);
   const versions = [...new Set((instances ?? []).map((i) => i.hermes_version).filter(Boolean))];
+  const groups = (me.portal === "workspace" ? WORKSPACE_NAV : NAV)
+    .map((g) => ({ ...g, items: g.items.filter((it) => !it.permission || can(it.permission)) }))
+    .filter((g) => g.items.length > 0);
+
   return (
     <div className="min-h-screen flex flex-col">
       <header className="h-14 shrink-0 flex items-center gap-4 px-5 bg-white border-b border-hairline">
@@ -70,32 +99,98 @@ export function Shell() {
           </div>
         </div>
         <div className="flex-1" />
-        <div className="flex items-center gap-2 text-[13px]" title="Sign-in arrives later in Slice 1; the API trusts a placeholder user for now.">
-          <span className="size-7 rounded-full bg-secondary-tint text-secondary text-[11px] font-bold flex items-center justify-center">DV</span>
-          <span className="font-medium">dev@local</span>
+        <div className="relative">
+          <button type="button" onClick={() => setMenu((m) => !m)} aria-haspopup="menu" aria-expanded={menu}
+            className="flex items-center gap-2 h-9 pl-1 pr-2.5 rounded-control hover:bg-container-low cursor-pointer text-[13px]">
+            <span className="size-7 rounded-full bg-secondary-tint text-secondary text-[11px] font-bold flex items-center justify-center">{initials(me.name || me.email)}</span>
+            <span className="text-left leading-tight">
+              <span className="block font-medium">{me.name}</span>
+              <span className="block text-[11px] text-text-secondary">{me.role_label}</span>
+            </span>
+          </button>
+          {menu && (
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setMenu(false)} />
+              <div role="menu" className="absolute right-0 top-11 z-40 w-56 bg-white border border-hairline rounded-control py-1 shadow-[0_1px_2px_0_rgba(15,23,42,0.05),0_4px_12px_0_rgba(15,23,42,0.08)]">
+                <div className="px-3 py-2 text-small text-text-secondary border-b border-hairline truncate">{me.email}</div>
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); setChanging(true); }}
+                  className="w-full text-left px-3 py-2 text-[13px] hover:bg-container-low cursor-pointer">Change password</button>
+                <button type="button" role="menuitem" onClick={() => void signOut()}
+                  className="w-full text-left px-3 py-2 text-[13px] hover:bg-container-low cursor-pointer">Sign out</button>
+              </div>
+            </>
+          )}
         </div>
       </header>
       <div className="flex flex-1 min-h-0">
         <nav className="w-sidebar shrink-0 bg-surface border-r border-hairline px-3 py-4 flex flex-col">
-          {NAV.map((g) => (
+          {groups.map((g) => (
             <div key={g.group} className="mb-4">
               <div className="text-label uppercase text-text-secondary px-2.5 mb-1.5">{g.group}</div>
               {g.items.map((it) => <SideLink key={it.key} item={it} />)}
             </div>
           ))}
           <div className="flex-1" />
-          <NavLink to="/soon/settings" className={({ isActive }) => `${ITEM} ${isActive ? ACTIVE : IDLE} opacity-60`}>
-            <Icon name="gear" /> Settings
-          </NavLink>
-          <div className="text-small text-text-secondary px-2.5 mt-3">
-            {instances === null ? "Connecting to the API…" : `Connected to ${instances.length} Hermes instance${instances.length === 1 ? "" : "s"}`}
-            {versions.length > 0 && <div>Hermes {versions.join(", ")}</div>}
-          </div>
+          {me.portal === "admin" && (
+            <NavLink to="/soon/settings" className={({ isActive }) => `${ITEM} ${isActive ? ACTIVE : IDLE} opacity-60`}>
+              <Icon name="gear" /> Settings
+            </NavLink>
+          )}
+          {instances && (
+            <div className="text-small text-text-secondary px-2.5 mt-3">
+              {`Connected to ${instances.length} Hermes instance${instances.length === 1 ? "" : "s"}`}
+              {versions.length > 0 && <div>Hermes {versions.join(", ")}</div>}
+            </div>
+          )}
         </nav>
         <main className="flex-1 min-w-0 px-8 py-7">
           <Outlet />
         </main>
       </div>
+      {changing && <ChangePasswordModal onClose={() => setChanging(false)} />}
     </div>
+  );
+}
+
+function ChangePasswordModal({ onClose }: { onClose: () => void }) {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [again, setAgain] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const mismatch = again.length > 0 && next !== again;
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.changePassword(current, next);
+      setDone(true);
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Change password" subtitle="At least 12 characters." width={460} onClose={onClose}
+      footer={done ? <Button variant="primary" onClick={onClose}>Done</Button> : <>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="primary" type="submit" form="password-form" disabled={busy || !current || next.length < 12 || next !== again}>{busy && <Spinner />}Change password</Button>
+      </>}>
+      {done ? <Banner tone="success">Password changed.</Banner> : (
+        <form id="password-form" onSubmit={(e) => void submit(e)}>
+          <Field label="Current password"><input className={INPUT} type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} autoFocus /></Field>
+          <Field label="New password"><input className={INPUT} type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} /></Field>
+          <Field label="New password again" hint={mismatch ? "The two passwords are different." : undefined}>
+            <input className={INPUT} type="password" autoComplete="new-password" value={again} onChange={(e) => setAgain(e.target.value)} />
+          </Field>
+          {error && <Banner tone="error">{error}</Banner>}
+        </form>
+      )}
+    </Modal>
   );
 }

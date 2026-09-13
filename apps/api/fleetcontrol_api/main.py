@@ -1,28 +1,36 @@
-"""Fleet Control API — Slice 1 scaffold.
+"""Fleet Control API — Slice 1.
 
 Two route families:
 
-* ``/api/v1/...`` — the web client (Instances, Blueprints, Plans, Drift, Audit).
-* ``/agent/v1/...`` — the fleetctl-agent daemon (pair, heartbeat, events, long-poll jobs, results).
+* ``/api/v1/...`` — the web client. Signed-in people only: a session cookie from ``POST /api/v1/auth/login``,
+  and every write also carries ``X-Fleet-Control: 1`` (a header a cross-site form cannot send). What each of
+  the five roles may do is ``auth.PERMISSIONS``.
+* ``/agent/v1/...`` — the fleetctl-agent daemon (pair, heartbeat, events, long-poll jobs, results), with the
+  bearer token issued at pairing.
 
-Auth is a placeholder: the web routes trust an ``X-User`` header (replace with OIDC sessions in
-Slice 1 proper); agent routes require the bearer token issued at pairing. The store is in-memory.
+The store is in-memory. The first admin comes from FLEETCONTROL_ADMIN_EMAIL (and optionally
+FLEETCONTROL_ADMIN_PASSWORD) when nobody exists yet; scripts/dev_api.py does that for local development.
 
 Run: ``uvicorn fleetcontrol_api.main:app --port 8080``
 """
 
 from __future__ import annotations
 
+import os
 import time
 import uuid
 from typing import Any, Literal, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from fleetcontrol_blueprint import Blueprint, dump_blueprint, json_schema, load_blueprint
 
+from .auth import (
+    ADMIN_PORTAL, DUMMY_HASH, LOCKOUT_FAILURES, LOCKOUT_SECONDS, ROLES, SESSION_SECONDS, allowed, check_password_policy,
+    hash_password, new_password, new_session_token, permissions_for, role_label, token_key, verify_password,
+)
 from .drift import DriftResolutionError, accept_into_blueprint, live_state_from_drift, select_drift
 from .edits import as_new_version, update_agent
 from .planner import compute_plan, to_agent_job
@@ -31,12 +39,194 @@ from .store import Store
 app = FastAPI(title="Fleet Control API", version="0.1.0")
 store = Store()
 
+SESSION_COOKIE = "fc_session"
+CSRF_HEADER = "X-Fleet-Control"
+COOKIE_SECURE = os.environ.get("FLEETCONTROL_COOKIE_SECURE", "0") == "1"  # set to 1 behind HTTPS
 
-# ----------------------------------------------------------------------------- auth placeholders
+RoleName = Literal["admin", "fleet_architect", "operator", "approver", "viewer"]
 
 
-def current_user(x_user: Optional[str] = Header(default=None)) -> str:
-    return x_user or "dev@local"
+def _bootstrap_admin() -> None:
+    """Create the first admin from the environment when nobody exists yet. There is no default password."""
+    email = (os.environ.get("FLEETCONTROL_ADMIN_EMAIL") or "").strip().lower()
+    if not email or store.users:
+        return
+    given = os.environ.get("FLEETCONTROL_ADMIN_PASSWORD")
+    password = given or new_password()
+    check_password_policy(password)
+    store.add_user(email, "Administrator", "admin", hash_password(password))
+    store.record("fleetcontrol", "user.created", email, "Admin (bootstrap)")
+    if not given:
+        print(f"Fleet Control: created admin {email} with one-time password {password}; change it after signing in.", flush=True)
+
+
+_bootstrap_admin()
+
+
+# ----------------------------------------------------------------------------- people: sessions and roles
+
+
+def current_user(request: Request, fc_session: Optional[str] = Cookie(default=None)) -> dict:
+    user = store.session_user(token_key(fc_session)) if fc_session else None
+    if not user:
+        raise HTTPException(401, "sign in required")
+    if request.method not in ("GET", "HEAD", "OPTIONS") and request.headers.get(CSRF_HEADER) != "1":
+        raise HTTPException(403, f"writes need the {CSRF_HEADER} header")
+    return user
+
+
+def require(*permissions: str):
+    def dependency(user: dict = Depends(current_user)) -> dict:
+        missing = [p for p in permissions if not allowed(user["role"], p)]
+        if missing:
+            raise HTTPException(403, f"the {role_label(user['role'])} role cannot do this ({', '.join(missing)})")
+        return user
+
+    return dependency
+
+
+def _me(user: dict) -> dict:
+    return {"email": user["email"], "name": user["name"], "role": user["role"], "role_label": role_label(user["role"]),
+            "portal": "admin" if user["role"] in ADMIN_PORTAL else "workspace", "permissions": permissions_for(user["role"])}
+
+
+def _person(user: dict) -> dict:
+    return {**{k: user[k] for k in ("email", "name", "role", "disabled", "created_at", "last_login")}, "role_label": role_label(user["role"])}
+
+
+class LoginBody(BaseModel):
+    email: str
+    password: str
+
+
+@app.post("/api/v1/auth/login")
+def login(body: LoginBody, request: Request, response: Response) -> dict:
+    if request.headers.get(CSRF_HEADER) != "1":
+        raise HTTPException(403, f"sign-in needs the {CSRF_HEADER} header")
+    email = body.email.strip().lower()
+    if store.recent_failures(email, LOCKOUT_SECONDS) >= LOCKOUT_FAILURES:
+        raise HTTPException(429, "too many failed sign-ins for this account; try again in 15 minutes")
+    user = store.users.get(email)
+    ok = verify_password(body.password, user["password_hash"] if user else DUMMY_HASH)
+    if not ok or not user or user["disabled"]:
+        store.login_failed(email)
+        store.record(email or "unknown", "auth.sign_in_failed", email or "unknown")
+        raise HTTPException(401, "email or password is not right")
+    store.clear_failures(email)
+    token = new_session_token()
+    store.create_session(email, token, token_key(token), SESSION_SECONDS)
+    user["last_login"] = time.time()
+    response.set_cookie(SESSION_COOKIE, token, max_age=SESSION_SECONDS, httponly=True, samesite="lax", secure=COOKIE_SECURE, path="/")
+    store.record(email, "auth.signed_in", email)
+    return _me(user)
+
+
+@app.post("/api/v1/auth/logout")
+def logout(response: Response, fc_session: Optional[str] = Cookie(default=None), user: dict = Depends(current_user)) -> dict:
+    if fc_session:
+        store.drop_session(token_key(fc_session))
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    store.record(user["email"], "auth.signed_out", user["email"])
+    return {"ok": True}
+
+
+@app.get("/api/v1/auth/me")
+def me(user: dict = Depends(current_user)) -> dict:
+    return _me(user)
+
+
+class PasswordChange(BaseModel):
+    current: str
+    new: str
+
+
+@app.post("/api/v1/auth/password")
+def change_password(body: PasswordChange, user: dict = Depends(current_user)) -> dict:
+    if not verify_password(body.current, user["password_hash"]):
+        raise HTTPException(403, "the current password is not right")
+    try:
+        check_password_policy(body.new)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    user["password_hash"] = hash_password(body.new)
+    store.record(user["email"], "auth.password_changed", user["email"])
+    return {"ok": True}
+
+
+@app.get("/api/v1/roles")
+def roles(user: dict = Depends(current_user)) -> list[dict]:
+    members = {r: 0 for r in ROLES}
+    for u in store.users.values():
+        if not u["disabled"]:
+            members[u["role"]] += 1
+    return [{"role": r, "label": label, "description": desc, "members": members[r],
+             "portal": "admin" if r in ADMIN_PORTAL else "workspace", "permissions": permissions_for(r)}
+            for r, (label, desc) in ROLES.items()]
+
+
+@app.get("/api/v1/users")
+def list_users(user: dict = Depends(require("users.read"))) -> list[dict]:
+    return sorted((_person(u) for u in store.users.values()), key=lambda p: p["email"])
+
+
+class UserCreate(BaseModel):
+    email: str = Field(..., pattern=r"^[^@\s]+@[^@\s]+$")
+    name: str = Field(..., min_length=1)
+    role: RoleName
+
+
+@app.post("/api/v1/users", status_code=201)
+def create_user(body: UserCreate, user: dict = Depends(require("users.manage"))) -> dict:
+    email = body.email.strip().lower()
+    if email in store.users:
+        raise HTTPException(409, f"{email} already has an account")
+    password = new_password()
+    created = store.add_user(email, body.name.strip(), body.role, hash_password(password))
+    store.record(user["email"], "user.created", email, role_label(body.role))
+    return {"user": _person(created), "password": password}  # shown once; only the hash is kept
+
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    role: Optional[RoleName] = None
+    disabled: Optional[bool] = None
+
+
+def _active_admins() -> list[dict]:
+    return [u for u in store.users.values() if u["role"] == "admin" and not u["disabled"]]
+
+
+@app.patch("/api/v1/users/{email}")
+def update_user(email: str, body: UserUpdate, user: dict = Depends(require("users.manage"))) -> dict:
+    target = store.users.get(email.strip().lower())
+    if not target:
+        raise HTTPException(404, "no such person")
+    changes = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    demoted = "role" in changes and changes["role"] != "admin"
+    if target["email"] == user["email"] and (changes.get("disabled") or demoted):
+        raise HTTPException(409, "you cannot disable yourself or remove your own Admin role")
+    if target["role"] == "admin" and not target["disabled"] and (changes.get("disabled") or demoted) and len(_active_admins()) <= 1:
+        raise HTTPException(409, "Fleet Control needs at least one active Admin")
+    if "name" in changes:
+        changes["name"] = changes["name"].strip() or target["name"]
+    target.update(changes)
+    if changes.get("disabled"):
+        store.drop_sessions_for(target["email"])
+    detail = ", ".join(f"role={role_label(v)}" if k == "role" else f"{k}={v}" for k, v in changes.items())
+    store.record(user["email"], "user.updated", target["email"], detail or "no changes")
+    return _person(target)
+
+
+@app.post("/api/v1/users/{email}/reset-password")
+def reset_password(email: str, user: dict = Depends(require("users.manage"))) -> dict:
+    target = store.users.get(email.strip().lower())
+    if not target:
+        raise HTTPException(404, "no such person")
+    password = new_password()
+    target["password_hash"] = hash_password(password)
+    store.drop_sessions_for(target["email"])
+    store.record(user["email"], "user.password_reset", target["email"])
+    return {"password": password}
 
 
 def agent_instance(authorization: Optional[str] = Header(default=None)) -> str:
@@ -58,11 +248,11 @@ class InstanceCreate(BaseModel):
 
 
 @app.post("/api/v1/instances", status_code=201)
-def create_instance(body: InstanceCreate, user: str = Depends(current_user)) -> dict:
+def create_instance(body: InstanceCreate, user: dict = Depends(require("instances.connect"))) -> dict:
     if body.id in store.instances:
         raise HTTPException(409, "instance exists")
-    inst = store.create_instance(body.id, body.environment, user, body.mode)
-    store.record(user, "instance.created", body.id, body.mode)
+    inst = store.create_instance(body.id, body.environment, user["email"], body.mode)
+    store.record(user["email"], "instance.created", body.id, body.mode)
     # The Connect drawer shows this one-liner; the pairing token is single-use.
     inst["install_command"] = (
         f"curl -fsSL https://get.fleetcontrol.example/install.sh | FLEETCONTROL_URL=<this server> "
@@ -72,7 +262,7 @@ def create_instance(body: InstanceCreate, user: str = Depends(current_user)) -> 
 
 
 @app.get("/api/v1/instances")
-def list_instances(user: str = Depends(current_user)) -> list[dict]:
+def list_instances(user: dict = Depends(require("instances.read"))) -> list[dict]:
     return [_instance_row(i) for i in store.instances.values()]
 
 
@@ -87,7 +277,7 @@ def _instance_row(inst: dict) -> dict:
 
 
 @app.get("/api/v1/instances/{instance_id}")
-def get_instance(instance_id: str, user: str = Depends(current_user)) -> dict:
+def get_instance(instance_id: str, user: dict = Depends(require("instances.read"))) -> dict:
     inst = store.instances.get(instance_id)
     if not inst:
         raise HTTPException(404)
@@ -98,19 +288,19 @@ def get_instance(instance_id: str, user: str = Depends(current_user)) -> dict:
 
 
 @app.post("/api/v1/instances/{instance_id}/import")
-def import_profiles(instance_id: str, user: str = Depends(current_user)) -> dict:
+def import_profiles(instance_id: str, user: dict = Depends(require("instances.operate"))) -> dict:
     _require_instance(instance_id)
     job = store.enqueue_job(instance_id, "import_profiles", {})
-    store.record(user, "instance.import_requested", instance_id, job["id"])
+    store.record(user["email"], "instance.import_requested", instance_id, job["id"])
     return {"job_id": job["id"]}
 
 
 @app.post("/api/v1/instances/{instance_id}/drift-scan")
-def drift_scan(instance_id: str, blueprint: str, version: int, user: str = Depends(current_user)) -> dict:
+def drift_scan(instance_id: str, blueprint: str, version: int, user: dict = Depends(require("instances.operate"))) -> dict:
     _require_instance(instance_id)
     bp = _blueprint(blueprint, version)
     job = store.enqueue_job(instance_id, "drift_scan", {"managed": bp.managed_fields()}, {"blueprint": blueprint, "version": version})
-    store.record(user, "drift.scan_requested", instance_id, f"{blueprint} v{version}")
+    store.record(user["email"], "drift.scan_requested", instance_id, f"{blueprint} v{version}")
     return {"job_id": job["id"]}
 
 
@@ -125,7 +315,7 @@ def _require_instance(instance_id: str) -> dict:
 
 
 @app.get("/api/v1/instances/{instance_id}/drift")
-def get_drift(instance_id: str, user: str = Depends(current_user)) -> dict:
+def get_drift(instance_id: str, user: dict = Depends(require("drift.read"))) -> dict:
     _require_instance(instance_id)
     report = store.drift.get(instance_id)
     if not report:
@@ -146,8 +336,10 @@ class DriftResolve(BaseModel):
 
 
 @app.post("/api/v1/instances/{instance_id}/drift/resolve")
-def resolve_drift(instance_id: str, body: DriftResolve, user: str = Depends(current_user)) -> dict:
+def resolve_drift(instance_id: str, body: DriftResolve, user: dict = Depends(require("drift.resolve"))) -> dict:
     inst = _require_instance(instance_id)
+    if body.action == "accept" and not allowed(user["role"], "blueprints.write"):
+        raise HTTPException(403, f"accepting drift writes a blueprint version; the {role_label(user['role'])} role cannot")
     report = store.drift.get(instance_id)
     if not report or not report.get("drift"):
         raise HTTPException(409, "no open drift on this instance")
@@ -155,19 +347,20 @@ def resolve_drift(instance_id: str, body: DriftResolve, user: str = Depends(curr
         chosen = select_drift(report["drift"], [f.model_dump() for f in body.fields])
     except DriftResolutionError as exc:
         raise HTTPException(422, str(exc))
+    who = user["email"]
     target = f"{instance_id}: " + ", ".join(f"{p}.{d['field']}" for p, diffs in chosen.items() for d in diffs)
 
     if body.action == "ignore_once":
         store.move_drift(instance_id, chosen, "ignored")
-        store.record(user, "drift.ignored_once", target)
+        store.record(who, "drift.ignored_once", target)
         return {"action": body.action, "resolved": chosen}
 
     if body.action == "exception":
         if body.expires_at is None or body.expires_at <= time.time():
             raise HTTPException(422, "an exception needs an expires_at in the future")
-        store.add_exceptions(instance_id, chosen, body.expires_at, user, body.reason)
+        store.add_exceptions(instance_id, chosen, body.expires_at, who, body.reason)
         until = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(body.expires_at))
-        store.record(user, "drift.exception_created", target, f"until {until}" + (f"; {body.reason}" if body.reason else ""))
+        store.record(who, "drift.exception_created", target, f"until {until}" + (f"; {body.reason}" if body.reason else ""))
         return {"action": body.action, "resolved": chosen, "expires_at": body.expires_at}
 
     # accept and revert work against the blueprint version the scan compared with
@@ -176,8 +369,8 @@ def resolve_drift(instance_id: str, body: DriftResolve, user: str = Depends(curr
     bp = _blueprint(report["blueprint"], report["version"])
 
     if body.action == "revert":
-        plan = _save_plan(bp, live_state_from_drift(bp, chosen), inst, user, why=" (revert drift)")
-        store.record(user, "drift.revert_planned", target, plan["id"])
+        plan = _save_plan(bp, live_state_from_drift(bp, chosen), inst, who, why=" (revert drift)")
+        store.record(who, "drift.revert_planned", target, plan["id"])
         return {"action": body.action, "resolved": chosen, "plan": plan}
 
     new_version = max(store.blueprints[bp.metadata.name]) + 1
@@ -188,9 +381,9 @@ def resolve_drift(instance_id: str, body: DriftResolve, user: str = Depends(curr
         raise HTTPException(409, str(exc))
     except ValueError as exc:  # the live values do not make a valid blueprint (e.g. no model provider)
         raise HTTPException(422, f"live values do not form a valid blueprint: {exc}")
-    rec = store.save_blueprint(new_bp.metadata.name, new_version, dump_blueprint(new_bp), new_bp.model_dump(mode="json"), user)
+    rec = store.save_blueprint(new_bp.metadata.name, new_version, dump_blueprint(new_bp), new_bp.model_dump(mode="json"), who)
     store.move_drift(instance_id, chosen, "accepted")
-    store.record(user, "drift.accepted", target, f"{new_bp.metadata.name} v{new_version} (draft)")
+    store.record(who, "drift.accepted", target, f"{new_bp.metadata.name} v{new_version} (draft)")
     return {"action": body.action, "resolved": chosen, "blueprint": rec["name"], "version": rec["version"], "status": rec["status"]}
 
 
@@ -202,12 +395,12 @@ class BlueprintUpload(BaseModel):
 
 
 @app.get("/api/v1/blueprints/schema")
-def blueprint_schema() -> dict:
+def blueprint_schema(user: dict = Depends(require("blueprints.read"))) -> dict:
     return json_schema()
 
 
 @app.post("/api/v1/blueprints", status_code=201)
-def upload_blueprint(body: BlueprintUpload, user: str = Depends(current_user)) -> dict:
+def upload_blueprint(body: BlueprintUpload, user: dict = Depends(require("blueprints.write"))) -> dict:
     try:
         bp = load_blueprint(body.yaml)
     except Exception as exc:
@@ -216,13 +409,13 @@ def upload_blueprint(body: BlueprintUpload, user: str = Depends(current_user)) -
     if existing and existing["status"] != "draft":
         raise HTTPException(409, f"{bp.metadata.name} v{bp.metadata.version} is {existing['status']} and immutable; "
                                  "raise metadata.version to upload a new version")
-    rec = store.save_blueprint(bp.metadata.name, bp.metadata.version, dump_blueprint(bp), bp.model_dump(mode="json"), user)
-    store.record(user, "blueprint.saved", f"{bp.metadata.name} v{bp.metadata.version}")
+    rec = store.save_blueprint(bp.metadata.name, bp.metadata.version, dump_blueprint(bp), bp.model_dump(mode="json"), user["email"])
+    store.record(user["email"], "blueprint.saved", f"{bp.metadata.name} v{bp.metadata.version}")
     return {"name": rec["name"], "version": rec["version"], "status": rec["status"], "managed_profiles": list(bp.managed_fields())}
 
 
 @app.get("/api/v1/blueprints")
-def list_blueprints(user: str = Depends(current_user)) -> list[dict]:
+def list_blueprints(user: dict = Depends(require("blueprints.read"))) -> list[dict]:
     out = []
     for name, versions in store.blueprints.items():
         latest = versions[max(versions)]
@@ -239,7 +432,7 @@ def list_blueprints(user: str = Depends(current_user)) -> list[dict]:
 
 
 @app.get("/api/v1/blueprints/{name}")
-def blueprint_versions(name: str, user: str = Depends(current_user)) -> list[dict]:
+def blueprint_versions(name: str, user: dict = Depends(require("blueprints.read"))) -> list[dict]:
     versions = store.blueprints.get(name)
     if not versions:
         raise HTTPException(404)
@@ -248,7 +441,7 @@ def blueprint_versions(name: str, user: str = Depends(current_user)) -> list[dic
 
 
 @app.get("/api/v1/blueprints/{name}/{version}")
-def get_blueprint(name: str, version: int, user: str = Depends(current_user)) -> dict:
+def get_blueprint(name: str, version: int, user: dict = Depends(require("blueprints.read"))) -> dict:
     rec = store.blueprints.get(name, {}).get(version)
     if not rec:
         raise HTTPException(404)
@@ -258,13 +451,13 @@ def get_blueprint(name: str, version: int, user: str = Depends(current_user)) ->
 
 
 @app.post("/api/v1/blueprints/{name}/{version}/draft", status_code=201)
-def create_draft(name: str, version: int, user: str = Depends(current_user)) -> dict:
+def create_draft(name: str, version: int, user: dict = Depends(require("blueprints.write"))) -> dict:
     """Start a new draft from any version (applied versions are immutable)."""
     bp = _blueprint(name, version)
     new_version = max(store.blueprints[name]) + 1
     new = as_new_version(bp, new_version)
-    rec = store.save_blueprint(name, new_version, dump_blueprint(new), new.model_dump(mode="json"), user)
-    store.record(user, "blueprint.draft_created", f"{name} v{new_version}", f"from v{version}")
+    rec = store.save_blueprint(name, new_version, dump_blueprint(new), new.model_dump(mode="json"), user["email"])
+    store.record(user["email"], "blueprint.draft_created", f"{name} v{new_version}", f"from v{version}")
     return {"name": name, "version": new_version, "status": rec["status"]}
 
 
@@ -281,7 +474,7 @@ class AgentEdit(BaseModel):
 
 
 @app.put("/api/v1/blueprints/{name}/{version}/agents/{agent_id}")
-def edit_agent(name: str, version: int, agent_id: str, body: AgentEdit, user: str = Depends(current_user)) -> dict:
+def edit_agent(name: str, version: int, agent_id: str, body: AgentEdit, user: dict = Depends(require("blueprints.write"))) -> dict:
     rec = store.blueprints.get(name, {}).get(version)
     if not rec:
         raise HTTPException(404, "unknown blueprint version")
@@ -293,8 +486,8 @@ def edit_agent(name: str, version: int, agent_id: str, body: AgentEdit, user: st
         raise HTTPException(404, f"no agent {agent_id!r} in {name} v{version}")
     except ValueError as exc:  # EditError, or the edit makes the blueprint invalid
         raise HTTPException(422, str(exc))
-    store.update_blueprint(name, version, dump_blueprint(new), new.model_dump(mode="json"), user)
-    store.record(user, "blueprint.edited", f"{name} v{version}", f"{agent_id}: {', '.join(changed) if changed else 'no changes'}")
+    store.update_blueprint(name, version, dump_blueprint(new), new.model_dump(mode="json"), user["email"])
+    store.record(user["email"], "blueprint.edited", f"{name} v{version}", f"{agent_id}: {', '.join(changed) if changed else 'no changes'}")
     agent = new.agent(agent_id)
     return {"name": name, "version": version, "status": rec["status"], "changed": changed,
             "agent": agent.model_dump(mode="json"), "managed": new.managed_fields()[agent.profile_name]}
@@ -317,27 +510,38 @@ class PlanCreate(BaseModel):
 
 
 @app.post("/api/v1/plans", status_code=201)
-def create_plan(body: PlanCreate, user: str = Depends(current_user)) -> dict:
+def create_plan(body: PlanCreate, user: dict = Depends(require("plans.create"))) -> dict:
     inst = _require_instance(body.instance_id)
     bp = _blueprint(body.blueprint, body.version)
     live = store.live_state.get(body.instance_id)
     if live is None:
         raise HTTPException(409, "no live state for this instance yet; run import first")
-    return _save_plan(bp, live, inst, user)
+    return _save_plan(bp, live, inst, user["email"])
 
 
-def _save_plan(bp: Blueprint, live: dict, inst: dict, user: str, why: str = "") -> dict:
+def _save_plan(bp: Blueprint, live: dict, inst: dict, who: str, why: str = "") -> dict:
     plan = compute_plan(bp, live, target_instance=inst["id"], agent_installed=(inst["mode"] == "agent" and inst.get("agent_version") is not None), environment=inst["environment"])
     plan["id"] = "plan_" + uuid.uuid4().hex[:10]
     plan["status"] = "planned"
     plan["approvals"] = []
+    plan["created_by"] = who
+    plan["created_at"] = time.time()
     store.plans[plan["id"]] = plan
-    store.record(user, "plan.created", f"{bp.metadata.name} v{bp.metadata.version} → {inst['id']}", f"{len(plan['changes'])} changes{why}")
+    store.record(who, "plan.created", f"{bp.metadata.name} v{bp.metadata.version} → {inst['id']}", f"{len(plan['changes'])} changes{why}")
     return plan
 
 
+@app.get("/api/v1/plans")
+def list_plans(status: Optional[str] = None, user: dict = Depends(require("plans.read"))) -> list[dict]:
+    rows = [{**{k: p[k] for k in ("id", "target_instance", "environment", "blueprint", "status", "approvals",
+                                  "approvals_required", "created_by", "created_at")},
+             "changes": sum(1 for r in p["changes"] if r["kind"] != "approval")}
+            for p in store.plans.values() if not status or p["status"] == status]
+    return sorted(rows, key=lambda r: r["created_at"], reverse=True)
+
+
 @app.get("/api/v1/plans/{plan_id}")
-def get_plan(plan_id: str, user: str = Depends(current_user)) -> dict:
+def get_plan(plan_id: str, user: dict = Depends(require("plans.read"))) -> dict:
     plan = store.plans.get(plan_id)
     if not plan:
         raise HTTPException(404)
@@ -345,33 +549,45 @@ def get_plan(plan_id: str, user: str = Depends(current_user)) -> dict:
 
 
 @app.post("/api/v1/plans/{plan_id}/approve")
-def approve_plan(plan_id: str, user: str = Depends(current_user)) -> dict:
+def approve_plan(plan_id: str, user: dict = Depends(current_user)) -> dict:
     plan = store.plans.get(plan_id)
     if not plan:
         raise HTTPException(404)
-    if user not in plan["approvals"]:
-        plan["approvals"].append(user)
-        store.record(user, "plan.approved", plan_id)
+    if plan["status"] != "planned":
+        raise HTTPException(409, f"this plan is {plan['status']}; only a plan that has not been applied can be approved")
+    production = plan["environment"] == "production"
+    if not allowed(user["role"], "plans.approve.production" if production else "plans.approve.nonprod"):
+        raise HTTPException(403, f"the {role_label(user['role'])} role cannot approve {plan['environment']} plans")
+    if plan.get("created_by") == user["email"]:
+        raise HTTPException(403, "you created this plan; another person has to approve it")
+    if user["email"] not in plan["approvals"]:
+        plan["approvals"].append(user["email"])
+        store.record(user["email"], "plan.approved", plan_id, f"{len(plan['approvals'])} of {plan['approvals_required']}")
     return {"approvals": plan["approvals"], "required": plan["approvals_required"]}
 
 
 @app.post("/api/v1/plans/{plan_id}/apply")
-def apply_plan(plan_id: str, user: str = Depends(current_user)) -> dict:
+def apply_plan(plan_id: str, user: dict = Depends(current_user)) -> dict:
     plan = store.plans.get(plan_id)
     if not plan:
         raise HTTPException(404)
+    production = plan["environment"] == "production"
+    if not allowed(user["role"], "plans.apply.production" if production else "plans.apply.nonprod"):
+        raise HTTPException(403, f"the {role_label(user['role'])} role cannot apply {plan['environment']} plans")
+    if plan["status"] != "planned":
+        raise HTTPException(409, f"this plan is already {plan['status']}")
     if not plan["can_apply"]:
         raise HTTPException(409, plan["blocked_reason"])
     if len(plan["approvals"]) < plan["approvals_required"]:
         raise HTTPException(409, f"{plan['approvals_required']} approvals required, {len(plan['approvals'])} given")
     jobs = [store.enqueue_job(plan["target_instance"], j["kind"], j["params"], {"plan_id": plan_id}) for j in to_agent_job(plan)]
     plan["status"] = "applying"
-    store.record(user, "plan.apply_requested", plan_id, ", ".join(j["id"] for j in jobs))
+    store.record(user["email"], "plan.apply_requested", plan_id, ", ".join(j["id"] for j in jobs))
     return {"jobs": [j["id"] for j in jobs]}
 
 
 @app.get("/api/v1/jobs/{job_id}")
-def get_job(job_id: str, user: str = Depends(current_user)) -> dict:
+def get_job(job_id: str, user: dict = Depends(require("instances.read"))) -> dict:
     job = store.jobs.get(job_id)
     if not job:
         raise HTTPException(404)
@@ -379,12 +595,12 @@ def get_job(job_id: str, user: str = Depends(current_user)) -> dict:
 
 
 @app.get("/api/v1/audit")
-def audit(limit: int = 200, user: str = Depends(current_user)) -> list[dict]:
+def audit(limit: int = 200, user: dict = Depends(require("audit.read"))) -> list[dict]:
     return list(reversed(store.audit))[: max(1, min(limit, 5000))]
 
 
 @app.get("/api/v1/audit/export")
-def audit_export(user: str = Depends(current_user)) -> Response:
+def audit_export(user: dict = Depends(require("audit.read"))) -> Response:
     """The whole audit log as CSV (build document §7: export is CSV in v1)."""
     import csv
     import io
@@ -394,13 +610,14 @@ def audit_export(user: str = Depends(current_user)) -> Response:
     w.writerow(["time_utc", "actor", "action", "target", "detail"])
     for e in store.audit:
         w.writerow([time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(e["ts"])), e["actor"], e["action"], e["target"], e["detail"]])
-    store.record(user, "audit.exported", "audit log", f"{len(store.audit)} entries")
+    store.record(user["email"], "audit.exported", "audit log", f"{len(store.audit)} entries")
     return Response(buf.getvalue(), media_type="text/csv",
                     headers={"Content-Disposition": 'attachment; filename="fleetcontrol-audit.csv"'})
 
 
 @app.get("/api/v1/events")
-def events(instance_id: Optional[str] = None, kind: Optional[str] = None, limit: int = 200, user: str = Depends(current_user)) -> list[dict]:
+def events(instance_id: Optional[str] = None, kind: Optional[str] = None, limit: int = 200,
+           user: dict = Depends(require("instances.read"))) -> list[dict]:
     out = [e for e in store.events if (not instance_id or e.get("instance_id") == instance_id) and (not kind or e.get("kind") == kind)]
     return out[-limit:]
 

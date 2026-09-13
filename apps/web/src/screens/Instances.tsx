@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { api, type Environment, type Instance } from "../api/client";
+import { useAuth } from "../lib/auth";
 import { errorText, useLoad, useNow } from "../lib/hooks";
 import { ENV_LABEL, capabilityRows, formatDate, instanceStatus, timeAgo, type Tone } from "../lib/view";
 import { Banner, Button, Card, Chip, INPUT, Icon, KpiTile, Label, Mono, PageHeader, Spinner } from "../components/ui";
@@ -11,6 +12,7 @@ export function InstancesScreen() {
   const { id: driftFor } = useParams();
   const navigate = useNavigate();
   const now = useNow();
+  const { can } = useAuth();
   const { data: instances, error, loading, reload } = useLoad(api.instances, [], 5000);
   const [selected, setSelected] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
@@ -25,7 +27,7 @@ export function InstancesScreen() {
     <PageHeader crumb="Estate" title="Instances" subtitle="Hermes installations Fleet Control can read from and apply blueprints to."
       actions={<>
         <Button icon="refresh" onClick={() => void reload()}>Re-check all</Button>
-        <Button variant="primary" icon="plus" onClick={() => setConnecting(true)}>Connect instance</Button>
+        {can("instances.connect") && <Button variant="primary" icon="plus" onClick={() => setConnecting(true)}>Connect instance</Button>}
       </>} />
   );
   const overlays = <>
@@ -44,7 +46,9 @@ export function InstancesScreen() {
           <div className="mx-auto mb-5 size-14 rounded-card bg-primary-tint text-primary flex items-center justify-center"><Icon name="server" size={26} /></div>
           <h2 className="text-section m-0">No Hermes instances connected yet</h2>
           <p className="text-text-secondary mt-2 mb-6">Point Fleet Control at a running Hermes Agent and it will read what is already there before you change anything.</p>
-          <Button variant="primary" icon="plus" onClick={() => setConnecting(true)}>Connect instance</Button>
+          {can("instances.connect")
+            ? <Button variant="primary" icon="plus" onClick={() => setConnecting(true)}>Connect instance</Button>
+            : <p className="m-0 text-small text-text-secondary">Ask an Admin to connect one.</p>}
           <ol className="grid grid-cols-3 gap-4 text-left list-none p-0 mt-9 pt-6 border-t border-hairline">
             {["Install the Fleet Control Agent on the Hermes host", "Fleet Control discovers profiles, skills and MCPs", "Import what is running, or apply a blueprint"].map((s, n) => (
               <li key={s} className="flex gap-2.5 text-small text-text-secondary">
@@ -130,6 +134,7 @@ export function InstancesScreen() {
 
 function InstanceRail({ inst, now, onChanged }: { inst: Instance; now: number; onChanged: () => void }) {
   const navigate = useNavigate();
+  const { can } = useAuth();
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ tone: Tone; text: string } | null>(null);
   const status = instanceStatus(inst, now);
@@ -189,17 +194,17 @@ function InstanceRail({ inst, now, onChanged }: { inst: Instance; now: number; o
             Review drift ({inst.open_drift} field{inst.open_drift === 1 ? "" : "s"})
           </Button>
         )}
-        <Button icon="download" disabled={!agentReady || busy !== null} title={agentReady ? undefined : "Needs a paired Fleet Control Agent"}
+        {can("instances.operate") && <Button icon="download" disabled={!agentReady || busy !== null} title={agentReady ? undefined : "Needs a paired Fleet Control Agent"}
           onClick={() => void run("import", () => api.importProfiles(inst.id), "Import queued. The agent reads live profiles on its next poll.")}>
           {busy === "import" && <Spinner />}Import live profiles
-        </Button>
-        <Button icon="scan" disabled={!agentReady || !inst.applied || busy !== null}
+        </Button>}
+        {can("instances.operate") && <Button icon="scan" disabled={!agentReady || !inst.applied || busy !== null}
           title={!inst.applied ? "Apply a blueprint version first; drift is measured against it" : undefined}
           onClick={() => inst.applied && void run("scan", () => api.driftScan(inst.id, inst.applied!.name, inst.applied!.version),
             `Drift scan against ${inst.applied.name} v${inst.applied.version} queued.`)}>
           {busy === "scan" && <Spinner />}Scan for drift
-        </Button>
-        <Button icon="layers" onClick={() => navigate(`/blueprints`)}>Plan a blueprint for this instance</Button>
+        </Button>}
+        {can("plans.create") && <Button icon="layers" onClick={() => navigate(`/blueprints`)}>Plan a blueprint for this instance</Button>}
       </div>
       {msg && <Banner tone={msg.tone} className="mt-3">{msg.text}</Banner>}
     </Card>

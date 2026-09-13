@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { api, type Plan, type PlanRow } from "../api/client";
+import { useMe } from "../lib/auth";
 import { errorText, useLoad } from "../lib/hooks";
-import { ENV_LABEL, applyLabel, changeCounts, planPhase, type Tone } from "../lib/view";
+import { ENV_LABEL, applyLabel, approvalFor, canApply, changeCounts, planPhase, type Tone } from "../lib/view";
 import { Banner, Button, Card, Chip, Icon, Mono, PageHeader, Spinner, TONE_CLASS, type IconName } from "../components/ui";
 
 const ROW_TONE: Record<PlanRow["kind"], Tone> = { create: "success", update: "info", remove: "error", approval: "warning" };
@@ -14,6 +15,7 @@ export function ApplyPlanScreen() {
   const { data: plan, error, reload } = useLoad(() => api.plan(id), [id], pollMs);
   const [busy, setBusy] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const me = useMe();
 
   useEffect(() => setPollMs(plan?.status === "applying" ? 1500 : 0), [plan?.status]);
 
@@ -34,26 +36,34 @@ export function ApplyPlanScreen() {
   if (!plan) return <div className="flex gap-2 items-center text-text-secondary"><Spinner /> Loading plan…</div>;
 
   const phase = planPhase(plan);
+  const approval = approvalFor(plan, me);
+  const mayApply = canApply(plan, me);
   const counts = changeCounts(plan);
   const actionable = plan.changes.filter((r) => r.kind !== "approval").length;
 
   return (
     <>
       <PageHeader
-        crumb={<><Link to="/blueprints">Library</Link> › <Link to={`/blueprints?name=${plan.blueprint.name}`}>{plan.blueprint.name}</Link></>}
+        crumb={me.portal === "workspace"
+          ? <><Link to="/workspace">Workspace</Link> › Plan</>
+          : <><Link to="/blueprints">Library</Link> › <Link to={`/blueprints?name=${plan.blueprint.name}`}>{plan.blueprint.name}</Link></>}
         title={<>Plan: apply blueprint v{plan.blueprint.version} to {plan.target_instance}</>}
         subtitle={`Review every change before anything touches Hermes.${plan.approvals_required ? ` Applying to ${ENV_LABEL[plan.environment].toLowerCase()} needs ${plan.approvals_required} approvals.` : ""}`}
         actions={<>
-          {phase === "needs-approval" && (
+          {phase === "needs-approval" && approval.can && (
             <Button icon="check" disabled={busy !== null} onClick={() => void act("approve", () => api.approvePlan(plan.id))}>
               {busy === "approve" && <Spinner />}Approve ({plan.approvals.length}/{plan.approvals_required})
             </Button>
           )}
-          <Button variant="primary" icon="check" disabled={phase !== "ready" || busy !== null} onClick={() => void act("apply", () => api.applyPlan(plan.id))}>
+          <Button variant="primary" icon="check" disabled={phase !== "ready" || busy !== null || !mayApply}
+            title={mayApply ? undefined : `The ${me.role_label} role cannot apply ${plan.environment} plans`}
+            onClick={() => void act("apply", () => api.applyPlan(plan.id))}>
             {busy === "apply" && <Spinner />}{phase === "applied" ? "Applied" : phase === "applying" ? "Applying…" : applyLabel(plan.environment)}
           </Button>
         </>} />
       {failure && <Banner tone="error" className="mb-4">{failure}</Banner>}
+      {phase === "needs-approval" && approval.reason && <Banner tone="info" className="mb-4">{approval.reason}</Banner>}
+      {phase === "ready" && !mayApply && <Banner tone="info" className="mb-4">Approved. An {plan.environment === "production" ? "Admin or Operator" : "Admin, Fleet Architect or Operator"} applies it.</Banner>}
 
       <div className="grid grid-cols-[1fr_360px] gap-5 items-start">
         <Card className="overflow-hidden">

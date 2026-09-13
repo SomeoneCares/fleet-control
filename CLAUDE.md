@@ -35,8 +35,14 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   with demo data and simulated agents; see `apps/web/README.md` to run it. Drift resolution API: accept/revert/ignore/exception.
 - DONE: Fleet Designer (topology from the workflow), Agent Studio (edits land on drafts; applied versions are immutable,
   also on re-upload), Audit log (filters, CSV export at `/api/v1/audit/export`).
-- NEXT: sign-in (local accounts, then OIDC) with the five roles and the Access screen; the API still trusts `X-User`.
-- THEN: PostgreSQL store, Docker Compose packaging, Slice 1 exit test on a lab instance.
+- DONE: sign-in with local accounts (stdlib scrypt, HttpOnly session cookie, `X-Fleet-Control: 1` required on writes,
+  lockout after 5 failures) and the five roles enforced on every `/api/v1` route (`auth.PERMISSIONS`). Production
+  approvals: Admin or Approver only, never the plan's creator, one per person; production applies by Admin or Operator.
+  Access screen (roles, people, agent permissions) and a Workspace home for Approvers/Viewers. First admin comes from
+  `FLEETCONTROL_ADMIN_EMAIL` (no default password). Local dev: `scripts/dev_api.py` then `scripts/dev_seed.py`;
+  passwords land in git-ignored `.fleetcontrol-dev-credentials.json`. Claude must not type passwords into the web form:
+  the user signs in for browser checks.
+- NEXT: OIDC sign-in mapped onto the same roles; PostgreSQL store; Docker Compose packaging; Slice 1 exit test on a lab instance.
 
 ## Working agreements
 - Keep tests runnable with `python3 -m unittest` (no pytest-only features). Add tests with every module.

@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { api, type AgentDoc, type AgentPatch, type BlueprintDetail, type OutputContract } from "../api/client";
+import { useAuth, useMe } from "../lib/auth";
 import { errorText } from "../lib/hooks";
 import { cleanLines, renderSoul } from "../lib/soul";
 import { formatValue, prettyId } from "../lib/view";
@@ -56,6 +57,9 @@ function AgentEditor({ detail, agent, notice, nextVersion, onSwitch, onSaved }: 
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [planning, setPlanning] = useState(false);
+  const { can } = useAuth();
+  const me = useMe();
+  const canWrite = can("blueprints.write");
   const isDraft = detail.status === "draft";
 
   function cleaned(a: AgentDoc): AgentDoc {
@@ -99,12 +103,15 @@ function AgentEditor({ detail, agent, notice, nextVersion, onSwitch, onSaved }: 
             onChange={(e) => onSwitch(e.target.value)}>
             {detail.parsed.agents.map((a) => <option key={a.id} value={a.id}>{prettyId(a.id)}</option>)}
           </select>
-          {dirty && <Button onClick={() => { setForm(structuredClone(agent)); setFailure(null); }}>Discard</Button>}
-          <Button variant="primary" icon="check" disabled={!dirty || busy} onClick={() => void save()}>
-            {busy && <Spinner />}{isDraft ? "Save to draft" : `Save as draft v${nextVersion}`}
-          </Button>
+          {canWrite && dirty && <Button onClick={() => { setForm(structuredClone(agent)); setFailure(null); }}>Discard</Button>}
+          {canWrite && (
+            <Button variant="primary" icon="check" disabled={!dirty || busy} onClick={() => void save()}>
+              {busy && <Spinner />}{isDraft ? "Save to draft" : `Save as draft v${nextVersion}`}
+            </Button>
+          )}
         </>} />
-      {!isDraft && <Banner tone="info" className="mb-4">v{detail.version} is {detail.status} and immutable. Saving creates draft v{nextVersion} with your changes.</Banner>}
+      {!canWrite && <Banner tone="info" className="mb-4">Read-only: the {me.role_label} role can read agents but not change them.</Banner>}
+      {canWrite && !isDraft && <Banner tone="info" className="mb-4">v{detail.version} is {detail.status} and immutable. Saving creates draft v{nextVersion} with your changes.</Banner>}
       {notice && <Banner tone="success" className="mb-4">{notice}</Banner>}
       {failure && <Banner tone="error" className="mb-4">{failure}</Banner>}
 
@@ -121,6 +128,7 @@ function AgentEditor({ detail, agent, notice, nextVersion, onSwitch, onSaved }: 
         </Card>
 
         <Card className="p-5">
+          <fieldset disabled={!canWrite} className="m-0 p-0 border-0 min-w-0">
           {tab === "identity" && (
             <Panel title="Identity" hint="The id and Hermes profile name are fixed once the agent exists.">
               <div className="grid grid-cols-2 gap-4">
@@ -220,6 +228,7 @@ function AgentEditor({ detail, agent, notice, nextVersion, onSwitch, onSaved }: 
               </div>
             </Panel>
           )}
+          </fieldset>
         </Card>
 
         <div className="flex flex-col gap-4">
@@ -234,7 +243,7 @@ function AgentEditor({ detail, agent, notice, nextVersion, onSwitch, onSaved }: 
                 ))}
               </div>
             )}
-            <Button className="w-full mt-3" icon="arrowRight" disabled={dirty} title={dirty ? "Save first" : undefined} onClick={() => setPlanning(true)}>Plan v{detail.version}…</Button>
+            {can("plans.create") && <Button className="w-full mt-3" icon="arrowRight" disabled={dirty} title={dirty ? "Save first" : undefined} onClick={() => setPlanning(true)}>Plan v{detail.version}…</Button>}
           </Card>
           <Card className="p-4">
             <h2 className="text-section m-0 mb-1">Sandbox</h2>

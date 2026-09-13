@@ -30,11 +30,64 @@ class Store:
         self.drift: dict[str, dict] = {}  # instance_id -> latest report {at, blueprint, version, drift, excepted, ...}
         self.drift_exceptions: dict[str, list[dict]] = {}  # instance_id -> [{profile, field, expires_at, by, reason}]
         self.applied: dict[str, dict] = {}  # instance_id -> {name, version, plan_id, at} of the last successful apply
+        self.users: dict[str, dict] = {}  # email -> {email, name, role, password_hash, disabled, created_at, last_login}
+        self.sessions: dict[str, dict] = {}  # sha256(token) -> {email, expires}
+        self.login_failures: dict[str, list[float]] = {}  # email -> recent failure times
 
     # ---- audit ---------------------------------------------------------------
     def record(self, actor: str, action: str, target: str, detail: str = "") -> None:
         with self.lock:
             self.audit.append({"id": uuid.uuid4().hex, "ts": time.time(), "actor": actor, "action": action, "target": target, "detail": detail})
+
+    # ---- people and sessions -------------------------------------------------
+    def add_user(self, email: str, name: str, role: str, password_hash: str) -> dict:
+        with self.lock:
+            user = {"email": email, "name": name, "role": role, "password_hash": password_hash,
+                    "disabled": False, "created_at": time.time(), "last_login": None}
+            self.users[email] = user
+            return user
+
+    def create_session(self, email: str, token: str, key: str, seconds: int) -> None:
+        with self.lock:
+            self.sessions[key] = {"email": email, "expires": time.time() + seconds, "seconds": seconds}
+
+    def session_user(self, key: str) -> Optional[dict]:
+        """The signed-in user for a session, sliding its expiry; None when expired, unknown or disabled."""
+        with self.lock:
+            s = self.sessions.get(key)
+            if not s or s["expires"] < time.time():
+                self.sessions.pop(key, None)
+                return None
+            user = self.users.get(s["email"])
+            if not user or user["disabled"]:
+                self.sessions.pop(key, None)
+                return None
+            s["expires"] = time.time() + s["seconds"]
+            return user
+
+    def drop_session(self, key: str) -> None:
+        with self.lock:
+            self.sessions.pop(key, None)
+
+    def drop_sessions_for(self, email: str) -> None:
+        with self.lock:
+            for k in [k for k, s in self.sessions.items() if s["email"] == email]:
+                del self.sessions[k]
+
+    def recent_failures(self, email: str, window: float) -> int:
+        with self.lock:
+            cutoff = time.time() - window
+            recent = [t for t in self.login_failures.get(email, []) if t > cutoff]
+            self.login_failures[email] = recent
+            return len(recent)
+
+    def login_failed(self, email: str) -> None:
+        with self.lock:
+            self.login_failures.setdefault(email, []).append(time.time())
+
+    def clear_failures(self, email: str) -> None:
+        with self.lock:
+            self.login_failures.pop(email, None)
 
     # ---- instances -----------------------------------------------------------
     def create_instance(self, instance_id: str, environment: str, owner: str, mode: str) -> dict:

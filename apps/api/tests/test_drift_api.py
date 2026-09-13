@@ -8,7 +8,7 @@ import unittest
 try:
     from fastapi.testclient import TestClient
 
-    from fleetcontrol_api.main import app
+    from tests.helpers import signed_in
 except ImportError:  # pragma: no cover
     TestClient = None
 
@@ -21,7 +21,7 @@ DRIFT = {"sanctions-screener": [SKILLS], "ownership-tracer": [MODEL]}
 @unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
 class DriftApiTest(unittest.TestCase):
     def setUp(self):
-        self.c = TestClient(app)
+        self.c = signed_in("admin")
         self.inst = "drift-" + os.urandom(3).hex()
         pair = self.c.post("/api/v1/instances", json={"id": self.inst, "environment": "staging", "mode": "agent"}).json()["pairing_token"]
         tok = self.c.post("/agent/v1/pair", json={"instance_id": self.inst, "agent_version": "0.1.0", "report": {"surfaces": {"api": "ok"}}},

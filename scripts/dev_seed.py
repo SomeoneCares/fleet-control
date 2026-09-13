@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 """Fill a local Fleet Control API with realistic demo data for the web client, with simulated agents.
 
-    uvicorn fleetcontrol_api.main:app --port 8080     # terminal 1 (the API; in-memory)
-    python scripts/dev_seed.py                         # terminal 2 (seeds, then keeps the agents running)
+    python scripts/dev_api.py      # terminal 1: the API (in-memory) with a bootstrap admin
+    python scripts/dev_seed.py     # terminal 2: seeds, then keeps the simulated agents running
 
-Creates three instances: staging and production with a paired, simulated Fleet Control Agent, and a
-lab instance connected API-only. Uploads the example AML blueprint, imports live profiles, applies v3 to
-staging, then changes two fields "by hand" on staging and scans, so there is drift to resolve. Production
-gets a plan that waits for two approvals. The simulated agents keep answering jobs (import, drift scan,
-policy push, apply) against an in-memory Hermes until you stop the script, so the screens work end to end.
-`--once` seeds and exits (queued jobs then stay queued).
+Signs in as the bootstrap admin from .fleetcontrol-dev-credentials.json and creates one demo person per
+role (their one-time passwords go into the same git-ignored file). Creates three instances: staging and
+production with a paired, simulated Fleet Control Agent, and a lab instance connected API-only. Uploads
+the example AML blueprint, imports live profiles, applies v3 to staging, then changes two fields "by hand"
+on staging and scans, so there is drift to resolve. Dana (Fleet Architect) creates a production plan that
+waits for two approvals from Admin or Approver. The simulated agents keep answering jobs (import, drift
+scan, policy push, apply) against an in-memory Hermes until you stop the script, so the screens work end
+to end. `--once` seeds and exits (queued jobs then stay queued).
 """
 
 from __future__ import annotations
 
 import hashlib
+import http.cookiejar
 import json
 import os
 import sys
@@ -27,8 +30,17 @@ import urllib.request
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path[:0] = [os.path.join(ROOT, "packages", "blueprint_schema"), os.path.join(ROOT, "apps", "agent")]
 
+from dev_api import CREDENTIALS, save_credentials  # noqa: E402
 from fleetcontrol_blueprint import load_blueprint  # noqa: E402
 from fleetctl_agent.hermes_local import diff_managed  # noqa: E402
+
+PEOPLE = [
+    ("dana.whitfield@fleetcontrol.local", "Dana Whitfield", "fleet_architect"),
+    ("sam.ortiz@fleetcontrol.local", "Sam Ortiz", "operator"),
+    ("marcus.okafor@fleetcontrol.local", "Marcus Okafor", "approver"),
+    ("lena.berg@fleetcontrol.local", "Lena Berg", "approver"),
+    ("riya.shah@fleetcontrol.local", "Riya Shah", "viewer"),
+]
 
 BASE = os.environ.get("FLEETCONTROL_URL", "http://127.0.0.1:8080")
 EXAMPLE = os.path.join(ROOT, "packages", "blueprint_schema", "examples", "aml-investigation.yaml")
@@ -42,15 +54,27 @@ REPORT = {
 }
 
 
-def call(method: str, path: str, body=None, token: str | None = None, query: dict | None = None, timeout: float = 40):
+def call(method: str, path: str, body=None, token: str | None = None, query: dict | None = None, timeout: float = 40, opener=None):
     url = BASE + path + ("?" + urllib.parse.urlencode(query) if query else "")
     req = urllib.request.Request(url, data=None if body is None else json.dumps(body).encode(), method=method)
     req.add_header("Content-Type", "application/json")
+    req.add_header("X-Fleet-Control", "1")
     if token:
         req.add_header("Authorization", f"Bearer {token}")
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with (opener.open(req, timeout=timeout) if opener else urllib.request.urlopen(req, timeout=timeout)) as r:
         raw = r.read()
         return json.loads(raw) if raw else None
+
+
+class Session:
+    """A signed-in person, like the web client: a cookie jar plus the X-Fleet-Control header."""
+
+    def __init__(self, email: str, password: str):
+        self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        self.me = self.call("POST", "/api/v1/auth/login", {"email": email, "password": password}, timeout=10)
+
+    def call(self, method: str, path: str, body=None, query: dict | None = None, timeout: float = 40):
+        return call(method, path, body, query=query, timeout=timeout, opener=self.opener)
 
 
 def soul_hash(text: str) -> str:
@@ -123,23 +147,35 @@ def wait(check, what: str, timeout: float = 30) -> None:
         time.sleep(0.3)
 
 
-def instance(iid: str) -> dict:
-    return call("GET", f"/api/v1/instances/{iid}")
-
-
 def main() -> None:
+    if not os.path.exists(CREDENTIALS):
+        sys.exit(f"{CREDENTIALS} not found. Start the API with scripts/dev_api.py first; it creates the admin.")
+    with open(CREDENTIALS, encoding="utf-8") as f:
+        creds = json.load(f)
     try:
-        existing = call("GET", "/api/v1/instances", timeout=5)
+        admin = Session(creds["admin"]["email"], creds["admin"]["password"])
+    except urllib.error.HTTPError as exc:
+        sys.exit(f"Signing in as {creds['admin']['email']} failed ({exc.code}). Was the API started with scripts/dev_api.py?")
     except (urllib.error.URLError, OSError) as exc:
-        sys.exit(f"Fleet Control API not reachable at {BASE} ({exc}). Start it: uvicorn fleetcontrol_api.main:app --port 8080")
-    if existing:
+        sys.exit(f"Fleet Control API not reachable at {BASE} ({exc}). Start it: python scripts/dev_api.py")
+    if admin.call("GET", "/api/v1/instances"):
         sys.exit("The API already has instances. Restart it for a clean demo (its store is in-memory).")
+
+    creds["people"] = {}
+    for email, name, role in PEOPLE:
+        created = admin.call("POST", "/api/v1/users", {"email": email, "name": name, "role": role})
+        creds["people"][email] = {"name": name, "role": role, "password": created["password"]}
+    save_credentials(creds)
+    print(f"created {len(PEOPLE)} demo people (one per role); passwords in {CREDENTIALS}", flush=True)
+
+    def instance(iid: str) -> dict:
+        return admin.call("GET", f"/api/v1/instances/{iid}")
 
     bp = load_blueprint(EXAMPLE)
     managed = bp.managed_fields()
     souls = {a.profile_name: a.soul.render() for a in bp.agents}
     with open(EXAMPLE, encoding="utf-8") as f:
-        call("POST", "/api/v1/blueprints", {"yaml": f.read()})
+        admin.call("POST", "/api/v1/blueprints", {"yaml": f.read()})
 
     def live_copy() -> dict:
         return json.loads(json.dumps(managed))
@@ -154,34 +190,36 @@ def main() -> None:
 
     agents: dict[str, SimulatedAgent] = {}
     for iid, env, live in (("hermes-staging-eu-01", "staging", staging), ("hermes-prod-eu-01", "production", prod)):
-        created = call("POST", "/api/v1/instances", {"id": iid, "environment": env, "mode": "agent"})
+        created = admin.call("POST", "/api/v1/instances", {"id": iid, "environment": env, "mode": "agent"})
         token = call("POST", "/agent/v1/pair", {"instance_id": iid, "agent_version": AGENT_VERSION, "report": REPORT},
                      token=created["pairing_token"])["agent_token"]
         agents[iid] = SimulatedAgent(iid, token, live, dict(souls))
         agents[iid].start()
-    call("POST", "/api/v1/instances", {"id": "hermes-lab-01", "environment": "lab", "mode": "api-only"})
+    admin.call("POST", "/api/v1/instances", {"id": "hermes-lab-01", "environment": "lab", "mode": "api-only"})
     print("instances created; importing live profiles", flush=True)
 
     for iid in agents:
-        call("POST", f"/api/v1/instances/{iid}/import")
+        admin.call("POST", f"/api/v1/instances/{iid}/import")
         wait(lambda iid=iid: instance(iid)["live_profile_count"] > 0, f"import on {iid}")
 
     stg = "hermes-staging-eu-01"
-    plan = call("POST", "/api/v1/plans", {"blueprint": bp.metadata.name, "version": bp.metadata.version, "instance_id": stg})
-    call("POST", f"/api/v1/plans/{plan['id']}/apply")
-    wait(lambda: call("GET", f"/api/v1/plans/{plan['id']}")["status"] == "applied", "apply on staging")
+    plan = admin.call("POST", "/api/v1/plans", {"blueprint": bp.metadata.name, "version": bp.metadata.version, "instance_id": stg})
+    admin.call("POST", f"/api/v1/plans/{plan['id']}/apply")
+    wait(lambda: admin.call("GET", f"/api/v1/plans/{plan['id']}")["status"] == "applied", "apply on staging")
     print(f"applied {bp.metadata.name} v{bp.metadata.version} to {stg} ({plan['id']})", flush=True)
 
     # someone edits staging by hand, outside Fleet Control
     live = agents[stg].profiles
     live["sanctions-screener"]["skills"] = sorted(set(live["sanctions-screener"]["skills"]) | {"quick-lookup"})
     live["ownership-tracer"]["model"] = {"provider": "local", "name": "llama-4-8b"}
-    call("POST", f"/api/v1/instances/{stg}/drift-scan", query={"blueprint": bp.metadata.name, "version": bp.metadata.version})
+    admin.call("POST", f"/api/v1/instances/{stg}/drift-scan", query={"blueprint": bp.metadata.name, "version": bp.metadata.version})
     wait(lambda: instance(stg)["open_drift"] > 0, "drift scan on staging")
 
-    prod_plan = call("POST", "/api/v1/plans", {"blueprint": bp.metadata.name, "version": bp.metadata.version, "instance_id": "hermes-prod-eu-01"})
-    print(f"production plan {prod_plan['id']} waits for {prod_plan['approvals_required']} approvals", flush=True)
-    print("\nSeeded. Open the web client (npm run dev in apps/web) and go to Instances.", flush=True)
+    dana_email = PEOPLE[0][0]
+    dana = Session(dana_email, creds["people"][dana_email]["password"])
+    prod_plan = dana.call("POST", "/api/v1/plans", {"blueprint": bp.metadata.name, "version": bp.metadata.version, "instance_id": "hermes-prod-eu-01"})
+    print(f"production plan {prod_plan['id']} by {dana_email} waits for {prod_plan['approvals_required']} approvals (Admin or Approver)", flush=True)
+    print(f"\nSeeded. Open the web client (npm run dev in apps/web) and sign in; credentials are in {CREDENTIALS}.", flush=True)
 
     if "--once" in sys.argv:
         return

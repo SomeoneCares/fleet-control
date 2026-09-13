@@ -1,0 +1,16 @@
+[project]
+name = "fleetctl-agent"
+version = "0.1.0"
+description = "Fleet Control host daemon for Hermes Agent instances"
+requires-python = ">=3.11"
+dependencies = ["PyYAML>=6"]
+
+[project.scripts]
+fleetctl-agent = "fleetctl_agent.daemon:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["fleetctl_agent*"]

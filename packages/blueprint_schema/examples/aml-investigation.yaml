@@ -1,0 +1,154 @@
+apiVersion: fleetcontrol/v1
+kind: Blueprint
+metadata:
+  name: aml-investigation
+  version: 3
+  owner: dana.whitfield
+  description: Investigates flagged wire transfers and prepares SAR drafts for human sign-off.
+requires:
+  hermes: ">=0.21"
+  capabilities: [runs, sessions, profiles.read, profiles.write, hooks]
+  agent: required
+
+mission: >
+  Investigate suspicious wire transfers flagged by the SAS Viya anomaly model.
+  Verify sanctions exposure, trace beneficial ownership, and prepare a SAR draft
+  for two compliance officers to sign. Customer data stays on-premises; cloud
+  models may only see redacted summaries. Any external submission needs human approval.
+
+policies:
+  - id: data-residency
+    kind: data-residency
+    description: Cloud-model agents receive redacted summaries only.
+    applies_to: ["*"]
+    enforcement: block
+  - id: external-submission
+    kind: external-action-approval
+    description: Any external action requires human approval.
+    applies_to: ["*"]
+    params: { tools: [sar.submit, http.post] }
+    enforcement: approve
+  - id: no-web-fetch-in-screening
+    kind: tool-denylist
+    description: Screening must use OpenSanctions, never ad-hoc web fetches.
+    applies_to: [sanctions-screener]
+    params: { tools: [web.fetch] }
+    enforcement: block
+
+agents:
+  - id: case-orchestrator
+    role: Owns each case; routes work to specialists and assembles the case file for humans.
+    model: { provider: anthropic, name: claude-sonnet, data_class: redacted-only }
+    soul:
+      objective: Coordinate the investigation of one flagged transaction and assemble a case brief.
+      principles:
+        - Delegate screening and ownership tracing in parallel; never do them yourself.
+        - Send the Challenger every recommendation before a human sees it.
+      boundaries:
+        - Never contact external systems directly.
+      output_contract: { format: markdown, required: [summary, findings, open-questions] }
+    skills: [case-routing, evidence-ledger, redaction]
+    mcps: [case-store]
+    delegates_to: [sanctions-screener, ownership-tracer, challenger, sar-drafter]
+    content_zones: [case-files]
+  - id: sanctions-screener
+    role: Screens every counterparty against OFAC, EU and UN lists.
+    model: { provider: local, name: llama-4-70b-q4 }
+    soul:
+      objective: Screen counterparties on a case against sanctions lists and return matches with confidence.
+      principles:
+        - Query OpenSanctions before forming any opinion on a name.
+        - Try transliterations and known aliases before declaring no match.
+      boundaries:
+        - Never mark a screening complete without an OpenSanctions result in the run.
+        - Escalate any match above 0.85 confidence to the Case Orchestrator.
+      output_contract: { format: json, required: [match_count, matches, list_versions, screened_at] }
+    skills: [name-matching, list-versioning]
+    mcps: [opensanctions]
+    content_zones: [case-files]
+    tests: [sanctions-evidence, alias-match, no-web-fetch]
+  - id: ownership-tracer
+    role: Resolves beneficial ownership chains from registry filings.
+    model: { provider: local, name: llama-4-70b-q4 }
+    soul:
+      objective: Trace beneficial ownership up to three hops and return a graph.
+      output_contract: { format: json, required: [entities, edges, ubo_candidates] }
+    skills: [entity-resolution, graph-walk]
+    mcps: [corporate-registry]
+    content_zones: [case-files]
+  - id: challenger
+    role: Argues against the orchestrator's recommendation before it reaches a compliance officer.
+    model: { provider: openai, name: gpt-5, data_class: redacted-only }
+    soul:
+      objective: Find the strongest benign explanation for the transaction and cite the case file for every objection.
+      boundaries:
+        - May not contact external systems.
+        - Disagreement blocks the SAR draft until a human decides.
+    skills: [counter-argument, redaction-check, citation-check]
+    tests: [objects-to-unsupported-claim]
+  - id: sar-drafter
+    role: Writes the SAR narrative from the case file; two compliance officers must sign before submission.
+    model: { provider: anthropic, name: claude-sonnet, data_class: redacted-only }
+    soul:
+      objective: Draft a SAR narrative from the approved case file.
+      output_contract: { format: file, artifact: sar-draft.docx }
+    skills: [sar-template, citation-check]
+    mcps: [document-store]
+    content_zones: [case-files, shared-drafts]
+
+workflows:
+  - id: case-to-sar-draft
+    steps:
+      - { agent: case-orchestrator, artifact: case-brief.md, input: flagged transaction }
+      - parallel:
+          - { agent: sanctions-screener, artifact: screening-result.json }
+          - { agent: ownership-tracer, artifact: ownership-graph.json }
+      - { agent: challenger, artifact: challenge-memo.md }
+      - { human_gate: approver, timeout: 24h, escalate_to: mlro, on_reject: challenger }
+      - { agent: sar-drafter, artifact: sar-draft.docx }
+      - { open_decision_room: true, question_template: "Should we file a SAR for {counterparty}?" }
+    tests: [workflow-smoke]
+
+tests:
+  - id: sanctions-evidence
+    target: sanctions-screener
+    scenario: Screen "Zephyr Maritime Ltd" (Cyprus) and its two directors for case MB-4471.
+    required_tools: [opensanctions.search]
+    forbidden_tools: [web.fetch]
+    expected_artifact: screening-result.json
+    evaluator: schema
+  - id: alias-match
+    target: sanctions-screener
+    scenario: Screen "Nikos Katsaros" including transliterations.
+    required_tools: [opensanctions.search]
+    evaluator: contains
+    expected: "match_count"
+  - id: no-web-fetch
+    target: sanctions-screener
+    scenario: Screen an unknown shell company with no registry footprint.
+    forbidden_tools: [web.fetch]
+    evaluator: none
+  - id: objects-to-unsupported-claim
+    target: challenger
+    scenario: Case brief claims "customer has zero sanctions hits" with no screening result attached.
+    evaluator: contains
+    expected: "unsupported"
+  - id: workflow-smoke
+    target: case-to-sar-draft
+    scenario: Run the full workflow on fixture case MB-4471 with a mock approval.
+    expected_artifact: sar-draft.docx
+    evaluator: artifact-exists
+    limits: { max_seconds: 600, max_tokens: 200000, max_cost_usd: 2.0 }
+
+delivery:
+  - { when: decision_room.opened, to: "teams:aml-investigations", template: decision-request }
+  - { when: approval.second_needed, to: "email:approvers", template: approval-request }
+  - { when: assurance.no_evidence, to: "slack:#fleet-ops", template: alert }
+  - { when: drift.detected, to: "slack:#fleet-ops", template: alert, enabled: false }
+
+secrets:
+  - { name: opensanctions-api-key, ref: "secret://vault/hermes/opensanctions" }
+
+targets:
+  - { instance: hermes-staging-eu-01, environment: staging }
+  - { instance: hermes-prod-eu-01, environment: production, requires_approvals: 2 }

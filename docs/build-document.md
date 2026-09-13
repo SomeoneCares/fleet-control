@@ -1,7 +1,7 @@
 # Fleet Control for Hermes Agent — Build Document v1
 
 Date: 11 September 2026
-Status: Working draft for the first engineering team
+Status: Working draft for the first engineering team · revised after the Hermes 0.21.2 spike
 Inputs reconciled: *Hermes Fleet Studio — Deep Research Validation*, *Hermes Fleet Control Platform — Components & Detailed Feature Plan*, the 18 Stitch screens, and the 23-screen consolidated redesign canvas ("Fleet Control Redesign").
 
 ---
@@ -108,7 +108,7 @@ Explicitly deferred: marketplace, arbitrary workflow engine, custom observabilit
 | **Workflow** (in blueprint) | Ordered steps with human gates | mapped onto Hermes Kanban where available |
 | **Policy** (in blueprint) | Fleet-level rule | e.g. cloud models receive redacted input only; external submission requires approval |
 | **Test** | Scenario + required/forbidden tools + expected artifact + limits + evaluator | attached to an agent or workflow |
-| **Plan** | Computed diff between a BlueprintVersion and an Instance's live state | list of changes, each with method tier and risk |
+| **Plan** | Computed diff between a BlueprintVersion and an Instance's live state | list of changes, each with method (Agent / API read-only) and risk |
 | **Apply** | Execution record of a plan | snapshot before, per-change result, rollback pointer |
 | **Snapshot** | Live config captured before an apply | used for rollback |
 | **DriftEvent** | Managed field differs from blueprint | resolution: accept / revert / ignore once / exception |
@@ -176,42 +176,45 @@ Secrets are references, never values. SOUL text is stored in the blueprint with 
 
 ---
 
-## 5. Hermes adapter and the write path
+## 5. Hermes integration: the Fleet Control Agent
 
-### 5.1 Three tiers (every feature declares which tier it needs)
+*Rewritten after the spike (see `spike-addendum-hermes-0.21.2.md`). The earlier "three-tier adapter" is withdrawn.*
 
-| Tier | Surface | Stability | Used for |
+### 5.1 What the spike established (Hermes 0.21.2)
+
+- The stable `/v1` API is read-and-run only. `/v1/capabilities` advertises `admin_config_rw: false`; there are no profile or config routes on it.
+- Every write (profiles, SOUL, model, skills, toolsets, MCP servers, messaging platforms, cron) lives on the web dashboard backend (`hermes_cli/web_routers/*`, port 9119). It is per-profile scoped, undocumented as a public contract, and when bound off loopback it requires an interactive OIDC/OAuth session; there is no machine credential for it.
+- The `/v1/runs` event stream drops tool arguments and every child-agent tool call by design. Full tool calls and results are available after the fact from `GET /api/sessions/{id}/messages` (parent and child sessions), and in real time only from inside the process: plugin hooks `pre_tool_call` (can block) and `post_tool_call` (args + result), `subagent_start/stop`, `on_session_end`. Outbound webhooks (`hooks.outbound`) push signed copies of those events with tool inputs.
+- The bundled Langfuse plugin carries full tool evidence; OTLP export carries none.
+- Hermes is at 0.21.x (SemVer) with CalVer release tags; "v2.4" does not exist and must not appear anywhere.
+
+### 5.2 Architecture
+
+A small, signed **Fleet Control Agent** is installed beside every managed Hermes instance. Nothing on the host is exposed inbound; the dashboard stays on loopback.
+
+| Part | Runs as | Uses | Provides |
 |---|---|---|---|
-| A | Stable API (`/v1/capabilities`, `/v1/runs`, `/v1/skills`, `/v1/toolsets`, sessions, jobs) | Documented as stable | Discovery, running tests, sandbox, run events, assurance inputs |
-| B | Dashboard backend API (`/api/config`, `/api/mcp/servers`, skills toggle, cron) | "You can call these directly" — not a stability promise | Writing profiles, config, skills, MCP registrations |
-| C | CLI over SSH / local exec (`hermes profile …`) and config files | Unsupported fallback | Profile create/clone where B is missing; explicitly flagged in the plan |
+| **Hermes plugin `fleetcontrol`** | in-process, `~/.hermes/plugins/fleetcontrol/` | plugin hooks (`pre_tool_call`, `post_tool_call`, `subagent_start`, `subagent_stop`, `on_session_end`, `pre_approval_request`, `post_approval_response`); optional dashboard backend router `/api/plugins/fleetcontrol/*` | real-time evidence with arguments and results for parent and child agents; policy enforcement by blocking a tool call; a versioned read/write contract for managed fields that we own |
+| **Host daemon `fleetctl-agent`** | systemd/launchd/Windows service | outbound mTLS WebSocket to Fleet Control; `hermes` CLI; loopback dashboard API with a session token the daemon sets (`HERMES_DASHBOARD_SESSION_TOKEN`); profile directories | profile create/clone/delete, field writes, config snapshots and restore, drift scans (routes + file hashes of `SOUL.md`/`config.yaml`), test runs via `/v1/runs`, gateway lifecycle, capability report |
+| **API-only mode** (no install) | — | `/v1` for discovery/runs/sessions; optional `hooks.outbound` and Langfuse configured by the operator | read-only import and after-the-fact evidence; **no writes**; assurance verdicts fall back to "Not verifiable" |
 
-Every Plan change row shows its tier ("via Dashboard API"). The capability matrix per instance (shown on the Instances screen) is computed from Tier A discovery plus a reachability probe of Tier B.
+The connect wizard offers both paths: *Install the Fleet Control Agent* (one command, pairing code) and *Connect via API only (read-only)*. The Instances screen shows agent version and last heartbeat.
 
-### 5.2 Spike questions (answer before Slice 1 starts; two days)
+Plan rows show the method as **Agent** or **API (read-only)**. Which local mechanism the agent uses (CLI, loopback dashboard, plugin router) is internal and chosen per Hermes version by the agent's compatibility table.
 
-| # | Question | Pass criterion | Decides |
-|---|---|---|---|
-| S1 | Can a profile be created, updated and deleted through Tier B? | Round-trip create → read → update → delete on a lab instance | Whether Agent Studio is a UI over an API or a CLI wrapper |
-| S2 | Can SOUL, skills and MCP assignment be written per profile through Tier B? | Same, per field | Which blueprint fields are "managed" in v1 |
-| S3 | Are Tier B endpoints authenticated and reachable when the dashboard is bound to a non-loopback address? | Bearer token flow works | Connect wizard design |
-| S4 | Do run events (`/v1/runs/{id}/events`) include tool-call start/end with tool name and arguments for the parent run and for child/delegated runs? | Tool calls visible with names; child correlation ids present | Whether tool-evidence assertions work without Langfuse |
-| S5 | With the bundled Langfuse plugin enabled, can Fleet Control read the trace for a run id and enumerate tool calls and artifacts? | Trace fetched by run id via Langfuse API | Assurance data path |
-| S6 | Can a messaging gateway (Teams or Slack) be configured per instance via Tier B and a message sent programmatically with a deep link? | Message arrives with link | Messaging admin scope |
-| S7 | Is there a stable way to list profiles and their live config for drift comparison? | Full read of managed fields | Drift detection |
-| S8 | What happens across a Hermes minor upgrade to B-tier endpoints? | Diff endpoints between two recent versions | Size of the upstream-tracking budget |
+Evidence sources, in order of preference: agent hook (real time, full) → session transcript (after the fact, full) → Langfuse trace (after the fact, capture-mode dependent) → outbound webhook (real time, inputs only) → none ("Not verifiable").
 
-Outcome of the spike is a one-page addendum to this document, and the capability matrix in code.
+Messaging delivery rules are implemented as `deliver_only` inbound webhook routes on the instance, created by the agent; Fleet Control posts HMAC-signed payloads to them. Email delivery is plain text in v1.
 
 ### 5.3 Upstream tracking
 
-Budget roughly half an engineer permanently for Hermes compatibility: watching releases, re-running the spike checks in CI against the newest Hermes, and updating the adapter. Open an upstream conversation with Nous Research about a stable profile-management API; Fleet Control's viability improves materially if it exists.
+Budget roughly half an engineer permanently for Hermes compatibility. Pin the plugin to Hermes version ranges; run `scripts/hermes_compat_check.py` nightly against the newest release (route table, hook names, plugin loader, dashboard routes the agent uses). Send small fixes upstream (first candidate: the `GET /v1/skills` `TypeError`), and open a conversation with Nous Research about a stable profile-management API.
 
 ---
 
 ## 6. Assurance pipeline
 
-1. **Observe**: subscribe to run events for managed profiles (Tier A); optionally fetch the Langfuse trace (S5).
+1. **Observe**: receive hook events from the Fleet Control Agent for managed profiles; for API-only instances, poll run status and read session transcripts after completion; optionally fetch the Langfuse trace.
 2. **Extract claims**: rule-based first (regex/structured output contracts); an LLM extractor only for free-text outputs, and only in v2.
 3. **Check** against rules attached to agents and workflows: required tool called; forbidden tool not called; expected artifact exists (checked in the artifact store the workflow declares); output matches contract; policy constraints (approval present before external action; redacted-input-only for cloud models).
 4. **Verdict**: Evidence found / No evidence / Not verifiable (inputs missing, e.g. no trace on that instance) / Policy blocked.
@@ -243,19 +246,19 @@ What this is not: it does not prove correctness of content, and the product copy
 
 Each slice is shippable and demoable on its own. Sizes assume a team of three to four (one product/design, two to three engineers).
 
-### Slice 0 — Spike (2 days)
-Section 5.2. Output: addendum + capability matrix.
+### Slice 0 — Spike (done; see addendum)
+Remaining: capture real request/response pairs for the six dashboard routes the agent uses, on a host with Hermes installed (half a day).
 
-### Slice 1 — The thin vertical slice (6–8 weeks)
-Sign in (email/password; SSO stub) · Connect an instance with capability discovery and the honest "what Fleet Control can do here" panel · Import live profiles into a Blueprint v1 (YAML, Git-friendly) · Fleet Designer as a read-mostly topology with inspector · Agent Studio for managed fields (identity, SOUL, model, skills, MCPs) · Plan (diff) with tiers and pre-flight · Apply to lab/staging with snapshot and rollback · Drift detection and the four resolutions · Blueprints library and version history · Audit log · Roles (five) and basic RBAC.
+### Slice 1 — The thin vertical slice (8–10 weeks)
+**Fleet Control Agent v0**: Hermes plugin with hook capture and `pre_tool_call` policy block; host daemon with outbound connection, pairing, capability report, profile read/write through CLI and loopback dashboard, snapshot/restore, drift scan; one-line installer for Linux and macOS. Then: Sign in (email/password; SSO stub) · Connect an instance (agent or API-only) with capability discovery and the honest "what Fleet Control can do here" panel · Import live profiles into a Blueprint v1 (YAML, Git-friendly) · Fleet Designer as a read-mostly topology with inspector · Agent Studio for managed fields (identity, SOUL, model, skills, MCPs) · Plan (diff) with method and pre-flight · Apply to lab/staging with snapshot and rollback · Drift detection and the four resolutions · Blueprints library and version history · Audit log · Roles (five) and basic RBAC.
 
 Exit criterion: a stranger can connect a Hermes instance, change an agent, see the plan, apply it, break it by hand and watch drift appear, then revert. Nothing else counts as done.
 
 ### Slice 2 — Fleet Architect (3–4 weeks)
-Mission intake and constraints · structured proposal contract (schema v1, versioned independently of Hermes) submitted to a designated architect profile via Tier A runs · proposal rendered as agents/tests/policies with accept/edit/remove · save as blueprint draft · open questions loop.
+Mission intake and constraints · structured proposal contract (schema v1, versioned independently of Hermes) submitted to a designated architect profile via `/v1/runs` · proposal rendered as agents/tests/policies with accept/edit/remove · save as blueprint draft · open questions loop.
 
 ### Slice 3 — Test Lab and Assurance (5–6 weeks)
-Test cases and suites attached to agents and workflows · runs against lab/staging via Tier A · gating: plan pre-flight requires the suite · assurance rules, verdicts and the evidence rail · Langfuse/OTel settings and per-instance enablement · Integrations screen with per-tool allow-lists for MCPs.
+Test cases and suites attached to agents and workflows · runs against lab/staging via `/v1/runs` through the agent · gating: plan pre-flight requires the suite · assurance rules, verdicts and the evidence rail · Langfuse/OTel settings and per-instance enablement · Integrations screen with per-tool allow-lists for MCPs.
 
 ### Slice 4 — Workspace and Messaging (5–6 weeks)
 Workspace shell and home · Decision Rooms (evidence, findings with verdicts, options, rationale, second approver) · Ask the fleet (orchestrator chat bounded by the person's content access, sources shown) · Fleet outputs · Content (zones, upload, classification, read access for people and agents) · Messaging admin (channels, delivery rules, test message) · effective-permission inspector.
@@ -271,7 +274,7 @@ Total to a complete v1: roughly six months with a small team, assuming the spike
 
 Chosen for proximity to Hermes (Python) and for a small team that must move fast without a platform build-out.
 
-- **Backend**: Python 3.12, FastAPI, SQLAlchemy, Pydantic models for the blueprint schema (also used to generate JSON Schema for validation and export). The Hermes adapter is a Python package with the three tiers behind one interface; the CLI tier shells out or runs over SSH (asyncssh).
+- **Backend**: Python 3.12, FastAPI, SQLAlchemy, Pydantic models for the blueprint schema (also used to generate JSON Schema for validation and export). The Fleet Control Agent is a separate Python package (plugin + daemon) installed on Hermes hosts; it shares the blueprint schema package with the API.
 - **Workers**: a lightweight task queue (arq or Celery with Redis) for drift polling, test runs, assurance checks and message delivery.
 - **Database**: PostgreSQL. Blueprints stored as YAML text plus a parsed JSONB column; versions immutable. Audit as an append-only table.
 - **Frontend**: React with TypeScript, Vite, Tailwind configured from the client's DESIGN.md tokens, a small in-house component set matching the redesign shell (no heavy UI framework). Topology in Fleet Designer rendered with React Flow in read-mostly mode.
@@ -280,7 +283,7 @@ Chosen for proximity to Hermes (Python) and for a small team that must move fast
 - **Packaging**: single Docker Compose stack (api, worker, postgres, redis, web) for v1; Helm chart only when a customer needs it.
 - **Repo**: monorepo (`apps/api`, `apps/web`, `packages/blueprint-schema`, `packages/hermes-adapter`), with a CI job that runs the spike checks against the latest Hermes release nightly.
 
-If the team is stronger in TypeScript than Python, the same architecture works with Node (Fastify) and a thin Python sidecar for the CLI tier; the adapter interface is the part to keep language-agnostic.
+If the team is stronger in TypeScript than Python, the same architecture works with Node (Fastify) for the API and web; the Hermes plugin must stay Python because it runs inside Hermes, and the daemon is simplest in Python next to it.
 
 ---
 
@@ -288,7 +291,8 @@ If the team is stronger in TypeScript than Python, the same architecture works w
 
 | Risk | Mitigation |
 |---|---|
-| No stable write API in Hermes | Tier B/C with explicit labelling; upstream conversation; keep managed-field set small |
+| No stable write API in Hermes | Fleet Control Agent does writes locally through CLI/loopback dashboard/plugin router; upstream conversation; keep managed-field set small |
+| Plugin breaks on a Hermes release | Version-pinned plugin, nightly compat check, fail-open capture with loud status in the Instances screen |
 | Hermes ships desired-state/drift natively | Structural position: multi-instance, governance, evidence and Workspace are what a runtime vendor is least likely to build; keep the adapter thin so feature overlap is cheap to absorb |
 | Assurance data incomplete on some instances | "Not verifiable" verdict is first-class; per-instance Langfuse enablement from Settings |
 | Upstream velocity | Nightly compatibility CI; half-engineer budget; capability matrix per instance |
@@ -310,4 +314,4 @@ Six to eight conversations with people who run more than a handful of agents in 
 1. Run the spike (section 5.2) on a lab Hermes instance; write the addendum.
 2. Confirm the stack (section 10) or the TypeScript variant.
 3. Set up the monorepo, CI with the nightly Hermes compatibility job, and the design tokens package from DESIGN.md.
-4. Start Slice 1 with the Instances screen and the adapter's Tier A discovery; the first demo is "connect and see what this instance can do".
+4. Start Slice 1 with the Fleet Control Agent v0 and the Instances screen; the first demo is "install the agent, connect, and see what this instance can do".

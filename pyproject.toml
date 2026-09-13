@@ -1,0 +1,10 @@
+# Workspace root. Install everything for development with:
+#   uv sync   (or)   pip install -e packages/blueprint_schema -e packages/hermes_plugin -e apps/agent -e apps/api[dev]
+[tool.uv.workspace]
+members = ["packages/blueprint_schema", "packages/hermes_plugin", "apps/agent", "apps/api"]
+
+[tool.uv.sources]
+fleetcontrol-blueprint = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["packages/blueprint_schema/tests", "packages/hermes_plugin/tests", "apps/agent/tests", "apps/api/tests"]

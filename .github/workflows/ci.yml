@@ -1,0 +1,51 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request:
+  schedule:
+    - cron: "17 3 * * *"   # nightly Hermes compatibility check
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pydantic pyyaml
+      - run: sh scripts/test.sh
+  api-import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e packages/blueprint_schema -e apps/api[dev]
+      - run: python -c "from fleetcontrol_api.main import app; print(len(app.routes), 'routes')"
+      - run: |
+          python - <<'PY'
+          from fastapi.testclient import TestClient
+          from fleetcontrol_api.main import app
+          c = TestClient(app)
+          r = c.post("/api/v1/instances", json={"id": "lab-01", "environment": "lab", "mode": "agent"}); assert r.status_code == 201, r.text
+          pair = r.json()["pairing_token"]
+          r = c.post("/agent/v1/pair", json={"instance_id": "lab-01", "agent_version": "0.1.0", "report": {"hermes_version": "0.21.2", "surfaces": {"api": "ok"}, "capabilities": ["runs","profiles.write","hooks"]}}, headers={"Authorization": f"Bearer {pair}"}); assert r.status_code == 200, r.text
+          tok = r.json()["agent_token"]
+          r = c.post("/api/v1/blueprints", json={"yaml": open("packages/blueprint_schema/examples/aml-investigation.yaml").read()}); assert r.status_code == 201, r.text
+          r = c.post("/api/v1/instances/lab-01/import"); job = r.json()["job_id"]
+          r = c.get("/agent/v1/instances/lab-01/jobs/next", headers={"Authorization": f"Bearer {tok}"}); assert r.json()["kind"] == "import_profiles"
+          r = c.post(f"/agent/v1/jobs/{job}/result", json={"ok": True, "profiles": {}}, headers={"Authorization": f"Bearer {tok}"}); assert r.status_code == 200
+          r = c.post("/api/v1/plans", json={"blueprint": "aml-investigation", "version": 3, "instance_id": "lab-01"}); assert r.status_code == 201, r.text
+          plan = r.json(); assert len([x for x in plan["changes"] if x["kind"] == "create"]) == 5
+          r = c.post(f"/api/v1/plans/{plan['id']}/apply"); assert r.status_code == 200, r.text
+          print("end-to-end plan/apply OK:", r.json())
+          PY
+  hermes-compat:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with: { repository: NousResearch/hermes-agent, path: hermes-agent, fetch-depth: 1 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: python scripts/hermes_compat_check.py hermes-agent

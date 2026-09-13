@@ -1,0 +1,14 @@
+name: fleetcontrol
+version: "0.1.0"
+description: "Fleet Control agent plugin — streams tool/subagent lifecycle evidence to the local fleetctl-agent daemon and enforces blueprint policies via pre_tool_call. Install by copying this directory to ~/.hermes/plugins/fleetcontrol/ (the fleetctl-agent installer does this)."
+author: Fleet Control
+requires_env: []
+hooks:
+  - pre_tool_call
+  - post_tool_call
+  - subagent_start
+  - subagent_stop
+  - on_session_start
+  - on_session_end
+  - pre_approval_request
+  - post_approval_response

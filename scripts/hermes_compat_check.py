@@ -90,11 +90,49 @@ def _routes(root):
     return (not missing, f"missing: {missing}" if missing else "ok")
 
 
-@check("dashboard session header still X-Hermes-Session")
+def _daemon_header():
+    """The session header fleetctl-agent sends, read from its source so the two cannot diverge."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "apps", "agent", "fleetctl_agent", "hermes_local.py"), encoding="utf-8") as f:
+        m = re.search(r'DASHBOARD_SESSION_HEADER\s*=\s*"([^"]+)"', f.read())
+    return m.group(1) if m else "X-Hermes-Session-Token"
+
+
+@check("dashboard session header matches the one fleetctl-agent sends")
 def _hdr(root):
     src = read(root, "hermes_cli/web_server.py")
-    ok = "X-Hermes-Session" in src
-    return (ok, "ok" if ok else "session header renamed")
+    want = _daemon_header()
+    m = re.search(r'_SESSION_HEADER_NAME\s*=\s*"([^"]+)"', src)
+    if m:
+        ok = m.group(1) == want
+        return (ok, "ok" if ok else f"dashboard expects {m.group(1)}, fleetctl-agent sends {want}")
+    # No constant: require the exact quoted header, not a prefix of it.
+    ok = f'"{want}"' in src
+    return (ok, "ok" if ok else f"{want} not found in web_server.py")
+
+
+# --- request bodies the daemon sends (hermes_cli/web_models.py) ---------------------------
+REQUEST_BODIES = {
+    "ProfileCreate": ["name", "clone_from", "description", "provider", "model"],
+    "ProfileSoulUpdate": ["content"],
+    "ProfileDescriptionUpdate": ["description"],
+    "ProfileModelUpdate": ["provider", "model"],
+    "SkillToggle": ["name", "enabled", "profile"],
+    "ToolsetToggle": ["enabled", "profile"],
+}
+
+
+@check("dashboard request bodies still accept the fields fleetctl-agent sends")
+def _bodies(root):
+    src = read(root, "hermes_cli/web_models.py")
+    missing = []
+    for cls, fields in REQUEST_BODIES.items():
+        m = re.search(rf"^class {cls}\([^\n]*\n((?:[ \t]+[^\n]*\n|[ \t]*\n)*)", src, re.M)
+        if not m:
+            missing.append(f"{cls} (class gone)")
+            continue
+        missing += [f"{cls}.{f}" for f in fields if not re.search(rf"^[ \t]+{re.escape(f)}[ \t]*:", m.group(1), re.M)]
+    return (not missing, f"missing: {missing}" if missing else "ok")
 
 
 @check("/v1 API server routes used still exist")

@@ -22,7 +22,7 @@ scripts/    test.sh · hermes_compat_check.py (nightly against upstream) · inst
 1. **Blueprint** (`packages/blueprint_schema`) is the desired state. `Blueprint.managed_fields()` is the exact set the agent reconciles: description, model, SOUL hash, skills, toolsets, MCPs per profile.
 2. **Fleet Control Agent** = plugin + daemon on the Hermes host.
    - The plugin registers `pre_tool_call` / `post_tool_call` / `subagent_*` / session hooks, streams events (args and results, redacted) to the daemon over a local socket, and enforces the per-profile `policy.json` the daemon writes (block / approve).
-   - The daemon pairs once with Fleet Control, then long-polls for jobs and executes them against Hermes through the `hermes` CLI and the loopback dashboard API (`X-Hermes-Session` token it sets itself). Nothing inbound is exposed.
+   - The daemon pairs once with Fleet Control, then long-polls for jobs and executes them against Hermes through the `hermes` CLI and the loopback dashboard API (`X-Hermes-Session-Token` header, with a token it sets itself). Nothing inbound is exposed.
 3. **API** computes a plan from blueprint vs the instance's imported live state (`planner.compute_plan`), gates it on approvals, and turns it into two agent jobs: `push_policy` then `apply` (with a snapshot first, stop on first failure).
 
 ## Run the tests
@@ -42,6 +42,6 @@ Then: `POST /api/v1/instances` → copy `install_command` → run `scripts/insta
 
 ## Status
 
-Scaffold. Schema, planner, plugin and daemon job logic are unit-tested; the API is smoke-tested in CI. Not yet done: real-host capture of the six dashboard request/response bodies (spike addendum §4), PostgreSQL store, OIDC, the web client, and everything in Slices 2–5 of the build document.
+Scaffold. Schema, planner, plugin and daemon job logic are unit-tested; the API is smoke-tested in CI. The dashboard routes the daemon uses are verified against a real Hermes 0.21.2 host (`docs/dashboard-capture-0.21.2*.json`). Not yet done: PostgreSQL store, OIDC, the web client, and everything in Slices 2–5 of the build document.
 
 Design canvas: the "Fleet Control Redesign" artifact on claude.ai. Regenerate a screen with `cd design && python3 build.py <Name> <nav>`.

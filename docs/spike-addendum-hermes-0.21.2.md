@@ -28,7 +28,7 @@ SOUL `PUT /api/profiles/{name}/soul` (atomic write) · model `PUT /api/profiles/
 
 ### S3 — Auth, binding, stability
 **Verdict: the stable surface refuses writes; the write surface has no machine auth when exposed.**
-- Loopback dashboard: one ephemeral token per process (`HERMES_DASHBOARD_SESSION_TOKEN` or random), sent as `X-Hermes-Session` (`web_server.py:308-406`).
+- Loopback dashboard: one ephemeral token per process (`HERMES_DASHBOARD_SESSION_TOKEN` or random), sent as `X-Hermes-Session-Token` (`web_server.py:308-406`; confirmed on a real host, `docs/dashboard-capture-0.21.2.json` — plain `X-Hermes-Session` gets 401).
 - Any non-loopback bind forces the auth gate; `--insecure` is a documented no-op since the June 2026 "hermes-0day" incident ("There is no unauthenticated public-dashboard option", `web_server.py:461-482`). Gated mode accepts OIDC/OAuth session cookies or interactive bearer tokens; the machine-token seam (`dashboard_auth/token_auth.py`) only covers explicitly registered paths, and in-tree that is just `/api/gateway/drain`.
 - `COMPAT_MANIFEST.md` governs Python import paths only, states "internal import paths are not a stable API", and self-destructs on **2026-09-14**. It says nothing about HTTP.
 - `/v1/capabilities` is the only surface documented as stable "for external UIs, orchestrators and control planes" (`api-server.md:241-260`) and it advertises `admin_config_rw: false`, `jobs_admin: false`, `memory_write_api: false` (`api_server.py:72`).

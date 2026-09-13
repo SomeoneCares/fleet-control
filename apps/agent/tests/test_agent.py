@@ -1,8 +1,12 @@
 """Unit tests for the daemon pieces that don't need a Hermes host."""
-import json, os, socket, tempfile, threading, time, unittest, queue
+import hashlib, json, os, socket, tempfile, threading, time, unittest, queue
 
-from fleetctl_agent.hermes_local import diff_managed, ROUTES, API_ROUTES
+from fleetctl_agent.hermes_local import (
+    API_ROUTES, DASHBOARD_SESSION_HEADER, ROUTES, HermesLocal, HermesLocalConfig, HermesLocalError, diff_managed,
+)
 from fleetctl_agent.daemon import Jobs, AgentConfig, PluginSocketServer
+
+CAPTURE = os.path.join(os.path.dirname(__file__), "..", "..", "..", "docs", "dashboard-capture-0.21.2-write.json")
 
 
 class FakeHermes:
@@ -91,6 +95,82 @@ class RouteTableTest(unittest.TestCase):
             for k, (m, p) in table.items():
                 self.assertIn(m, ("GET", "POST", "PUT", "DELETE"), k)
                 self.assertTrue(p.startswith("/"), k)
+
+
+class CapturedDashboard(HermesLocal):
+    """HermesLocal whose HTTP layer replays responses recorded on a real Hermes 0.21.2 host."""
+
+    def __init__(self, overrides=None):
+        super().__init__(HermesLocalConfig(dashboard_token="tok", api_key=None, hermes_home=tempfile.mkdtemp()))
+        with open(CAPTURE, encoding="utf-8") as f:
+            calls = json.load(f)["calls"]
+        self.responses = {}
+        for c in calls:  # first response wins: the state before the write probe changed anything
+            self.responses.setdefault((c["method"], c["path"]), c["response"])
+        self.responses.update(overrides or {})
+        self.sent = []
+
+    def _request(self, base, method, path, body=None, headers=None):
+        self.sent.append({"method": method, "path": path, "body": body, "headers": headers or {}})
+        if (method, path) not in self.responses:
+            raise HermesLocalError(f"{method} {path} -> 404: not in capture")
+        return self.responses[(method, path)]
+
+
+ONLY_DEFAULT = {("GET", "/api/profiles"): {"profiles": [
+    {"name": "default", "model": "upstage/solar-pro4:free", "provider": "nous", "description": ""}]}}
+
+
+class CapturedDashboardTest(unittest.TestCase):
+    def test_session_header_is_the_one_hermes_accepts(self):
+        h = CapturedDashboard()
+        h.profiles()
+        self.assertEqual(DASHBOARD_SESSION_HEADER, "X-Hermes-Session-Token")
+        self.assertEqual(h.sent[0]["headers"], {"X-Hermes-Session-Token": "tok"})
+
+    def test_profiles_list_is_unwrapped(self):
+        names = [p["name"] for p in CapturedDashboard().profiles()]
+        self.assertEqual(names[0], "default")
+        self.assertIn("compliance", names)
+
+    def test_live_state_of_default_profile(self):
+        h = CapturedDashboard()
+        st = h.live_profile_state("default")
+        self.assertEqual(set(st), {"description", "model", "soul_sha256", "skills", "toolsets", "mcps"})
+        self.assertEqual(st["model"], {"provider": "nous", "name": "upstage/solar-pro4:free"})
+        self.assertEqual(st["mcps"], [])  # {"servers": []} must not read as ["servers"]
+        self.assertIn("claude-code", st["skills"])
+        self.assertEqual(st["skills"], sorted(st["skills"]))
+        self.assertIn("web", st["toolsets"])
+        soul = h.responses[("GET", "/api/profiles/default/soul")]["content"]
+        self.assertEqual(st["soul_sha256"], "sha256:" + hashlib.sha256((soul.rstrip() + "\n").encode()).hexdigest())
+
+    def test_missing_profile_raises(self):
+        with self.assertRaises(HermesLocalError):
+            CapturedDashboard().live_profile_state("no-such-profile")
+
+    def test_mcp_servers_parsing(self):
+        h = CapturedDashboard({("GET", "/api/mcp/servers?profile=default"): {"servers": [
+            {"name": "opensanctions", "enabled": True}, {"name": "case-store", "enabled": True},
+            {"name": "retired", "enabled": False}]}})
+        self.assertEqual(h.mcp_servers("default"), ["case-store", "opensanctions"])
+
+    def test_create_reports_rejected_model(self):
+        # Recorded: POST /api/profiles answers 200 with model_set=false when the provider has no credentials.
+        h = CapturedDashboard()
+        with self.assertRaises(HermesLocalError) as cm:
+            h.ensure_profile("fleetcontrol-probe", "Fleet Control probe (safe to delete)", "openai", "gpt-4o-mini")
+        self.assertIn("model not set", str(cm.exception))
+        post = [s for s in h.sent if s["method"] == "POST"][0]
+        self.assertEqual(post["body"], {"name": "fleetcontrol-probe", "description": "Fleet Control probe (safe to delete)",
+                                        "provider": "openai", "model": "gpt-4o-mini"})
+
+    def test_import_profiles_job(self):
+        jobs = Jobs(AgentConfig(state_dir=tempfile.mkdtemp()), CapturedDashboard(ONLY_DEFAULT))
+        out = jobs.dispatch({"kind": "import_profiles"})
+        self.assertTrue(out["ok"], out)
+        self.assertEqual(list(out["profiles"]), ["default"])
+        self.assertTrue(out["profiles"]["default"]["soul_text"].startswith("You are Hermes Agent"))
 
 
 if __name__ == "__main__":

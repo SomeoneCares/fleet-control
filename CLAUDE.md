@@ -23,12 +23,13 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
 - `scripts/test.sh` runs all suites with the stdlib runner; `scripts/hermes_compat_check.py <hermes-agent checkout>` must stay green.
 - `design/` — 23 screen sources; `python3 build.py <Name> <nav>` regenerates an artboard. Tokens in `design/DESIGN.md`.
 
-## Current state (2026-09-13)
+## Current state (2026-09-14)
 - CI green on GitHub (tests + API end-to-end smoke). Nightly Hermes compat job configured.
-- OPEN: real-host capture of the dashboard routes the daemon uses. Run `scripts/run_capture.sh` on the Hermes host
-  (over SSH: `scp scripts/run_capture.sh hermes@<host>:~/ && ssh hermes@<host> bash run_capture.sh`), then reconcile
-  `apps/agent/fleetctl_agent/hermes_local.py` (ROUTES, request bodies, `live_profile_state` parsing) against the two JSON files.
-  Save them as `docs/dashboard-capture-<hermes-version>.json`.
+- DONE: real-host capture on Hermes 0.21.2 → `docs/dashboard-capture-0.21.2*.json`, and `hermes_local.py` reconciled
+  against it (session header is `X-Hermes-Session-Token`; `/api/profiles` and `/api/mcp/servers` return wrapped lists;
+  profile create answers 200 with `model_set: false` when Hermes rejects the model). Re-capture on each new Hermes minor:
+  `scp scripts/run_capture.sh hermes@<host>:~/ && ssh hermes@<host> bash run_capture.sh` (it starts its own temporary
+  loopback dashboard and leaves an existing one alone); save as `docs/dashboard-capture-<version>*.json`.
 - NEXT: `apps/web` Slice 1 screens — Instances (+Connect drawer, empty state), Blueprints, ApplyPlan, Drift — against the existing API.
 - THEN: PostgreSQL store, sign-in (local then OIDC), Docker Compose packaging, Slice 1 exit test on a lab instance.
 

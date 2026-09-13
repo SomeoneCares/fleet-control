@@ -6,16 +6,17 @@ Talks to the Hermes instance on the same host through the two surfaces that exis
 * the ``hermes`` CLI for profile lifecycle;
 * the web dashboard backend on **loopback** for per-profile reads and writes, authenticated
   with the session token the daemon sets itself via ``HERMES_DASHBOARD_SESSION_TOKEN``
-  (header ``X-Hermes-Session``; legacy ``Authorization: Bearer`` also accepted);
+  (header ``X-Hermes-Session-Token``; ``Authorization: Bearer`` also accepted);
 * the ``/v1`` API server for discovery, runs and sessions (``API_SERVER_KEY`` bearer).
 
 Route names are pinned in ``ROUTES`` so a Hermes release that moves one fails loudly in
-the compatibility check instead of silently in production. All numbers refer to
-hermes-agent 0.21.2.
+the compatibility check instead of silently in production. Request bodies and response
+shapes were captured on a real hermes-agent 0.21.2 host: ``docs/dashboard-capture-0.21.2*.json``.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -25,28 +26,36 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-# Dashboard backend routes (hermes_cli/web_routers/*). Verified by reading the source; the
-# request/response bodies still need capturing on a real host (addendum §4).
+# The header the dashboard checks (``_SESSION_HEADER_NAME`` in hermes_cli/web_server.py).
+# A bare ``X-Hermes-Session`` is refused with 401 on 0.21.2 (see the capture's auth probe).
+DASHBOARD_SESSION_HEADER = "X-Hermes-Session-Token"
+
+# Dashboard backend routes (hermes_cli/web_routers/*). Request bodies are the web_models.py
+# classes named below; response shapes are as captured on 0.21.2.
 ROUTES = {
-    "status": ("GET", "/api/status"),  # unauthenticated: version, release_date, config_version
-    "profiles.list": ("GET", "/api/profiles"),
-    "profiles.create": ("POST", "/api/profiles"),  # ProfileCreate{name, clone_from, provider, model, mcp_servers, keep_skills}
-    "profiles.delete": ("DELETE", "/api/profiles/{name}"),
-    "profiles.soul.get": ("GET", "/api/profiles/{name}/soul"),
-    "profiles.soul.put": ("PUT", "/api/profiles/{name}/soul"),  # {content}
-    "profiles.model.put": ("PUT", "/api/profiles/{name}/model"),
-    "profiles.description.put": ("PUT", "/api/profiles/{name}/description"),  # {description}
+    "status": ("GET", "/api/status"),  # unauthenticated: version, config_version, auth_required, profiles
+    "profiles.list": ("GET", "/api/profiles"),  # {"profiles": [{name, model, provider, description, ...}]}
+    # ProfileCreate{name, description, provider, model, clone_from} -> {ok, path, model_set, model_error, ...}.
+    # clone_channels defaults to false, so bot credentials are never copied into a new profile.
+    "profiles.create": ("POST", "/api/profiles"),
+    "profiles.delete": ("DELETE", "/api/profiles/{name}"),  # -> {ok, path}
+    "profiles.soul.get": ("GET", "/api/profiles/{name}/soul"),  # -> {content, exists}
+    "profiles.soul.put": ("PUT", "/api/profiles/{name}/soul"),  # ProfileSoulUpdate{content} -> {ok}
+    "profiles.model.put": ("PUT", "/api/profiles/{name}/model"),  # ProfileModelUpdate{provider, model}
+    "profiles.description.put": ("PUT", "/api/profiles/{name}/description"),  # ProfileDescriptionUpdate{description}
     "config.raw.get": ("GET", "/api/config/raw?profile={name}"),
-    "skills.list": ("GET", "/api/skills?profile={name}"),
-    "skills.toggle": ("PUT", "/api/skills/toggle?profile={name}"),  # {name, enabled, profile}
-    "toolsets.list": ("GET", "/api/tools/toolsets?profile={name}"),
-    "toolsets.toggle": ("PUT", "/api/tools/toolsets/{toolset}?profile={name}"),  # {enabled, profile}
-    "mcp.list": ("GET", "/api/mcp/servers?profile={name}"),
-    "mcp.create": ("POST", "/api/mcp/servers?profile={name}"),
+    "skills.list": ("GET", "/api/skills?profile={name}"),  # [{name, enabled, category, provenance, usage}]
+    "skills.toggle": ("PUT", "/api/skills/toggle?profile={name}"),  # SkillToggle{name, enabled, profile}
+    "toolsets.list": ("GET", "/api/tools/toolsets?profile={name}"),  # [{name, platform, enabled, available, tools}]
+    "toolsets.toggle": ("PUT", "/api/tools/toolsets/{toolset}?profile={name}"),  # ToolsetToggle{enabled, profile}
+    "mcp.list": ("GET", "/api/mcp/servers?profile={name}"),  # {"servers": [{name, transport, enabled, ...}]}
+    "mcp.create": ("POST", "/api/mcp/servers?profile={name}"),  # MCPServerCreate{name, url|command, args, env, auth}
     "mcp.delete": ("DELETE", "/api/mcp/servers/{server}?profile={name}"),
     "messaging.platforms": ("GET", "/api/messaging/platforms?profile={name}"),
-    "messaging.platform.put": ("PUT", "/api/messaging/platforms/{platform}?profile={name}"),
-    "webhooks.create": ("POST", "/api/webhooks?profile={name}"),  # deliver_only routes for delivery rules
+    "messaging.platform.put": ("PUT", "/api/messaging/platforms/{platform}?profile={name}"),  # not captured yet
+    # Webhook routes are not profile-scoped: they act on the dashboard process's own home.
+    "webhooks.list": ("GET", "/api/webhooks"),  # {enabled, base_url, subscriptions}
+    "webhooks.create": ("POST", "/api/webhooks"),  # WebhookCreate{name, events, deliver, deliver_only, ...}
     "cron.list": ("GET", "/api/cron/jobs?profile=all"),
 }
 
@@ -103,9 +112,7 @@ class HermesLocal:
 
     def dashboard(self, route: str, body: Optional[dict] = None, **params: str) -> Any:
         method, path = ROUTES[route]
-        headers = {}
-        if self.cfg.dashboard_token:
-            headers["X-Hermes-Session"] = self.cfg.dashboard_token
+        headers = {DASHBOARD_SESSION_HEADER: self.cfg.dashboard_token} if self.cfg.dashboard_token else {}
         return self._request(self.cfg.dashboard_url, method, path.format(**params), body, headers)
 
     def api(self, route: str, body: Optional[dict] = None, **params: str) -> Any:
@@ -134,6 +141,9 @@ class HermesLocal:
             report["hermes_version"] = st.get("version")
             report["config_version"] = st.get("config_version")
             report["surfaces"]["dashboard"] = "loopback"
+            report["dashboard_auth_required"] = st.get("auth_required")
+            if st.get("auth_required"):
+                report["notes"].append("dashboard: auth gate is on (non-loopback bind); session-token writes may be refused")
         except HermesLocalError as e:
             report["surfaces"]["dashboard"] = "unreachable"
             report["notes"].append(f"dashboard: {e}")
@@ -171,43 +181,63 @@ class HermesLocal:
 
     # ------------------------------------------------------------------ live state (for import + drift)
 
-    def live_profile_state(self, name: str) -> dict:
-        """Live values of the managed fields for one profile, shaped like Blueprint.managed_fields()."""
-        import hashlib
+    def profiles(self) -> list[dict]:
+        """Profiles on this instance. 0.21.2 wraps them as {"profiles": [...]}; a bare list is accepted too."""
+        data = self.dashboard("profiles.list")
+        if isinstance(data, dict):
+            data = data.get("profiles")
+        return [p for p in (data or []) if isinstance(p, dict)]
 
+    def mcp_servers(self, name: str) -> list[str]:
+        """Names of the enabled MCP servers on a profile. 0.21.2 returns {"servers": [{name, enabled, ...}]}."""
+        data = self.dashboard("mcp.list", name=name)
+        if isinstance(data, dict) and "servers" in data:
+            data = data["servers"]
+        if isinstance(data, dict):  # older shape: {server_name: config}
+            return sorted(data)
+        return sorted(m["name"] for m in (data or []) if isinstance(m, dict) and m.get("name") and m.get("enabled", True))
+
+    def live_profile_state(self, name: str, profiles: Optional[list[dict]] = None) -> dict:
+        """Live values of the managed fields for one profile, shaped like Blueprint.managed_fields().
+
+        Pass ``profiles`` (from :meth:`profiles`) when scanning many profiles to avoid re-listing."""
+        prof = next((p for p in (profiles if profiles is not None else self.profiles()) if p.get("name") == name), None)
+        if prof is None:
+            raise HermesLocalError(f"profile {name!r} not found on this instance")
         soul = self.dashboard("profiles.soul.get", name=name) or {}
         soul_text = (soul.get("content") or "").rstrip() + "\n"
-        prof = next((p for p in (self.dashboard("profiles.list") or []) if p.get("name") == name), {})
         skills = [s["name"] for s in (self.dashboard("skills.list", name=name) or []) if s.get("enabled")]
-        toolsets = [t["name"] for t in (self.dashboard("toolsets.list", name=name) or []) if t.get("enabled")]
-        mcps = list((self.dashboard("mcp.list", name=name) or {}).keys()) if isinstance(self.dashboard("mcp.list", name=name), dict) else [
-            m.get("name") for m in (self.dashboard("mcp.list", name=name) or [])
-        ]
+        toolsets = {t["name"] for t in (self.dashboard("toolsets.list", name=name) or []) if t.get("enabled")}
         return {
             "description": prof.get("description"),
             "model": {"provider": prof.get("provider"), "name": prof.get("model")},
             "soul_sha256": "sha256:" + hashlib.sha256(soul_text.encode("utf-8")).hexdigest(),
             "skills": sorted(skills),
             "toolsets": sorted(toolsets),
-            "mcps": sorted(m for m in mcps if m),
+            "mcps": self.mcp_servers(name),
         }
 
     # ------------------------------------------------------------------ writes (managed fields only)
 
     def ensure_profile(self, name: str, description: str, provider: str, model: str, clone_from: Optional[str] = None) -> None:
-        existing = {p.get("name") for p in (self.dashboard("profiles.list") or [])}
+        existing = {p.get("name") for p in self.profiles()}
         if name not in existing:
             body = {"name": name, "description": description, "provider": provider, "model": model}
             if clone_from:
                 body["clone_from"] = clone_from
             try:
-                self.dashboard("profiles.create", body)
+                out = self.dashboard("profiles.create", body) or {}
             except HermesLocalError:
                 # dashboard down or route changed: fall back to the CLI, same on-disk result
                 args = ["profile", "create", name]
                 if clone_from:
                     args += ["--clone-from", clone_from]
                 self.cli(*args)
+                return
+            # The profile is created even when Hermes rejects the model (e.g. a provider without
+            # credentials); it answers 200 with model_set=false instead of failing the request.
+            if provider and model and out.get("model_set") is False:
+                raise HermesLocalError(f"profile {name!r} created but model not set: {out.get('model_error') or 'no reason given'}")
         else:
             self.dashboard("profiles.description.put", {"description": description}, name=name)
             self.dashboard("profiles.model.put", {"provider": provider, "model": model}, name=name)

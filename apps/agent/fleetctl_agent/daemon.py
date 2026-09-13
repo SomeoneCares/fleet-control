@@ -170,13 +170,13 @@ class Jobs:
         return {"report": self.hermes.capability_report()}
 
     def import_profiles(self, p: dict) -> dict:
-        profiles = self.hermes.dashboard("profiles.list") or []
+        profiles = self.hermes.profiles()
         out = {}
         for prof in profiles:
             name = prof.get("name")
             if not name:
                 continue
-            state = self.hermes.live_profile_state(name)
+            state = self.hermes.live_profile_state(name, profiles)
             soul = self.hermes.dashboard("profiles.soul.get", name=name) or {}
             state["soul_text"] = soul.get("content", "")
             out[name] = state

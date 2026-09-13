@@ -104,10 +104,15 @@ class Store:
             job["status"] = "running"
         return {"id": job["id"], "kind": job["kind"], "params": job["params"]}
 
-    def complete_job(self, job_id: str, result: dict) -> Optional[dict]:
+    def complete_job(self, job_id: str, result: dict, *, instance_id: str) -> Optional[dict]:
+        """Record a job result reported by the agent of ``instance_id``.
+
+        Ownership is checked before anything is written: a job queued for another instance is
+        left untouched and None is returned, so one agent can never overwrite another
+        instance's live state or flip the status of its plans."""
         with self.lock:
             job = self.jobs.get(job_id)
-            if not job:
+            if not job or job["instance_id"] != instance_id:
                 return None
             job["status"] = "done" if result.get("ok") else "failed"
             job["result"] = result

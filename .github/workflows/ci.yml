@@ -33,6 +33,10 @@ jobs:
           r = c.post("/api/v1/blueprints", json={"yaml": open("packages/blueprint_schema/examples/aml-investigation.yaml").read()}); assert r.status_code == 201, r.text
           r = c.post("/api/v1/instances/lab-01/import"); job = r.json()["job_id"]
           r = c.get("/agent/v1/instances/lab-01/jobs/next", headers={"Authorization": f"Bearer {tok}"}); assert r.json()["kind"] == "import_profiles"
+          # another instance's agent must not be able to complete lab-01's job
+          r = c.post("/api/v1/instances", json={"id": "lab-02", "environment": "lab", "mode": "agent"}); pair2 = r.json()["pairing_token"]
+          tok2 = c.post("/agent/v1/pair", json={"instance_id": "lab-02", "agent_version": "0.1.0", "report": {}}, headers={"Authorization": f"Bearer {pair2}"}).json()["agent_token"]
+          r = c.post(f"/agent/v1/jobs/{job}/result", json={"ok": True, "profiles": {"planted": {}}}, headers={"Authorization": f"Bearer {tok2}"}); assert r.status_code == 404, r.text
           r = c.post(f"/agent/v1/jobs/{job}/result", json={"ok": True, "profiles": {}}, headers={"Authorization": f"Bearer {tok}"}); assert r.status_code == 200
           r = c.post("/api/v1/plans", json={"blueprint": "aml-investigation", "version": 3, "instance_id": "lab-01"}); assert r.status_code == 201, r.text
           plan = r.json(); assert len([x for x in plan["changes"] if x["kind"] == "create"]) == 5

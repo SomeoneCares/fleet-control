@@ -131,7 +131,7 @@ metadata:
   version: 3
   owner: dana.whitfield
 requires:
-  hermes: ">=2.4"
+  hermes: ">=0.21"
   capabilities: [runs, sessions, skills, profiles.write]
 mission: >
   Investigate suspicious wire transfers flagged by the SAS Viya anomaly model;

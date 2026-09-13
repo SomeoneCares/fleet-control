@@ -289,8 +289,8 @@ def next_job(instance_id: str, inst: str = Depends(agent_instance)) -> Optional[
 
 @app.post("/agent/v1/jobs/{job_id}/result")
 def job_result(job_id: str, result: dict[str, Any], inst: str = Depends(agent_instance)) -> dict:
-    job = store.complete_job(job_id, result)
-    if not job or job["instance_id"] != inst:
+    job = store.complete_job(job_id, result, instance_id=inst)
+    if not job:  # unknown, or queued for another instance: same answer, nothing written
         raise HTTPException(404)
     store.record("agent:" + inst, f"job.{job['status']}", job_id, job["kind"])
     return {"ok": True}

@@ -12,7 +12,7 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
 - Writes to Hermes go through the Fleet Control Agent on the host (plugin + daemon), never through an exposed dashboard API.
 - Two experiences, one app: admin portal and business-user Workspace. Decision Rooms live in the Workspace.
 - Messaging delivers; it never records decisions. Assurance verdicts are exactly: Evidence found / No evidence / Not verifiable / Policy blocked.
-- Stack: Python 3.11+, FastAPI, Pydantic v2, PostgreSQL later (in-memory now), React+TS+Vite+Tailwind for `apps/web` (not scaffolded yet).
+- Stack: Python 3.11+, FastAPI, Pydantic v2, PostgreSQL later (in-memory now), React+TS+Vite+Tailwind for `apps/web`.
 - Hermes version strings are 0.21.x. "v2.4" was fiction in early docs; if you see it, fix it.
 
 ## Layout
@@ -30,7 +30,10 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   profile create answers 200 with `model_set: false` when Hermes rejects the model). Re-capture on each new Hermes minor:
   `scp scripts/run_capture.sh hermes@<host>:~/ && ssh hermes@<host> bash run_capture.sh` (it starts its own temporary
   loopback dashboard and leaves an existing one alone); save as `docs/dashboard-capture-<version>*.json`.
-- NEXT: `apps/web` Slice 1 screens — Instances (+Connect drawer, empty state), Blueprints, ApplyPlan, Drift — against the existing API.
+- DONE: `apps/web` Slice 1 screens — Instances (+Connect drawer, empty state), Blueprints, ApplyPlan, Drift — with
+  Tailwind tokens generated from `design/` (`apps/web/scripts/tokens.mjs`). `scripts/dev_seed.py` fills a local API
+  with demo data and simulated agents; see `apps/web/README.md` to run it. Drift resolution API: accept/revert/ignore/exception.
+- NEXT: the remaining Slice 1 screens — Fleet Designer (read-mostly topology), Agent Studio, Audit log, Access (roles).
 - THEN: PostgreSQL store, sign-in (local then OIDC), Docker Compose packaging, Slice 1 exit test on a lab instance.
 
 ## Working agreements

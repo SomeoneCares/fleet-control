@@ -29,6 +29,7 @@ class Store:
         self.audit: list[dict] = []
         self.drift: dict[str, dict] = {}  # instance_id -> latest report {at, blueprint, version, drift, excepted, ...}
         self.drift_exceptions: dict[str, list[dict]] = {}  # instance_id -> [{profile, field, expires_at, by, reason}]
+        self.applied: dict[str, dict] = {}  # instance_id -> {name, version, plan_id, at} of the last successful apply
 
     # ---- audit ---------------------------------------------------------------
     def record(self, actor: str, action: str, target: str, detail: str = "") -> None:
@@ -130,8 +131,15 @@ class Store:
             if job["kind"] == "apply":
                 plan_id = job["meta"].get("plan_id")
                 if plan_id and plan_id in self.plans:
-                    self.plans[plan_id]["status"] = "applied" if result.get("ok") else "failed"
-                    self.plans[plan_id]["apply_result"] = result
+                    plan = self.plans[plan_id]
+                    plan["status"] = "applied" if result.get("ok") else "failed"
+                    plan["apply_result"] = result
+                    if result.get("ok"):
+                        bp = plan["blueprint"]
+                        self.applied[job["instance_id"]] = {"name": bp["name"], "version": bp["version"], "plan_id": plan_id, "at": time.time()}
+                        rec = self.blueprints.get(bp["name"], {}).get(bp["version"])
+                        if rec:
+                            rec["status"] = "applied"  # immutable from here on
             return job
 
     # ---- drift ---------------------------------------------------------------

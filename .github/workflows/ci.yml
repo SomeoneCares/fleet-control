@@ -44,6 +44,17 @@ jobs:
           r = c.post(f"/api/v1/plans/{plan['id']}/apply"); assert r.status_code == 200, r.text
           print("end-to-end plan/apply OK:", r.json())
           PY
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: apps/web }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm, cache-dependency-path: apps/web/package-lock.json }
+      - run: npm ci
+      - run: npm test
+      - run: npm run build   # tokens up to date + typecheck + production build
   hermes-compat:
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

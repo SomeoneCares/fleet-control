@@ -28,6 +28,22 @@ class JobResultOwnershipTest(unittest.TestCase):
         self.assertIsNone(self.s.complete_job(job["id"], {"ok": True}, instance_id="lab-b"))
         self.assertEqual(self.s.plans["plan_1"]["status"], "applying")
 
+    def test_successful_apply_records_applied_version(self):
+        self.s.save_blueprint("aml", 3, "", {}, "me")
+        self.s.plans["plan_2"] = {"status": "applying", "blueprint": {"name": "aml", "version": 3}}
+        job = self.s.enqueue_job("lab-a", "apply", {}, {"plan_id": "plan_2"})
+        self.s.complete_job(job["id"], {"ok": True}, instance_id="lab-a")
+        self.assertEqual(self.s.applied["lab-a"]["version"], 3)
+        self.assertEqual(self.s.blueprints["aml"][3]["status"], "applied")
+
+    def test_failed_apply_records_nothing(self):
+        self.s.save_blueprint("aml", 3, "", {}, "me")
+        self.s.plans["plan_3"] = {"status": "applying", "blueprint": {"name": "aml", "version": 3}}
+        job = self.s.enqueue_job("lab-a", "apply", {}, {"plan_id": "plan_3"})
+        self.s.complete_job(job["id"], {"ok": False, "error": "boom"}, instance_id="lab-a")
+        self.assertNotIn("lab-a", self.s.applied)
+        self.assertEqual(self.s.blueprints["aml"][3]["status"], "draft")
+
     def test_unknown_job(self):
         self.assertIsNone(self.s.complete_job("job_nope", {"ok": True}, instance_id="lab-a"))
 

@@ -1,0 +1,27 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+@layer base {
+  html,
+  body {
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+  }
+  body {
+    margin: 0;
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    -webkit-font-smoothing: antialiased;
+  }
+  a {
+    color: var(--color-primary);
+  }
+  a:hover {
+    color: var(--color-primary-hover);
+  }
+  /* Numbers never jitter while they update (DESIGN.md: tabular figures everywhere). */
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+}

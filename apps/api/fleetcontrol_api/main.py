@@ -71,7 +71,17 @@ def create_instance(body: InstanceCreate, user: str = Depends(current_user)) -> 
 
 @app.get("/api/v1/instances")
 def list_instances(user: str = Depends(current_user)) -> list[dict]:
-    return [{k: v for k, v in i.items() if k != "pairing_token"} for i in store.instances.values()]
+    return [_instance_row(i) for i in store.instances.values()]
+
+
+def _instance_row(inst: dict) -> dict:
+    """An instance as the Instances screen needs it: record + open drift, imported profiles, applied version."""
+    iid = inst["id"]
+    out = {k: v for k, v in inst.items() if k != "pairing_token"}
+    out["open_drift"] = sum(len(d) for d in ((store.drift.get(iid) or {}).get("drift") or {}).values())
+    out["live_profile_count"] = len(store.live_state.get(iid, {}))
+    out["applied"] = store.applied.get(iid)
+    return out
 
 
 @app.get("/api/v1/instances/{instance_id}")
@@ -79,7 +89,7 @@ def get_instance(instance_id: str, user: str = Depends(current_user)) -> dict:
     inst = store.instances.get(instance_id)
     if not inst:
         raise HTTPException(404)
-    out = {k: v for k, v in inst.items() if k != "pairing_token"}
+    out = _instance_row(inst)
     out["live_profiles"] = list(store.live_state.get(instance_id, {}).keys())
     out["drift"] = store.drift.get(instance_id)
     return out
@@ -207,10 +217,28 @@ def upload_blueprint(body: BlueprintUpload, user: str = Depends(current_user)) -
 
 @app.get("/api/v1/blueprints")
 def list_blueprints(user: str = Depends(current_user)) -> list[dict]:
-    return [
-        {"name": n, "versions": sorted(v.keys()), "latest": max(v.keys()), "status": v[max(v.keys())]["status"]}
-        for n, v in store.blueprints.items()
-    ]
+    out = []
+    for name, versions in store.blueprints.items():
+        latest = versions[max(versions)]
+        parsed = latest["parsed"]
+        out.append({
+            "name": name, "versions": sorted(versions), "latest": max(versions), "status": latest["status"],
+            "owner": parsed["metadata"]["owner"], "description": parsed["metadata"].get("description"),
+            "agents": len(parsed["agents"]), "workflows": len(parsed.get("workflows") or []),
+            "tests": len(parsed.get("tests") or []), "updated_at": latest["created_at"], "author": latest["author"],
+            "applied_on": [{"instance": iid, "version": a["version"], "at": a["at"]}
+                           for iid, a in store.applied.items() if a["name"] == name],
+        })
+    return out
+
+
+@app.get("/api/v1/blueprints/{name}")
+def blueprint_versions(name: str, user: str = Depends(current_user)) -> list[dict]:
+    versions = store.blueprints.get(name)
+    if not versions:
+        raise HTTPException(404)
+    return [{"version": v, "status": r["status"], "author": r["author"], "created_at": r["created_at"]}
+            for v, r in sorted(versions.items(), reverse=True)]
 
 
 @app.get("/api/v1/blueprints/{name}/{version}")
@@ -374,4 +402,10 @@ def job_result(job_id: str, result: dict[str, Any], inst: str = Depends(agent_in
     if not job:  # unknown, or queued for another instance: same answer, nothing written
         raise HTTPException(404)
     store.record("agent:" + inst, f"job.{job['status']}", job_id, job["kind"])
+    if job["kind"] == "apply" and job["status"] == "done" and store.applied.get(inst):
+        # drift detection starts right after an apply, against the version just applied
+        applied = store.applied[inst]
+        bp = _blueprint(applied["name"], applied["version"])
+        scan = store.enqueue_job(inst, "drift_scan", {"managed": bp.managed_fields()}, {"blueprint": applied["name"], "version": applied["version"]})
+        store.record("fleetcontrol", "drift.scan_requested", inst, f"{applied['name']} v{applied['version']} after apply ({scan['id']})")
     return {"ok": True}

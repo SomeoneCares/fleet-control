@@ -13,13 +13,16 @@ Run: ``uvicorn fleetcontrol_api.main:app --port 8080``
 
 from __future__ import annotations
 
-from typing import Any, Optional
+import time
+import uuid
+from typing import Any, Literal, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from fleetcontrol_blueprint import Blueprint, dump_blueprint, json_schema, load_blueprint
 
+from .drift import DriftResolutionError, accept_into_blueprint, live_state_from_drift, select_drift
 from .planner import compute_plan, to_agent_job
 from .store import Store
 
@@ -94,7 +97,8 @@ def import_profiles(instance_id: str, user: str = Depends(current_user)) -> dict
 def drift_scan(instance_id: str, blueprint: str, version: int, user: str = Depends(current_user)) -> dict:
     _require_instance(instance_id)
     bp = _blueprint(blueprint, version)
-    job = store.enqueue_job(instance_id, "drift_scan", {"managed": bp.managed_fields()})
+    job = store.enqueue_job(instance_id, "drift_scan", {"managed": bp.managed_fields()}, {"blueprint": blueprint, "version": version})
+    store.record(user, "drift.scan_requested", instance_id, f"{blueprint} v{version}")
     return {"job_id": job["id"]}
 
 
@@ -103,6 +107,79 @@ def _require_instance(instance_id: str) -> dict:
     if not inst:
         raise HTTPException(404, "unknown instance")
     return inst
+
+
+# ----------------------------------------------------------------------------- web: drift
+
+
+@app.get("/api/v1/instances/{instance_id}/drift")
+def get_drift(instance_id: str, user: str = Depends(current_user)) -> dict:
+    _require_instance(instance_id)
+    report = store.drift.get(instance_id)
+    if not report:
+        raise HTTPException(404, "no drift scan for this instance yet")
+    return {**report, "exceptions": store.active_exceptions(instance_id)}
+
+
+class DriftField(BaseModel):
+    profile: str
+    field: str
+
+
+class DriftResolve(BaseModel):
+    action: Literal["accept", "revert", "ignore_once", "exception"]
+    fields: list[DriftField] = Field(default_factory=list, description="Fields to resolve; empty means every open one.")
+    expires_at: Optional[float] = Field(None, description="Unix time the exception ends; required for 'exception'.")
+    reason: Optional[str] = None
+
+
+@app.post("/api/v1/instances/{instance_id}/drift/resolve")
+def resolve_drift(instance_id: str, body: DriftResolve, user: str = Depends(current_user)) -> dict:
+    inst = _require_instance(instance_id)
+    report = store.drift.get(instance_id)
+    if not report or not report.get("drift"):
+        raise HTTPException(409, "no open drift on this instance")
+    try:
+        chosen = select_drift(report["drift"], [f.model_dump() for f in body.fields])
+    except DriftResolutionError as exc:
+        raise HTTPException(422, str(exc))
+    target = f"{instance_id}: " + ", ".join(f"{p}.{d['field']}" for p, diffs in chosen.items() for d in diffs)
+
+    if body.action == "ignore_once":
+        store.move_drift(instance_id, chosen, "ignored")
+        store.record(user, "drift.ignored_once", target)
+        return {"action": body.action, "resolved": chosen}
+
+    if body.action == "exception":
+        if body.expires_at is None or body.expires_at <= time.time():
+            raise HTTPException(422, "an exception needs an expires_at in the future")
+        store.add_exceptions(instance_id, chosen, body.expires_at, user, body.reason)
+        until = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(body.expires_at))
+        store.record(user, "drift.exception_created", target, f"until {until}" + (f"; {body.reason}" if body.reason else ""))
+        return {"action": body.action, "resolved": chosen, "expires_at": body.expires_at}
+
+    # accept and revert work against the blueprint version the scan compared with
+    if not report.get("blueprint"):
+        raise HTTPException(409, "this drift report does not name a blueprint version; run a drift scan again")
+    bp = _blueprint(report["blueprint"], report["version"])
+
+    if body.action == "revert":
+        plan = _save_plan(bp, live_state_from_drift(bp, chosen), inst, user, why=" (revert drift)")
+        store.record(user, "drift.revert_planned", target, plan["id"])
+        return {"action": body.action, "resolved": chosen, "plan": plan}
+
+    new_version = max(store.blueprints[bp.metadata.name]) + 1
+    soul_texts = {p: s["soul_text"] for p, s in store.live_state.get(instance_id, {}).items() if isinstance(s.get("soul_text"), str)}
+    try:
+        new_bp = accept_into_blueprint(bp, chosen, new_version=new_version, soul_texts=soul_texts)
+    except DriftResolutionError as exc:
+        raise HTTPException(409, str(exc))
+    except ValueError as exc:  # the live values do not make a valid blueprint (e.g. no model provider)
+        raise HTTPException(422, f"live values do not form a valid blueprint: {exc}")
+    rec = store.save_blueprint(new_bp.metadata.name, new_version, dump_blueprint(new_bp), new_bp.model_dump(mode="json"), user)
+    store.move_drift(instance_id, chosen, "accepted")
+    store.record(user, "drift.accepted", target, f"{new_bp.metadata.name} v{new_version} (draft)")
+    return {"action": body.action, "resolved": chosen, "blueprint": rec["name"], "version": rec["version"], "status": rec["status"]}
 
 
 # ----------------------------------------------------------------------------- web: blueprints
@@ -167,12 +244,16 @@ def create_plan(body: PlanCreate, user: str = Depends(current_user)) -> dict:
     live = store.live_state.get(body.instance_id)
     if live is None:
         raise HTTPException(409, "no live state for this instance yet; run import first")
-    plan = compute_plan(bp, live, target_instance=body.instance_id, agent_installed=(inst["mode"] == "agent" and inst.get("agent_version") is not None), environment=inst["environment"])
-    plan["id"] = "plan_" + __import__("uuid").uuid4().hex[:10]
+    return _save_plan(bp, live, inst, user)
+
+
+def _save_plan(bp: Blueprint, live: dict, inst: dict, user: str, why: str = "") -> dict:
+    plan = compute_plan(bp, live, target_instance=inst["id"], agent_installed=(inst["mode"] == "agent" and inst.get("agent_version") is not None), environment=inst["environment"])
+    plan["id"] = "plan_" + uuid.uuid4().hex[:10]
     plan["status"] = "planned"
     plan["approvals"] = []
     store.plans[plan["id"]] = plan
-    store.record(user, "plan.created", f"{body.blueprint} v{body.version} → {body.instance_id}", f"{len(plan['changes'])} changes")
+    store.record(user, "plan.created", f"{bp.metadata.name} v{bp.metadata.version} → {inst['id']}", f"{len(plan['changes'])} changes{why}")
     return plan
 
 

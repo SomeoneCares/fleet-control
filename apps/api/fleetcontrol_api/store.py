@@ -27,7 +27,8 @@ class Store:
         self.job_queues: dict[str, "queue.Queue[dict]"] = {}
         self.events: list[dict] = []
         self.audit: list[dict] = []
-        self.drift: dict[str, dict] = {}
+        self.drift: dict[str, dict] = {}  # instance_id -> latest report {at, blueprint, version, drift, excepted, ...}
+        self.drift_exceptions: dict[str, list[dict]] = {}  # instance_id -> [{profile, field, expires_at, by, reason}]
 
     # ---- audit ---------------------------------------------------------------
     def record(self, actor: str, action: str, target: str, detail: str = "") -> None:
@@ -121,13 +122,57 @@ class Store:
             if job["kind"] in ("import_profiles",) and result.get("ok"):
                 self.live_state[job["instance_id"]] = result.get("profiles", {})
             if job["kind"] == "drift_scan" and result.get("ok"):
-                self.drift[job["instance_id"]] = {"at": time.time(), "drift": result.get("drift", {})}
+                drift, excepted = self._apply_exceptions(job["instance_id"], result.get("drift", {}))
+                self.drift[job["instance_id"]] = {
+                    "at": time.time(), "blueprint": job["meta"].get("blueprint"), "version": job["meta"].get("version"),
+                    "drift": drift, "excepted": excepted,
+                }
             if job["kind"] == "apply":
                 plan_id = job["meta"].get("plan_id")
                 if plan_id and plan_id in self.plans:
                     self.plans[plan_id]["status"] = "applied" if result.get("ok") else "failed"
                     self.plans[plan_id]["apply_result"] = result
             return job
+
+    # ---- drift ---------------------------------------------------------------
+    def active_exceptions(self, instance_id: str, now: Optional[float] = None) -> list[dict]:
+        now = time.time() if now is None else now
+        return [e for e in self.drift_exceptions.get(instance_id, []) if e["expires_at"] > now]
+
+    def _apply_exceptions(self, instance_id: str, drift: dict) -> tuple[dict, dict]:
+        """Split a scan's drift into (reported, excepted) using the instance's unexpired exceptions."""
+        active = {(e["profile"], e["field"]) for e in self.active_exceptions(instance_id)}
+        reported: dict[str, list] = {}
+        excepted: dict[str, list] = {}
+        for profile, diffs in drift.items():
+            for d in diffs:
+                (excepted if (profile, d["field"]) in active else reported).setdefault(profile, []).append(d)
+        return reported, excepted
+
+    def move_drift(self, instance_id: str, chosen: dict, bucket: str) -> None:
+        """Take resolved fields out of the open drift report and file them under ``bucket``."""
+        with self.lock:
+            report = self.drift.get(instance_id)
+            if not report:
+                return
+            filed = report.setdefault(bucket, {})
+            for profile, diffs in chosen.items():
+                fields = {d["field"] for d in diffs}
+                left = [d for d in report["drift"].get(profile, []) if d["field"] not in fields]
+                if left:
+                    report["drift"][profile] = left
+                else:
+                    report["drift"].pop(profile, None)
+                filed.setdefault(profile, []).extend(diffs)
+
+    def add_exceptions(self, instance_id: str, chosen: dict, expires_at: float, by: str, reason: Optional[str] = None) -> None:
+        with self.lock:
+            entries = self.drift_exceptions.setdefault(instance_id, [])
+            for profile, diffs in chosen.items():
+                for d in diffs:
+                    entries.append({"profile": profile, "field": d["field"], "expires_at": expires_at, "by": by,
+                                    "reason": reason, "created_at": time.time()})
+            self.move_drift(instance_id, chosen, "excepted")
 
     # ---- blueprints ----------------------------------------------------------
     def save_blueprint(self, name: str, version: int, yaml_text: str, parsed: dict, author: str) -> dict:

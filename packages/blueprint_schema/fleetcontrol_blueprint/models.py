@@ -3,10 +3,10 @@ from __future__ import annotations
 import hashlib
 import re
 from enum import Enum
-from typing import Any, Literal, Optional, Union
+from typing import Annotated, Any, Literal, Optional, Union
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 API_VERSION = "fleetcontrol/v1"
 
@@ -125,7 +125,9 @@ class Soul(_Strict):
     principles: list[str] = Field(default_factory=list)
     boundaries: list[str] = Field(default_factory=list)
     output_contract: Optional[OutputContract] = None
-    raw: Optional[str] = Field(
+    # Verbatim means verbatim: leading whitespace is part of the file and of its hash, so this
+    # field opts out of the model-wide stripping.
+    raw: Optional[Annotated[str, StringConstraints(strip_whitespace=False)]] = Field(
         None,
         description="Escape hatch: verbatim SOUL.md. When set, structured sections are ignored on render.",
     )

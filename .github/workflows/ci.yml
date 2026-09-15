@@ -11,17 +11,27 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install pydantic pyyaml
+      - run: pip install pydantic pyyaml sqlalchemy
       - run: sh scripts/test.sh
   api-import:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: fc, POSTGRES_PASSWORD: fc-ci-only, POSTGRES_DB: fleetcontrol }   # CI-only credentials
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U fc -d fleetcontrol" --health-interval 5s --health-timeout 5s --health-retries 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install -e packages/blueprint_schema -e apps/api[dev]
+      - run: pip install -e packages/blueprint_schema -e "apps/api[dev,postgres]"
       - run: python -c "from fleetcontrol_api.main import app; print(len(app.routes), 'routes')"
-      - run: cd apps/api && python -m unittest discover -s tests -t . -q   # includes the FastAPI drift tests
+      - run: cd apps/api && python -m unittest discover -s tests -t . -q   # includes the FastAPI tests (in-memory SQLite)
+      - name: API tests against PostgreSQL
+        run: cd apps/api && python -m unittest discover -s tests -t . -q
+        env: { FLEETCONTROL_DATABASE_URL: "postgresql+psycopg://fc:fc-ci-only@localhost:5432/fleetcontrol" }
       - run: |
           python - <<'PY'
           import os

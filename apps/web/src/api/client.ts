@@ -116,6 +116,14 @@ export interface ResolveResult {
   expires_at?: number;
 }
 
+export interface LiveImportResult {
+  name: string;
+  version: number;
+  status: string;
+  managed_profiles: string[];
+  skipped: { profile: string; reason: string }[];
+}
+
 export interface BlueprintSummary {
   name: string;
   versions: number[];
@@ -381,6 +389,8 @@ export const api = {
   createInstance: (body: { id: string; environment: Environment; mode: InstanceMode }) =>
     call<CreatedInstance>("POST", "/api/v1/instances", body),
   importProfiles: (id: string) => call<{ job_id: string }>("POST", `/api/v1/instances/${enc(id)}/import`),
+  blueprintFromLive: (id: string, body: { name: string; profiles?: string[] }) =>
+    call<LiveImportResult>("POST", `/api/v1/instances/${enc(id)}/blueprint-from-live`, body),
   driftScan: (id: string, blueprint: string, version: number) =>
     call<{ job_id: string }>("POST", `/api/v1/instances/${enc(id)}/drift-scan`, undefined, { blueprint, version }),
   drift: async (id: string): Promise<DriftReport | null> => {

@@ -5,7 +5,9 @@ import unittest
 from fleetcontrol_blueprint import dump_blueprint, load_blueprint
 from fleetcontrol_api.drift import DriftResolutionError, accept_into_blueprint, live_state_from_drift, select_drift
 from fleetcontrol_api.planner import compute_plan
-from fleetcontrol_api.store import Store
+from sqlalchemy import update
+
+from fleetcontrol_api.store import DRIFT_EXCEPTIONS, Store
 
 EXAMPLE = os.path.join(os.path.dirname(__file__), "..", "..", "..", "packages", "blueprint_schema", "examples", "aml-investigation.yaml")
 
@@ -70,13 +72,13 @@ class DriftFunctionsTest(unittest.TestCase):
 
 class DriftStoreTest(unittest.TestCase):
     def setUp(self):
-        self.s = Store()
+        self.s = Store("sqlite://")
         self.s.create_instance("stg", "staging", "me", "agent")
 
     def _scan(self, drift):
         job = self.s.enqueue_job("stg", "drift_scan", {}, {"blueprint": "aml-investigation", "version": 3})
         self.s.complete_job(job["id"], {"ok": True, "drift": drift}, instance_id="stg")
-        return self.s.drift["stg"]
+        return self.s.drift_report("stg")
 
     def test_report_names_blueprint_version(self):
         report = self._scan(DRIFT)
@@ -86,17 +88,18 @@ class DriftStoreTest(unittest.TestCase):
     def test_exception_hides_field_until_expiry(self):
         self._scan(DRIFT)
         self.s.add_exceptions("stg", {"sanctions-screener": [SKILLS]}, time.time() + 3600, "me", "vendor hotfix")
-        self.assertEqual(self.s.drift["stg"]["drift"], {"ownership-tracer": [MODEL]})
+        self.assertEqual(self.s.drift_report("stg")["drift"], {"ownership-tracer": [MODEL]})
         report = self._scan(DRIFT)  # the next scan still honours it
         self.assertEqual(report["drift"], {"ownership-tracer": [MODEL]})
         self.assertEqual(report["excepted"], {"sanctions-screener": [SKILLS]})
-        self.s.drift_exceptions["stg"][0]["expires_at"] = time.time() - 1  # expired: reported again
+        with self.s.engine.begin() as c:  # expired: reported again
+            c.execute(update(DRIFT_EXCEPTIONS).where(DRIFT_EXCEPTIONS.c.instance_id == "stg").values(expires_at=time.time() - 1))
         self.assertEqual(self._scan(DRIFT)["drift"], DRIFT)
 
     def test_ignore_once_is_reported_again(self):
         self._scan(DRIFT)
         self.s.move_drift("stg", DRIFT, "ignored")
-        self.assertEqual(self.s.drift["stg"]["drift"], {})
+        self.assertEqual(self.s.drift_report("stg")["drift"], {})
         self.assertEqual(self._scan(DRIFT)["drift"], DRIFT)
 
 

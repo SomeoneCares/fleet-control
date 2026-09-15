@@ -162,7 +162,8 @@ def main() -> None:
     except (urllib.error.URLError, OSError) as exc:
         sys.exit(f"Fleet Control API not reachable at {BASE} ({exc}). Start it: python scripts/dev_api.py")
     if admin.call("GET", "/api/v1/instances"):
-        sys.exit("The API already has instances. Restart it for a clean demo (its store is in-memory).")
+        sys.exit("The API already has data (it persists in .fleetcontrol-dev.db). "
+                 "For a clean demo, restart it with: python scripts/dev_api.py --fresh")
 
     creds["people"] = {}
     for email, name, role in PEOPLE:

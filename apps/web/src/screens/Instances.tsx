@@ -7,6 +7,7 @@ import { ENV_LABEL, capabilityRows, formatDate, instanceStatus, timeAgo, type To
 import { Banner, Button, Card, Chip, INPUT, Icon, KpiTile, Label, Mono, PageHeader, Spinner } from "../components/ui";
 import { ConnectDrawer } from "./ConnectDrawer";
 import { DriftModal } from "./DriftModal";
+import { ImportBlueprintModal } from "./ImportBlueprintModal";
 
 export function InstancesScreen() {
   const { id: driftFor } = useParams();
@@ -137,6 +138,7 @@ function InstanceRail({ inst, now, onChanged }: { inst: Instance; now: number; o
   const { can } = useAuth();
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ tone: Tone; text: string } | null>(null);
+  const [importing, setImporting] = useState(false);
   const status = instanceStatus(inst, now);
   const rows = capabilityRows(inst);
   const agentReady = inst.mode === "agent" && Boolean(inst.agent_version);
@@ -198,6 +200,10 @@ function InstanceRail({ inst, now, onChanged }: { inst: Instance; now: number; o
           onClick={() => void run("import", () => api.importProfiles(inst.id), "Import queued. The agent reads live profiles on its next poll.")}>
           {busy === "import" && <Spinner />}Import live profiles
         </Button>}
+        {can("blueprints.write") && <Button icon="plus" disabled={!inst.live_profile_count || busy !== null}
+          title={inst.live_profile_count ? undefined : "Import live profiles first"} onClick={() => setImporting(true)}>
+          Create blueprint from what runs here
+        </Button>}
         {can("instances.operate") && <Button icon="scan" disabled={!agentReady || !inst.applied || busy !== null}
           title={!inst.applied ? "Apply a blueprint version first; drift is measured against it" : undefined}
           onClick={() => inst.applied && void run("scan", () => api.driftScan(inst.id, inst.applied!.name, inst.applied!.version),
@@ -207,6 +213,7 @@ function InstanceRail({ inst, now, onChanged }: { inst: Instance; now: number; o
         {can("plans.create") && <Button icon="layers" onClick={() => navigate(`/blueprints`)}>Plan a blueprint for this instance</Button>}
       </div>
       {msg && <Banner tone={msg.tone} className="mt-3">{msg.text}</Banner>}
+      {importing && <ImportBlueprintModal instanceId={inst.id} onClose={() => { setImporting(false); onChanged(); }} />}
     </Card>
   );
 }

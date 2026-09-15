@@ -57,7 +57,7 @@ class SignInTest(unittest.TestCase):
         self.assertEqual(c.post("/api/v1/auth/password", json={"current": PASSWORD, "new": "a new long password"}).status_code, 200)
         fresh = TestClient(app, headers=H)
         self.assertEqual(fresh.post("/api/v1/auth/login", json={"email": email, "password": "a new long password"}).status_code, 200)
-        store.users[email]["password_hash"] = store.users[user("admin")]["password_hash"]  # back to the shared test password
+        store.update_user(email, password_hash=store.get_user(user("admin"))["password_hash"])  # back to the shared test password
 
 
 @unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
@@ -157,22 +157,21 @@ class PeopleTest(unittest.TestCase):
         self.assertEqual(admin.patch(f"/api/v1/users/{email}", json={"role": "viewer"}).status_code, 409)
 
     def test_last_active_admin_is_kept(self):
-        saved = {e: dict(u) for e, u in store.users.items()}
+        saved = {u["email"]: u["disabled"] for u in store.list_users()}
         try:
-            for u in store.users.values():
+            for u in store.list_users():
                 if u["role"] == "admin":
-                    u["disabled"] = True
+                    store.update_user(u["email"], disabled=True)
             keeper, other = user("admin"), user("admin")
-            store.users[other]["disabled"] = False
             admin = signed_in("admin", keeper)
             self.assertEqual(admin.patch(f"/api/v1/users/{other}", json={"disabled": True}).status_code, 200)
-            store.users[other]["disabled"] = False
-            store.users[keeper]["disabled"] = True  # now `other` is the only active admin
+            store.update_user(other, disabled=False)
+            store.update_user(keeper, disabled=True)  # now `other` is the only active admin
             boss = signed_in("admin", other)
             self.assertEqual(boss.patch(f"/api/v1/users/{keeper}", json={"role": "viewer"}).status_code, 200)  # keeper was disabled: fine
         finally:
-            for e, u in saved.items():
-                store.users[e].update(u)
+            for e, disabled in saved.items():
+                store.update_user(e, disabled=disabled)
 
 
 if __name__ == "__main__":

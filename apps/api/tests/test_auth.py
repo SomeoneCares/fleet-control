@@ -5,7 +5,9 @@ from fleetcontrol_api.auth import (
     ADMIN_PORTAL, PERMISSIONS, ROLES, allowed, check_password_policy, hash_password, new_password, permissions_for,
     token_key, verify_password,
 )
-from fleetcontrol_api.store import Store
+from sqlalchemy import select, update
+
+from fleetcontrol_api.store import LOGIN_FAILURES, SESSIONS, Store
 
 
 class PasswordTest(unittest.TestCase):
@@ -52,28 +54,32 @@ class RoleTest(unittest.TestCase):
 
 class SessionStoreTest(unittest.TestCase):
     def setUp(self):
-        self.s = Store()
+        self.s = Store("sqlite://")
         self.s.add_user("dana@x", "Dana", "fleet_architect", hash_password("correct horse battery"))
+
+    def _sql(self, statement):  # moves the clock for stored rows; the store has no API for that, on purpose
+        with self.s.engine.begin() as c:
+            return c.execute(statement)
 
     def test_session_lifecycle(self):
         key = token_key("tok")
         self.s.create_session("dana@x", "tok", key, 60)
         self.assertEqual(self.s.session_user(key)["email"], "dana@x")
-        self.s.users["dana@x"]["disabled"] = True
+        self.s.update_user("dana@x", disabled=True)
         self.assertIsNone(self.s.session_user(key))  # disabled users lose their sessions
-        self.assertNotIn(key, self.s.sessions)
+        self.assertIsNone(self._sql(select(SESSIONS).where(SESSIONS.c.key == key)).first())
 
     def test_expired_session(self):
         key = token_key("old")
         self.s.create_session("dana@x", "old", key, 60)
-        self.s.sessions[key]["expires"] = time.time() - 1
+        self._sql(update(SESSIONS).where(SESSIONS.c.key == key).values(expires=time.time() - 1))
         self.assertIsNone(self.s.session_user(key))
 
     def test_failures_window(self):
         for _ in range(3):
             self.s.login_failed("dana@x")
         self.assertEqual(self.s.recent_failures("dana@x", 60), 3)
-        self.s.login_failures["dana@x"] = [time.time() - 3600]
+        self._sql(update(LOGIN_FAILURES).where(LOGIN_FAILURES.c.email == "dana@x").values(at=time.time() - 3600))
         self.assertEqual(self.s.recent_failures("dana@x", 60), 0)
 
 

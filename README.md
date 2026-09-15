@@ -45,10 +45,15 @@ otherwise a one-time password is printed), and `FLEETCONTROL_COOKIE_SECURE=1` be
 `python scripts/dev_api.py` does this for you and keeps the password in the git-ignored `.fleetcontrol-dev-credentials.json`;
 `python scripts/dev_seed.py` then adds demo data and one person per role.
 
+Data lives in the database `FLEETCONTROL_DATABASE_URL` names: PostgreSQL in deployments
+(`postgresql+psycopg://user:password@host:5432/fleetcontrol`; install `apps/api[postgres]`), SQLite for development
+(`scripts/dev_api.py` keeps `.fleetcontrol-dev.db` at the repo root; `--fresh` starts over), and an in-memory SQLite
+database when it is unset (tests). Tables are created on start.
+
 Then: `POST /api/v1/instances` → copy `install_command` → run `scripts/install-agent.sh` on the Hermes host → `POST /api/v1/instances/{id}/import` → `POST /api/v1/blueprints` → `POST /api/v1/plans` → `POST /api/v1/plans/{id}/apply`.
 
 ## Status
 
-Scaffold. Schema, planner, plugin and daemon job logic are unit-tested; the API is smoke-tested in CI. The dashboard routes the daemon uses are verified against a real Hermes 0.21.2 host (`docs/dashboard-capture-0.21.2*.json`). Not yet done: OIDC single sign-on, PostgreSQL store, and everything in Slices 2–5 of the build document.
+Scaffold. Schema, planner, plugin and daemon job logic are unit-tested; the API is smoke-tested in CI. The dashboard routes the daemon uses are verified against a real Hermes 0.21.2 host (`docs/dashboard-capture-0.21.2*.json`). The Slice 1 exit test passed on that host. Not yet done: Docker Compose packaging, OIDC single sign-on, and everything in Slices 2–5 of the build document.
 
 Design canvas: the "Fleet Control Redesign" artifact on claude.ai. Regenerate a screen with `cd design && python3 build.py <Name> <nav>`.

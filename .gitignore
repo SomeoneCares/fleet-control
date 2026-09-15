@@ -4,3 +4,4 @@ __pycache__/
 .venv/
 *.egg-info/
 .fleetcontrol-dev-credentials.json
+.fleetcontrol-dev.db*

@@ -1,7 +1,7 @@
 # apps/web
 
 React + TypeScript (Vite, Tailwind v4) client for Fleet Control. Slice 1 admin screens: **Instances** (with the
-Connect drawer and the day-one empty state), **Blueprints** (library, version history, YAML import, plan creation),
+Connect drawer, the day-one empty state, and a blueprint created from what an instance runs), **Blueprints** (library, version history, YAML import, plan creation),
 **Plan before apply** (approvals, apply, outcome), **Drift** resolution (accept / revert / ignore once / exception),
 **Fleet Designer** (read-mostly topology laid out from the workflow, with an inspector), **Agent Studio** (edit an
 agent's managed fields; applied versions are immutable, so saving creates a draft) and the **Audit log** (filters,
@@ -12,7 +12,8 @@ slice they arrive in.
 
 ## Run it
 
-From the repo root, three terminals (the API keeps everything in memory, so restarting it clears the data):
+From the repo root, three terminals (the API keeps its data in `.fleetcontrol-dev.db`, so a restart keeps it;
+`scripts/dev_api.py --fresh` starts over):
 
 ```
 .venv/Scripts/python scripts/dev_api.py        # the API with a bootstrap admin (python3 on Linux/macOS)

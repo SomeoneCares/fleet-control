@@ -12,7 +12,7 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
 - Writes to Hermes go through the Fleet Control Agent on the host (plugin + daemon), never through an exposed dashboard API.
 - Two experiences, one app: admin portal and business-user Workspace. Decision Rooms live in the Workspace.
 - Messaging delivers; it never records decisions. Assurance verdicts are exactly: Evidence found / No evidence / Not verifiable / Policy blocked.
-- Stack: Python 3.11+, FastAPI, Pydantic v2, PostgreSQL later (in-memory now), React+TS+Vite+Tailwind for `apps/web`.
+- Stack: Python 3.11+, FastAPI, Pydantic v2, SQLAlchemy Core on PostgreSQL (SQLite for dev and tests), React+TS+Vite+Tailwind for `apps/web`.
 - Hermes version strings are 0.21.x. "v2.4" was fiction in early docs; if you see it, fix it.
 
 ## Layout
@@ -54,9 +54,19 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   on, so creates now `sync_skills`/`sync_toolsets` to exactly the blueprint's lists; `hermes-agent` is an
   essential skill Hermes never disables (`ESSENTIAL_SKILLS`), so the agent leaves it unmanaged and the compat check
   pins the set; Operators cannot create plans from a blueprint, only revert plans.
-- NEXT: "blueprint from imported live profiles" (Slice 1 gap: import exists, turning it into a Blueprint v1 does
-  not); OIDC sign-in mapped onto the same roles; PostgreSQL store (the dev API loses instances, pairings and
-  people on restart); Docker Compose packaging.
+- DONE (2026-09-16): blueprint from imported live profiles (`importer.py`, `POST /api/v1/instances/{id}/
+  blueprint-from-live`, "Create blueprint from what runs here" on Instances; Admin/Fleet Architect). SOULs are kept
+  verbatim (`Soul.raw` keeps its whitespace); a profile that would not plan to zero changes is left out with the
+  reason. On `hermesbo-lab-01` all five profiles import exactly and the plan against the instance is empty.
+- DONE (2026-09-16): database store (`store.py`, SQLAlchemy Core): one table per collection, key columns plus a
+  JSON document (JSONB on PostgreSQL); blueprints as YAML + parsed JSON; insert-only audit; pairing/agent tokens
+  stored as SHA-256; jobs in the database (queued work survives a restart; claims and plan transitions are
+  conditional updates, so two API processes cannot double-deliver or double-apply). All writes go through store
+  methods; never mutate a returned record. `FLEETCONTROL_DATABASE_URL` picks the database (unset = in-memory SQLite,
+  what the tests use); `scripts/dev_api.py` uses `.fleetcontrol-dev.db` (`--fresh` starts over); CI runs the API
+  tests a second time against a PostgreSQL 16 service. Unit tests must pass `Store("sqlite://")` explicitly.
+- NEXT: Docker Compose packaging (api, postgres, web; worker/redis when Slice 3 needs them); OIDC sign-in mapped
+  onto the same roles; Alembic migrations before the first schema change on a real install.
 
 ## Working agreements
 - Keep tests runnable with `python3 -m unittest` (no pytest-only features). Add tests with every module.

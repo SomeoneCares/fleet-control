@@ -8,7 +8,7 @@ Two route families:
 * ``/agent/v1/...`` — the fleetctl-agent daemon (pair, heartbeat, events, long-poll jobs, results), with the
   bearer token issued at pairing.
 
-The store is in-memory. The first admin comes from FLEETCONTROL_ADMIN_EMAIL (and optionally
+Data lives in the database ``store.py`` opens (FLEETCONTROL_DATABASE_URL; in memory when unset). The first admin comes from FLEETCONTROL_ADMIN_EMAIL (and optionally
 FLEETCONTROL_ADMIN_PASSWORD) when nobody exists yet; scripts/dev_api.py does that for local development.
 
 Run: ``uvicorn fleetcontrol_api.main:app --port 8080``
@@ -33,6 +33,7 @@ from .auth import (
 )
 from .drift import DriftResolutionError, accept_into_blueprint, live_state_from_drift, select_drift
 from .edits import as_new_version, update_agent
+from .importer import LiveImportError, blueprint_from_live
 from .planner import compute_plan, to_agent_job
 from .store import Store
 
@@ -49,7 +50,7 @@ RoleName = Literal["admin", "fleet_architect", "operator", "approver", "viewer"]
 def _bootstrap_admin() -> None:
     """Create the first admin from the environment when nobody exists yet. There is no default password."""
     email = (os.environ.get("FLEETCONTROL_ADMIN_EMAIL") or "").strip().lower()
-    if not email or store.users:
+    if not email or store.has_users():
         return
     given = os.environ.get("FLEETCONTROL_ADMIN_PASSWORD")
     password = given or new_password()
@@ -106,7 +107,7 @@ def login(body: LoginBody, request: Request, response: Response) -> dict:
     email = body.email.strip().lower()
     if store.recent_failures(email, LOCKOUT_SECONDS) >= LOCKOUT_FAILURES:
         raise HTTPException(429, "too many failed sign-ins for this account; try again in 15 minutes")
-    user = store.users.get(email)
+    user = store.get_user(email)
     ok = verify_password(body.password, user["password_hash"] if user else DUMMY_HASH)
     if not ok or not user or user["disabled"]:
         store.login_failed(email)
@@ -115,7 +116,7 @@ def login(body: LoginBody, request: Request, response: Response) -> dict:
     store.clear_failures(email)
     token = new_session_token()
     store.create_session(email, token, token_key(token), SESSION_SECONDS)
-    user["last_login"] = time.time()
+    user = store.update_user(email, last_login=time.time())
     response.set_cookie(SESSION_COOKIE, token, max_age=SESSION_SECONDS, httponly=True, samesite="lax", secure=COOKIE_SECURE, path="/")
     store.record(email, "auth.signed_in", email)
     return _me(user)
@@ -148,7 +149,7 @@ def change_password(body: PasswordChange, user: dict = Depends(current_user)) ->
         check_password_policy(body.new)
     except ValueError as exc:
         raise HTTPException(422, str(exc))
-    user["password_hash"] = hash_password(body.new)
+    store.update_user(user["email"], password_hash=hash_password(body.new))
     store.record(user["email"], "auth.password_changed", user["email"])
     return {"ok": True}
 
@@ -156,7 +157,7 @@ def change_password(body: PasswordChange, user: dict = Depends(current_user)) ->
 @app.get("/api/v1/roles")
 def roles(user: dict = Depends(current_user)) -> list[dict]:
     members = {r: 0 for r in ROLES}
-    for u in store.users.values():
+    for u in store.list_users():
         if not u["disabled"]:
             members[u["role"]] += 1
     return [{"role": r, "label": label, "description": desc, "members": members[r],
@@ -166,7 +167,7 @@ def roles(user: dict = Depends(current_user)) -> list[dict]:
 
 @app.get("/api/v1/users")
 def list_users(user: dict = Depends(require("users.read"))) -> list[dict]:
-    return sorted((_person(u) for u in store.users.values()), key=lambda p: p["email"])
+    return [_person(u) for u in store.list_users()]
 
 
 class UserCreate(BaseModel):
@@ -178,7 +179,7 @@ class UserCreate(BaseModel):
 @app.post("/api/v1/users", status_code=201)
 def create_user(body: UserCreate, user: dict = Depends(require("users.manage"))) -> dict:
     email = body.email.strip().lower()
-    if email in store.users:
+    if store.get_user(email):
         raise HTTPException(409, f"{email} already has an account")
     password = new_password()
     created = store.add_user(email, body.name.strip(), body.role, hash_password(password))
@@ -193,12 +194,12 @@ class UserUpdate(BaseModel):
 
 
 def _active_admins() -> list[dict]:
-    return [u for u in store.users.values() if u["role"] == "admin" and not u["disabled"]]
+    return [u for u in store.list_users() if u["role"] == "admin" and not u["disabled"]]
 
 
 @app.patch("/api/v1/users/{email}")
 def update_user(email: str, body: UserUpdate, user: dict = Depends(require("users.manage"))) -> dict:
-    target = store.users.get(email.strip().lower())
+    target = store.get_user(email.strip().lower())
     if not target:
         raise HTTPException(404, "no such person")
     changes = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
@@ -209,7 +210,7 @@ def update_user(email: str, body: UserUpdate, user: dict = Depends(require("user
         raise HTTPException(409, "Fleet Control needs at least one active Admin")
     if "name" in changes:
         changes["name"] = changes["name"].strip() or target["name"]
-    target.update(changes)
+    target = store.update_user(target["email"], **changes)
     if changes.get("disabled"):
         store.drop_sessions_for(target["email"])
     detail = ", ".join(f"role={role_label(v)}" if k == "role" else f"{k}={v}" for k, v in changes.items())
@@ -219,11 +220,11 @@ def update_user(email: str, body: UserUpdate, user: dict = Depends(require("user
 
 @app.post("/api/v1/users/{email}/reset-password")
 def reset_password(email: str, user: dict = Depends(require("users.manage"))) -> dict:
-    target = store.users.get(email.strip().lower())
+    target = store.get_user(email.strip().lower())
     if not target:
         raise HTTPException(404, "no such person")
     password = new_password()
-    target["password_hash"] = hash_password(password)
+    store.update_user(target["email"], password_hash=hash_password(password))
     store.drop_sessions_for(target["email"])
     store.record(user["email"], "user.password_reset", target["email"])
     return {"password": password}
@@ -249,7 +250,7 @@ class InstanceCreate(BaseModel):
 
 @app.post("/api/v1/instances", status_code=201)
 def create_instance(body: InstanceCreate, user: dict = Depends(require("instances.connect"))) -> dict:
-    if body.id in store.instances:
+    if store.get_instance(body.id):
         raise HTTPException(409, "instance exists")
     inst = store.create_instance(body.id, body.environment, user["email"], body.mode)
     store.record(user["email"], "instance.created", body.id, body.mode)
@@ -263,27 +264,27 @@ def create_instance(body: InstanceCreate, user: dict = Depends(require("instance
 
 @app.get("/api/v1/instances")
 def list_instances(user: dict = Depends(require("instances.read"))) -> list[dict]:
-    return [_instance_row(i) for i in store.instances.values()]
+    return [_instance_row(i) for i in store.list_instances()]
 
 
 def _instance_row(inst: dict) -> dict:
     """An instance as the Instances screen needs it: record + open drift, imported profiles, applied version."""
     iid = inst["id"]
     out = {k: v for k, v in inst.items() if k != "pairing_token"}
-    out["open_drift"] = sum(len(d) for d in ((store.drift.get(iid) or {}).get("drift") or {}).values())
-    out["live_profile_count"] = len(store.live_state.get(iid, {}))
-    out["applied"] = store.applied.get(iid)
+    out["open_drift"] = sum(len(d) for d in ((store.drift_report(iid) or {}).get("drift") or {}).values())
+    out["live_profile_count"] = len(store.live_state_for(iid) or {})
+    out["applied"] = store.applied_for(iid)
     return out
 
 
 @app.get("/api/v1/instances/{instance_id}")
 def get_instance(instance_id: str, user: dict = Depends(require("instances.read"))) -> dict:
-    inst = store.instances.get(instance_id)
+    inst = store.get_instance(instance_id)
     if not inst:
         raise HTTPException(404)
     out = _instance_row(inst)
-    out["live_profiles"] = list(store.live_state.get(instance_id, {}).keys())
-    out["drift"] = store.drift.get(instance_id)
+    out["live_profiles"] = list((store.live_state_for(instance_id) or {}).keys())
+    out["drift"] = store.drift_report(instance_id)
     return out
 
 
@@ -305,7 +306,7 @@ def drift_scan(instance_id: str, blueprint: str, version: int, user: dict = Depe
 
 
 def _require_instance(instance_id: str) -> dict:
-    inst = store.instances.get(instance_id)
+    inst = store.get_instance(instance_id)
     if not inst:
         raise HTTPException(404, "unknown instance")
     return inst
@@ -317,7 +318,7 @@ def _require_instance(instance_id: str) -> dict:
 @app.get("/api/v1/instances/{instance_id}/drift")
 def get_drift(instance_id: str, user: dict = Depends(require("drift.read"))) -> dict:
     _require_instance(instance_id)
-    report = store.drift.get(instance_id)
+    report = store.drift_report(instance_id)
     if not report:
         raise HTTPException(404, "no drift scan for this instance yet")
     return {**report, "exceptions": store.active_exceptions(instance_id)}
@@ -340,7 +341,7 @@ def resolve_drift(instance_id: str, body: DriftResolve, user: dict = Depends(req
     inst = _require_instance(instance_id)
     if body.action == "accept" and not allowed(user["role"], "blueprints.write"):
         raise HTTPException(403, f"accepting drift writes a blueprint version; the {role_label(user['role'])} role cannot")
-    report = store.drift.get(instance_id)
+    report = store.drift_report(instance_id)
     if not report or not report.get("drift"):
         raise HTTPException(409, "no open drift on this instance")
     try:
@@ -373,8 +374,8 @@ def resolve_drift(instance_id: str, body: DriftResolve, user: dict = Depends(req
         store.record(who, "drift.revert_planned", target, plan["id"])
         return {"action": body.action, "resolved": chosen, "plan": plan}
 
-    new_version = max(store.blueprints[bp.metadata.name]) + 1
-    soul_texts = {p: s["soul_text"] for p, s in store.live_state.get(instance_id, {}).items() if isinstance(s.get("soul_text"), str)}
+    new_version = store.next_blueprint_version(bp.metadata.name)
+    soul_texts = {p: s["soul_text"] for p, s in (store.live_state_for(instance_id) or {}).items() if isinstance(s.get("soul_text"), str)}
     try:
         new_bp = accept_into_blueprint(bp, chosen, new_version=new_version, soul_texts=soul_texts)
     except DriftResolutionError as exc:
@@ -405,7 +406,7 @@ def upload_blueprint(body: BlueprintUpload, user: dict = Depends(require("bluepr
         bp = load_blueprint(body.yaml)
     except Exception as exc:
         raise HTTPException(422, f"invalid blueprint: {exc}")
-    existing = store.blueprints.get(bp.metadata.name, {}).get(bp.metadata.version)
+    existing = store.get_blueprint(bp.metadata.name, bp.metadata.version)
     if existing and existing["status"] != "draft":
         raise HTTPException(409, f"{bp.metadata.name} v{bp.metadata.version} is {existing['status']} and immutable; "
                                  "raise metadata.version to upload a new version")
@@ -416,8 +417,8 @@ def upload_blueprint(body: BlueprintUpload, user: dict = Depends(require("bluepr
 
 @app.get("/api/v1/blueprints")
 def list_blueprints(user: dict = Depends(require("blueprints.read"))) -> list[dict]:
-    out = []
-    for name, versions in store.blueprints.items():
+    out, applied = [], store.all_applied()
+    for name, versions in store.all_blueprints().items():
         latest = versions[max(versions)]
         parsed = latest["parsed"]
         out.append({
@@ -426,14 +427,14 @@ def list_blueprints(user: dict = Depends(require("blueprints.read"))) -> list[di
             "agents": len(parsed["agents"]), "workflows": len(parsed.get("workflows") or []),
             "tests": len(parsed.get("tests") or []), "updated_at": latest["created_at"], "author": latest["author"],
             "applied_on": [{"instance": iid, "version": a["version"], "at": a["at"]}
-                           for iid, a in store.applied.items() if a["name"] == name],
+                           for iid, a in applied.items() if a["name"] == name],
         })
     return out
 
 
 @app.get("/api/v1/blueprints/{name}")
 def blueprint_versions(name: str, user: dict = Depends(require("blueprints.read"))) -> list[dict]:
-    versions = store.blueprints.get(name)
+    versions = store.blueprint_versions(name)
     if not versions:
         raise HTTPException(404)
     return [{"version": v, "status": r["status"], "author": r["author"], "created_at": r["created_at"]}
@@ -442,7 +443,7 @@ def blueprint_versions(name: str, user: dict = Depends(require("blueprints.read"
 
 @app.get("/api/v1/blueprints/{name}/{version}")
 def get_blueprint(name: str, version: int, user: dict = Depends(require("blueprints.read"))) -> dict:
-    rec = store.blueprints.get(name, {}).get(version)
+    rec = store.get_blueprint(name, version)
     if not rec:
         raise HTTPException(404)
     return {"name": name, "version": version, "status": rec["status"], "yaml": rec["yaml"], "parsed": rec["parsed"],
@@ -454,11 +455,39 @@ def get_blueprint(name: str, version: int, user: dict = Depends(require("bluepri
 def create_draft(name: str, version: int, user: dict = Depends(require("blueprints.write"))) -> dict:
     """Start a new draft from any version (applied versions are immutable)."""
     bp = _blueprint(name, version)
-    new_version = max(store.blueprints[name]) + 1
+    new_version = store.next_blueprint_version(name)
     new = as_new_version(bp, new_version)
     rec = store.save_blueprint(name, new_version, dump_blueprint(new), new.model_dump(mode="json"), user["email"])
     store.record(user["email"], "blueprint.draft_created", f"{name} v{new_version}", f"from v{version}")
     return {"name": name, "version": new_version, "status": rec["status"]}
+
+
+class LiveImport(BaseModel):
+    name: str
+    profiles: Optional[list[str]] = Field(None, description="Profiles to include; default every imported one.")
+
+
+@app.post("/api/v1/instances/{instance_id}/blueprint-from-live", status_code=201)
+def blueprint_from_instance(instance_id: str, body: LiveImport, user: dict = Depends(require("blueprints.write"))) -> dict:
+    """A Blueprint v1 draft describing what the instance runs today (from its last import)."""
+    inst = _require_instance(instance_id)
+    live = store.live_state_for(instance_id)
+    if not live:
+        raise HTTPException(409, "no live profiles for this instance yet; run an import first")
+    if store.blueprint_versions(body.name):
+        raise HTTPException(409, f"a blueprint named {body.name!r} already exists; choose another name")
+    try:
+        bp, skipped = blueprint_from_live(live, name=body.name, owner=user["email"], instance_id=instance_id,
+                                          environment=inst["environment"], profiles=body.profiles)
+    except LiveImportError as exc:
+        raise HTTPException(422, str(exc))
+    except ValueError as exc:  # e.g. a name outside the id rules
+        raise HTTPException(422, f"invalid blueprint: {exc}")
+    rec = store.save_blueprint(bp.metadata.name, 1, dump_blueprint(bp), bp.model_dump(mode="json"), user["email"])
+    store.record(user["email"], "blueprint.imported", f"{bp.metadata.name} v1",
+                 f"from {instance_id}: {len(bp.agents)} agents" + (f", {len(skipped)} skipped" if skipped else ""))
+    return {"name": rec["name"], "version": rec["version"], "status": rec["status"],
+            "managed_profiles": list(bp.managed_fields()), "skipped": skipped}
 
 
 class AgentEdit(BaseModel):
@@ -475,7 +504,7 @@ class AgentEdit(BaseModel):
 
 @app.put("/api/v1/blueprints/{name}/{version}/agents/{agent_id}")
 def edit_agent(name: str, version: int, agent_id: str, body: AgentEdit, user: dict = Depends(require("blueprints.write"))) -> dict:
-    rec = store.blueprints.get(name, {}).get(version)
+    rec = store.get_blueprint(name, version)
     if not rec:
         raise HTTPException(404, "unknown blueprint version")
     if rec["status"] != "draft":
@@ -494,7 +523,7 @@ def edit_agent(name: str, version: int, agent_id: str, body: AgentEdit, user: di
 
 
 def _blueprint(name: str, version: int) -> Blueprint:
-    rec = store.blueprints.get(name, {}).get(version)
+    rec = store.get_blueprint(name, version)
     if not rec:
         raise HTTPException(404, "unknown blueprint version")
     return Blueprint.model_validate(rec["parsed"])
@@ -513,7 +542,7 @@ class PlanCreate(BaseModel):
 def create_plan(body: PlanCreate, user: dict = Depends(require("plans.create"))) -> dict:
     inst = _require_instance(body.instance_id)
     bp = _blueprint(body.blueprint, body.version)
-    live = store.live_state.get(body.instance_id)
+    live = store.live_state_for(body.instance_id)
     if live is None:
         raise HTTPException(409, "no live state for this instance yet; run import first")
     return _save_plan(bp, live, inst, user["email"])
@@ -526,7 +555,7 @@ def _save_plan(bp: Blueprint, live: dict, inst: dict, who: str, why: str = "") -
     plan["approvals"] = []
     plan["created_by"] = who
     plan["created_at"] = time.time()
-    store.plans[plan["id"]] = plan
+    store.save_plan(plan)
     store.record(who, "plan.created", f"{bp.metadata.name} v{bp.metadata.version} → {inst['id']}", f"{len(plan['changes'])} changes{why}")
     return plan
 
@@ -536,13 +565,13 @@ def list_plans(status: Optional[str] = None, user: dict = Depends(require("plans
     rows = [{**{k: p[k] for k in ("id", "target_instance", "environment", "blueprint", "status", "approvals",
                                   "approvals_required", "created_by", "created_at")},
              "changes": sum(1 for r in p["changes"] if r["kind"] != "approval")}
-            for p in store.plans.values() if not status or p["status"] == status]
+            for p in store.list_plans(status)]
     return sorted(rows, key=lambda r: r["created_at"], reverse=True)
 
 
 @app.get("/api/v1/plans/{plan_id}")
 def get_plan(plan_id: str, user: dict = Depends(require("plans.read"))) -> dict:
-    plan = store.plans.get(plan_id)
+    plan = store.get_plan(plan_id)
     if not plan:
         raise HTTPException(404)
     return plan
@@ -550,7 +579,7 @@ def get_plan(plan_id: str, user: dict = Depends(require("plans.read"))) -> dict:
 
 @app.post("/api/v1/plans/{plan_id}/approve")
 def approve_plan(plan_id: str, user: dict = Depends(current_user)) -> dict:
-    plan = store.plans.get(plan_id)
+    plan = store.get_plan(plan_id)
     if not plan:
         raise HTTPException(404)
     if plan["status"] != "planned":
@@ -561,14 +590,14 @@ def approve_plan(plan_id: str, user: dict = Depends(current_user)) -> dict:
     if plan.get("created_by") == user["email"]:
         raise HTTPException(403, "you created this plan; another person has to approve it")
     if user["email"] not in plan["approvals"]:
-        plan["approvals"].append(user["email"])
+        plan = store.add_approval(plan_id, user["email"])
         store.record(user["email"], "plan.approved", plan_id, f"{len(plan['approvals'])} of {plan['approvals_required']}")
     return {"approvals": plan["approvals"], "required": plan["approvals_required"]}
 
 
 @app.post("/api/v1/plans/{plan_id}/apply")
 def apply_plan(plan_id: str, user: dict = Depends(current_user)) -> dict:
-    plan = store.plans.get(plan_id)
+    plan = store.get_plan(plan_id)
     if not plan:
         raise HTTPException(404)
     production = plan["environment"] == "production"
@@ -580,15 +609,16 @@ def apply_plan(plan_id: str, user: dict = Depends(current_user)) -> dict:
         raise HTTPException(409, plan["blocked_reason"])
     if len(plan["approvals"]) < plan["approvals_required"]:
         raise HTTPException(409, f"{plan['approvals_required']} approvals required, {len(plan['approvals'])} given")
+    if not store.transition_plan(plan_id, "planned", "applying"):  # two people pressed Apply at once: one wins
+        raise HTTPException(409, "this plan is already being applied")
     jobs = [store.enqueue_job(plan["target_instance"], j["kind"], j["params"], {"plan_id": plan_id}) for j in to_agent_job(plan)]
-    plan["status"] = "applying"
     store.record(user["email"], "plan.apply_requested", plan_id, ", ".join(j["id"] for j in jobs))
     return {"jobs": [j["id"] for j in jobs]}
 
 
 @app.get("/api/v1/jobs/{job_id}")
 def get_job(job_id: str, user: dict = Depends(require("instances.read"))) -> dict:
-    job = store.jobs.get(job_id)
+    job = store.get_job(job_id)
     if not job:
         raise HTTPException(404)
     return job
@@ -596,7 +626,7 @@ def get_job(job_id: str, user: dict = Depends(require("instances.read"))) -> dic
 
 @app.get("/api/v1/audit")
 def audit(limit: int = 200, user: dict = Depends(require("audit.read"))) -> list[dict]:
-    return list(reversed(store.audit))[: max(1, min(limit, 5000))]
+    return store.audit_log(max(1, min(limit, 5000)))
 
 
 @app.get("/api/v1/audit/export")
@@ -608,9 +638,10 @@ def audit_export(user: dict = Depends(require("audit.read"))) -> Response:
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["time_utc", "actor", "action", "target", "detail"])
-    for e in store.audit:
+    entries = store.audit_log(newest_first=False)
+    for e in entries:
         w.writerow([time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(e["ts"])), e["actor"], e["action"], e["target"], e["detail"]])
-    store.record(user["email"], "audit.exported", "audit log", f"{len(store.audit)} entries")
+    store.record(user["email"], "audit.exported", "audit log", f"{len(entries)} entries")
     return Response(buf.getvalue(), media_type="text/csv",
                     headers={"Content-Disposition": 'attachment; filename="fleetcontrol-audit.csv"'})
 
@@ -618,8 +649,7 @@ def audit_export(user: dict = Depends(require("audit.read"))) -> Response:
 @app.get("/api/v1/events")
 def events(instance_id: Optional[str] = None, kind: Optional[str] = None, limit: int = 200,
            user: dict = Depends(require("instances.read"))) -> list[dict]:
-    out = [e for e in store.events if (not instance_id or e.get("instance_id") == instance_id) and (not kind or e.get("kind") == kind)]
-    return out[-limit:]
+    return store.list_events(instance_id, kind, max(1, min(limit, 5000)))
 
 
 # ----------------------------------------------------------------------------- agent transport
@@ -666,9 +696,7 @@ class EventsBody(BaseModel):
 def push_events(instance_id: str, body: EventsBody, inst: str = Depends(agent_instance)) -> dict:
     if inst != instance_id:
         raise HTTPException(403)
-    for e in body.events:
-        e["instance_id"] = instance_id
-        store.events.append(e)
+    store.add_events(instance_id, body.events)
     # Assurance (Slice 3) consumes these; for now they are queryable via /api/v1/events.
     return {"accepted": len(body.events)}
 
@@ -686,9 +714,9 @@ def job_result(job_id: str, result: dict[str, Any], inst: str = Depends(agent_in
     if not job:  # unknown, or queued for another instance: same answer, nothing written
         raise HTTPException(404)
     store.record("agent:" + inst, f"job.{job['status']}", job_id, job["kind"])
-    if job["kind"] == "apply" and job["status"] == "done" and store.applied.get(inst):
+    applied = store.applied_for(inst) if job["kind"] == "apply" and job["status"] == "done" else None
+    if applied:
         # drift detection starts right after an apply, against the version just applied
-        applied = store.applied[inst]
         bp = _blueprint(applied["name"], applied["version"])
         scan = store.enqueue_job(inst, "drift_scan", {"managed": bp.managed_fields()}, {"blueprint": applied["name"], "version": applied["version"]})
         store.record("fleetcontrol", "drift.scan_requested", inst, f"{applied['name']} v{applied['version']} after apply ({scan['id']})")

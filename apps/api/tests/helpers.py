@@ -16,7 +16,7 @@ _HASH = hash_password(PASSWORD)
 
 def user(role: str = "admin", email: str | None = None) -> str:
     email = email or f"{role.replace('_', '-')}-{os.urandom(3).hex()}@test.local"
-    if email not in store.users:
+    if not store.get_user(email):
         store.add_user(email, email.split("@")[0], role, _HASH)
     return email
 

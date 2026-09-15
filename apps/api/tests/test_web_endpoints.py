@@ -83,7 +83,7 @@ class WebEndpointsTest(unittest.TestCase):
         self.assertEqual(self.c.put(f"/api/v1/blueprints/{name}/3/agents/challenger", json={"delegates_to": ["ghost"]}).status_code, 422)
         self.assertEqual(self.c.put(f"/api/v1/blueprints/{name}/3/agents/ghost", json={"role": "x"}).status_code, 404)
 
-        store.blueprints[name][3]["status"] = "applied"
+        store.set_blueprint_status(name, 3, "applied")
         self.assertEqual(self.c.put(f"/api/v1/blueprints/{name}/3/agents/challenger", json={"role": "x"}).status_code, 409)
         self.assertEqual(self.c.post("/api/v1/blueprints", json={"yaml": text}).status_code, 409)  # no overwrite of applied
         draft = self.c.post(f"/api/v1/blueprints/{name}/3/draft").json()

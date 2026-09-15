@@ -23,7 +23,7 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
 - `scripts/test.sh` runs all suites with the stdlib runner; `scripts/hermes_compat_check.py <hermes-agent checkout>` must stay green.
 - `design/` — 23 screen sources; `python3 build.py <Name> <nav>` regenerates an artboard. Tokens in `design/DESIGN.md`.
 
-## Current state (2026-09-14)
+## Current state (2026-09-16)
 - CI green on GitHub (tests + API end-to-end smoke). Nightly Hermes compat job configured.
 - DONE: real-host capture on Hermes 0.21.2 → `docs/dashboard-capture-0.21.2*.json`, and `hermes_local.py` reconciled
   against it (session header is `X-Hermes-Session-Token`; `/api/profiles` and `/api/mcp/servers` return wrapped lists;
@@ -42,7 +42,14 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   `FLEETCONTROL_ADMIN_EMAIL` (no default password). Local dev: `scripts/dev_api.py` then `scripts/dev_seed.py`;
   passwords land in git-ignored `.fleetcontrol-dev-credentials.json`. Claude must not type passwords into the web form:
   the user signs in for browser checks.
-- NEXT: OIDC sign-in mapped onto the same roles; PostgreSQL store; Docker Compose packaging; Slice 1 exit test on a lab instance.
+- DONE (2026-09-16): Fleet Control Agent installed on the lab host as instance `hermesbo-lab-01` (systemd user units
+  `fleetctl-dashboard`, its own dashboard on 127.0.0.1:9129 with a token only the daemon knows, and `fleetctl-agent`;
+  source copied to `~/fleet-control-src`). The installer no longer writes to `~/.hermes/.env` and leaves the LAN
+  dashboard alone; the plugin is copied but not enabled, and the capability report says so. The daemon reaches a
+  local dev API through an SSH reverse tunnel Basem runs: `ssh -N -R 127.0.0.1:18080:127.0.0.1:8080 hermes@<host>`.
+- NEXT: Slice 1 exit test on `hermesbo-lab-01` with a one-agent blueprint (`fc-exit-test`, throwaway; the four
+  business profiles stay unmanaged); then OIDC sign-in mapped onto the same roles; PostgreSQL store; Docker Compose.
+  Gap found: no "blueprint from imported live profiles" route yet (build document Slice 1).
 
 ## Working agreements
 - Keep tests runnable with `python3 -m unittest` (no pytest-only features). Add tests with every module.

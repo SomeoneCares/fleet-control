@@ -48,7 +48,7 @@ AGENT_VERSION = "0.1.0"
 REPORT = {
     "hermes_version": "0.21.2", "config_version": 44,
     "surfaces": {"dashboard": "loopback", "api": "ok", "cli": "ok"},
-    "plugins": {"fleetcontrol": "installed", "langfuse": "not enabled"},
+    "plugins": {"fleetcontrol": "enabled", "langfuse": "not enabled"},
     "dashboard_auth_required": False, "notes": [],
     "capabilities": ["runs", "sessions", "profiles.read", "profiles.write", "hooks", "policy.enforce"],
 }

@@ -22,6 +22,7 @@ import queue
 import socket
 import threading
 import time
+import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
@@ -265,7 +266,18 @@ class AgentDaemon:
         if not self.cfg.agent_token:
             if not self.cfg.pairing_token:
                 raise SystemExit("fleetctl-agent: not paired; set FLEETCONTROL_PAIRING_TOKEN from the Connect instance drawer")
-            token = self.cp.pair(self.hermes.capability_report())
+            delay = 5
+            while True:
+                try:
+                    token = self.cp.pair(self.hermes.capability_report())
+                    break
+                except urllib.error.HTTPError:
+                    raise  # Fleet Control answered and refused the token; retrying cannot help
+                except OSError as exc:  # URLError included: not reachable yet, keep the token and wait
+                    logger.warning("Fleet Control unreachable at %s (%s); retrying pairing in %ds",
+                                   self.cfg.control_plane_url, getattr(exc, "reason", exc), delay)
+                    time.sleep(delay)
+                    delay = min(delay * 2, 60)
             with open(token_file, "w") as f:
                 f.write(token)
             os.chmod(token_file, 0o600)

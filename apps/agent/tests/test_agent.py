@@ -1,10 +1,13 @@
 """Unit tests for the daemon pieces that don't need a Hermes host."""
 import hashlib, json, os, socket, tempfile, threading, time, unittest, queue
+from unittest import mock
 
 from fleetctl_agent.hermes_local import (
     API_ROUTES, DASHBOARD_SESSION_HEADER, ROUTES, HermesLocal, HermesLocalConfig, HermesLocalError, diff_managed,
 )
-from fleetctl_agent.daemon import Jobs, AgentConfig, PluginSocketServer
+import urllib.error
+
+from fleetctl_agent.daemon import AgentDaemon, Jobs, AgentConfig, PluginSocketServer
 
 CAPTURE = os.path.join(os.path.dirname(__file__), "..", "..", "..", "docs", "dashboard-capture-0.21.2-write.json")
 
@@ -98,6 +101,55 @@ class SocketTest(unittest.TestCase):
         self.assertEqual([g["kind"] for g in got], ["tool.post", "session.end"])
 
 
+class ConfigTest(unittest.TestCase):
+    def test_environment_overrides(self):
+        env = {"HERMES_BIN": "/opt/hermes/bin/hermes", "HERMES_DASHBOARD_URL": "http://127.0.0.1:9129",
+               "HERMES_API_URL": "http://127.0.0.1:8650"}
+        with mock.patch.dict(os.environ, env):
+            cfg = HermesLocalConfig()
+        self.assertEqual((cfg.hermes_bin, cfg.dashboard_url, cfg.api_url),
+                         ("/opt/hermes/bin/hermes", "http://127.0.0.1:9129", "http://127.0.0.1:8650"))
+
+    def test_defaults_are_loopback(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            cfg = HermesLocalConfig()
+        self.assertEqual((cfg.dashboard_url, cfg.api_url), ("http://127.0.0.1:9119", "http://127.0.0.1:8642"))
+
+
+class PairingTest(unittest.TestCase):
+    class FlakyControlPlane:
+        def __init__(self, failures):
+            self.failures, self.calls = list(failures), 0
+        def pair(self, report):
+            self.calls += 1
+            if self.failures:
+                raise self.failures.pop(0)
+            return "agent-token"
+
+    def daemon(self, failures):
+        d = AgentDaemon(AgentConfig(pairing_token="pair_x", agent_token=None, state_dir=tempfile.mkdtemp()))
+        d.hermes = type("H", (), {"capability_report": lambda self: {}})()
+        d.cp = self.FlakyControlPlane(failures)
+        return d
+
+    def test_waits_for_an_unreachable_control_plane(self):
+        refused = urllib.error.URLError(ConnectionRefusedError(111, "Connection refused"))
+        d = self.daemon([refused, refused])
+        with mock.patch("fleetctl_agent.daemon.time.sleep") as sleep:
+            d._pair_if_needed()
+        self.assertEqual(d.cfg.agent_token, "agent-token")
+        self.assertEqual(d.cp.calls, 3)
+        self.assertEqual([c.args[0] for c in sleep.call_args_list], [5, 10])
+        with open(os.path.join(d.cfg.state_dir, "agent.token")) as f:
+            self.assertEqual(f.read(), "agent-token")
+
+    def test_a_refused_token_fails_at_once(self):
+        d = self.daemon([urllib.error.HTTPError("u", 401, "invalid pairing token", {}, None)])
+        with mock.patch("fleetctl_agent.daemon.time.sleep") as sleep, self.assertRaises(urllib.error.HTTPError):
+            d._pair_if_needed()
+        sleep.assert_not_called()
+
+
 class RouteTableTest(unittest.TestCase):
     def test_routes_are_well_formed(self):
         for table in (ROUTES, API_ROUTES):
@@ -131,6 +183,20 @@ ONLY_DEFAULT = {("GET", "/api/profiles"): {"profiles": [
 
 
 class CapturedDashboardTest(unittest.TestCase):
+    def test_copied_plugin_claims_no_hooks_until_enabled(self):
+        h = CapturedDashboard()
+        os.makedirs(os.path.join(h.cfg.hermes_home, "plugins", "fleetcontrol"))
+        r = h.capability_report()
+        self.assertEqual(r["plugins"]["fleetcontrol"], "installed, not enabled")
+        self.assertNotIn("hooks", r["capabilities"])
+        self.assertNotIn("policy.enforce", r["capabilities"])
+        with open(os.path.join(h.cfg.hermes_home, "config.yaml"), "w", encoding="utf-8") as f:
+            f.write("plugins:\n  enabled:\n    - telegram_topic_profiles\n    - fleetcontrol\n")
+        r = h.capability_report()
+        self.assertEqual(r["plugins"]["fleetcontrol"], "enabled")
+        self.assertIn("hooks", r["capabilities"])
+        self.assertIn("policy.enforce", r["capabilities"])
+
     def test_session_header_is_the_one_hermes_accepts(self):
         h = CapturedDashboard()
         h.profiles()

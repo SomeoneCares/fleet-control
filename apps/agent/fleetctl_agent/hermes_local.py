@@ -76,10 +76,12 @@ class HermesLocalError(RuntimeError):
 
 @dataclass
 class HermesLocalConfig:
-    hermes_bin: str = field(default_factory=lambda: shutil.which("hermes") or "hermes")
-    dashboard_url: str = "http://127.0.0.1:9119"
+    # Services often run without ~/.local/bin on PATH, so the installer passes HERMES_BIN explicitly;
+    # it also points HERMES_DASHBOARD_URL at the loopback dashboard it runs for the daemon.
+    hermes_bin: str = field(default_factory=lambda: os.environ.get("HERMES_BIN") or shutil.which("hermes") or "hermes")
+    dashboard_url: str = field(default_factory=lambda: os.environ.get("HERMES_DASHBOARD_URL", "http://127.0.0.1:9119"))
     dashboard_token: Optional[str] = field(default_factory=lambda: os.environ.get("HERMES_DASHBOARD_SESSION_TOKEN"))
-    api_url: str = "http://127.0.0.1:8642"
+    api_url: str = field(default_factory=lambda: os.environ.get("HERMES_API_URL", "http://127.0.0.1:8642"))
     api_key: Optional[str] = field(default_factory=lambda: os.environ.get("API_SERVER_KEY"))
     hermes_home: str = field(default_factory=lambda: os.environ.get("HERMES_HOME") or os.path.expanduser("~/.hermes"))
     timeout: float = 15.0
@@ -157,14 +159,23 @@ class HermesLocal:
             report["surfaces"]["api"] = "unreachable"
             report["notes"].append(f"api: {e}")
         report["surfaces"]["cli"] = "ok" if shutil.which(self.cfg.hermes_bin) or os.path.exists(self.cfg.hermes_bin) else "missing"
+        # Hooks and policy enforcement need the plugin enabled in config.yaml, not just copied in.
         plugin_dir = os.path.join(self.cfg.hermes_home, "plugins", "fleetcontrol")
-        report["plugins"]["fleetcontrol"] = "installed" if os.path.isdir(plugin_dir) else "missing"
-        report["plugins"]["langfuse"] = "enabled" if "observability/langfuse" in self._enabled_plugins() else "not enabled"
+        enabled = self._enabled_plugins()
+        if not os.path.isdir(plugin_dir):
+            report["plugins"]["fleetcontrol"] = "missing"
+        elif "fleetcontrol" in enabled:
+            report["plugins"]["fleetcontrol"] = "enabled"
+        else:
+            report["plugins"]["fleetcontrol"] = "installed, not enabled"
+            report["notes"].append("fleetcontrol plugin: not in plugins.enabled; no evidence capture or policy "
+                                   "enforcement until it is enabled and Hermes restarts")
+        report["plugins"]["langfuse"] = "enabled" if "observability/langfuse" in enabled else "not enabled"
         # Capability ids consumed by blueprint.requires.capabilities
         caps_out = ["runs", "sessions", "profiles.read"] if report["surfaces"].get("api") == "ok" else []
         if report["surfaces"].get("dashboard") == "loopback" or report["surfaces"]["cli"] == "ok":
             caps_out += ["profiles.write"]
-        if report["plugins"]["fleetcontrol"] == "installed":
+        if report["plugins"]["fleetcontrol"] == "enabled":
             caps_out += ["hooks", "policy.enforce"]
         report["capabilities"] = caps_out
         return report

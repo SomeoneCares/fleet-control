@@ -18,6 +18,12 @@ class PlannerTest(unittest.TestCase):
         self.assertEqual(plan["approvals_required"], 0)
         self.assertEqual(plan["policy_push"]["sanctions-screener"]["deny_tools"], ["web.fetch"])
         self.assertEqual(plan["policy_push"]["case-orchestrator"]["approve_tools"], ["http.post", "sar.submit"])
+        # new profiles come with Hermes's defaults on; the create syncs to exactly the blueprint's lists
+        ops = creates[0]["ops"]
+        self.assertIn({"op": "sync_skills", "profile": "case-orchestrator",
+                       "skills": ["case-routing", "evidence-ledger", "redaction"]}, ops)
+        self.assertIn({"op": "sync_toolsets", "profile": "case-orchestrator", "toolsets": []}, ops)
+        self.assertFalse([o for o in ops if o["op"] in ("set_skill", "set_toolset")])
 
     def test_in_sync_instance_has_no_changes(self):
         live = {k: dict(v) for k, v in self.desired.items()}

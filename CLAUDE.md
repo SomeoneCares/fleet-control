@@ -47,9 +47,16 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   source copied to `~/fleet-control-src`). The installer no longer writes to `~/.hermes/.env` and leaves the LAN
   dashboard alone; the plugin is copied but not enabled, and the capability report says so. The daemon reaches a
   local dev API through an SSH reverse tunnel Basem runs: `ssh -N -R 127.0.0.1:18080:127.0.0.1:8080 hermes@<host>`.
-- NEXT: Slice 1 exit test on `hermesbo-lab-01` with a one-agent blueprint (`fc-exit-test`, throwaway; the four
-  business profiles stay unmanaged); then OIDC sign-in mapped onto the same roles; PostgreSQL store; Docker Compose.
-  Gap found: no "blueprint from imported live profiles" route yet (build document Slice 1).
+- DONE (2026-09-16): Slice 1 exit test passed on `hermesbo-lab-01` (Hermes 0.21.2) with a one-agent blueprint
+  (`fc-exit-test`, throwaway, deleted afterwards; the business profiles stayed unmanaged): connect → plan (Dana,
+  Fleet Architect) → apply (Sam, Operator) → hand edit of SOUL.md + `hermes tools enable web` → drift on both
+  fields → revert → clean scan. What the real host taught us: a new profile starts with 18 toolsets and ~53 skills
+  on, so creates now `sync_skills`/`sync_toolsets` to exactly the blueprint's lists; `hermes-agent` is an
+  essential skill Hermes never disables (`ESSENTIAL_SKILLS`), so the agent leaves it unmanaged and the compat check
+  pins the set; Operators cannot create plans from a blueprint, only revert plans.
+- NEXT: "blueprint from imported live profiles" (Slice 1 gap: import exists, turning it into a Blueprint v1 does
+  not); OIDC sign-in mapped onto the same roles; PostgreSQL store (the dev API loses instances, pairings and
+  people on restart); Docker Compose packaging.
 
 ## Working agreements
 - Keep tests runnable with `python3 -m unittest` (no pytest-only features). Add tests with every module.

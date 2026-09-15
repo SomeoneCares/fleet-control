@@ -24,11 +24,16 @@ import subprocess
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 # The header the dashboard checks (``_SESSION_HEADER_NAME`` in hermes_cli/web_server.py).
 # A bare ``X-Hermes-Session`` is refused with 401 on 0.21.2 (see the capture's auth probe).
 DASHBOARD_SESSION_HEADER = "X-Hermes-Session-Token"
+
+# Skills Hermes keeps enabled whatever the config says (``ESSENTIAL_SKILLS`` in agent/skill_utils.py;
+# the disabled list silently drops them). Fleet Control leaves them unmanaged: not in live state,
+# not synced, never drift. scripts/hermes_compat_check.py fails when upstream's set changes.
+HERMES_ESSENTIAL_SKILLS = frozenset({"hermes-agent"})
 
 # Dashboard backend routes (hermes_cli/web_routers/*). Request bodies are the web_models.py
 # classes named below; response shapes are as captured on 0.21.2.
@@ -217,7 +222,8 @@ class HermesLocal:
             raise HermesLocalError(f"profile {name!r} not found on this instance")
         soul = self.dashboard("profiles.soul.get", name=name) or {}
         soul_text = (soul.get("content") or "").rstrip() + "\n"
-        skills = [s["name"] for s in (self.dashboard("skills.list", name=name) or []) if s.get("enabled")]
+        skills = [s["name"] for s in (self.dashboard("skills.list", name=name) or [])
+                  if s.get("enabled") and s["name"] not in HERMES_ESSENTIAL_SKILLS]
         toolsets = {t["name"] for t in (self.dashboard("toolsets.list", name=name) or []) if t.get("enabled")}
         return {
             "description": prof.get("description"),
@@ -262,6 +268,28 @@ class HermesLocal:
     def set_toolset(self, name: str, toolset: str, enabled: bool) -> None:
         self.dashboard("toolsets.toggle", {"enabled": enabled, "profile": name}, name=name, toolset=toolset)
 
+    def sync_skills(self, name: str, wanted: list[str]) -> list[str]:
+        """Enable exactly ``wanted`` on the profile. Returns the skills that were toggled."""
+        live = {s["name"]: bool(s.get("enabled")) for s in (self.dashboard("skills.list", name=name) or [])
+                if s["name"] not in HERMES_ESSENTIAL_SKILLS}
+        wanted = [s for s in wanted if s not in HERMES_ESSENTIAL_SKILLS]
+        return self._sync("skills", live, wanted, lambda s, on: self.set_skill(name, s, on))
+
+    def sync_toolsets(self, name: str, wanted: list[str]) -> list[str]:
+        """Enable exactly ``wanted`` on the profile. Returns the toolsets that were toggled."""
+        live = {t["name"]: bool(t.get("enabled")) for t in (self.dashboard("toolsets.list", name=name) or [])}
+        return self._sync("toolsets", live, wanted, lambda t, on: self.set_toolset(name, t, on))
+
+    @staticmethod
+    def _sync(kind: str, live: dict[str, bool], wanted: list[str], toggle: Callable[[str, bool], None]) -> list[str]:
+        unknown = sorted(set(wanted) - set(live))
+        if unknown:  # checked before any toggle, so a bad blueprint leaves the profile as it was
+            raise HermesLocalError(f"{kind} not available on this instance: {', '.join(unknown)}")
+        changed = [k for k, on in sorted(live.items()) if on != (k in wanted)]
+        for k in changed:
+            toggle(k, k in wanted)
+        return changed
+
     def snapshot(self, dest_dir: str) -> str:
         """Tar the profile directories before an apply. Returns the archive path."""
         import tarfile
@@ -285,6 +313,8 @@ def diff_managed(desired: dict, live: dict) -> list[dict]:
     out = []
     for key in ("description", "model", "soul_sha256", "skills", "toolsets", "mcps"):
         d, l = desired.get(key), live.get(key)
+        if key == "skills":  # essential skills stay on whatever the blueprint says; they are not drift
+            d, l = (None if x is None else sorted(set(x) - HERMES_ESSENTIAL_SKILLS) for x in (d, l))
         if d != l:
             out.append({"field": key, "blueprint": d, "live": l})
     return out

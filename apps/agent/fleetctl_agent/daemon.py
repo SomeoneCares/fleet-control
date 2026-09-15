@@ -200,7 +200,8 @@ class Jobs:
 
     def apply(self, p: dict) -> dict:
         """params: {"changes": [ {op, profile, ...} ], "snapshot": true}.
-        Ops: ensure_profile, write_soul, set_skill, set_toolset. Order is preserved; first failure stops."""
+        Ops: ensure_profile, write_soul, set_skill, set_toolset, sync_skills, sync_toolsets (enable exactly
+        the listed ones; used for new profiles). Order is preserved; first failure stops."""
         results = []
         snap = None
         if p.get("snapshot", True):
@@ -216,6 +217,10 @@ class Jobs:
                     self.hermes.set_skill(ch["profile"], ch["skill"], bool(ch.get("enabled", True)))
                 elif op == "set_toolset":
                     self.hermes.set_toolset(ch["profile"], ch["toolset"], bool(ch.get("enabled", True)))
+                elif op == "sync_skills":
+                    self.hermes.sync_skills(ch["profile"], ch.get("skills") or [])
+                elif op == "sync_toolsets":
+                    self.hermes.sync_toolsets(ch["profile"], ch.get("toolsets") or [])
                 else:
                     raise ValueError(f"unknown op {op!r}")
                 results.append({"op": op, "profile": ch.get("profile"), "ok": True})

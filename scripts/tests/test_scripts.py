@@ -74,6 +74,23 @@ class CompatTest(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("X-Hermes-Session-Token", detail)
 
+    def _skill_utils(self, text):
+        root = self._tree()
+        os.makedirs(os.path.join(root, "agent"))
+        with open(os.path.join(root, "agent", "skill_utils.py"), "w", encoding="utf-8") as f:
+            f.write(text)
+        return root
+
+    def test_essential_skills_match_daemon(self):
+        ok, _ = compat._essential(self._skill_utils('ESSENTIAL_SKILLS: frozenset = frozenset({"hermes-agent"})\n'))
+        self.assertTrue(ok)
+
+    def test_a_new_essential_skill_fails(self):
+        ok, detail = compat._essential(self._skill_utils('ESSENTIAL_SKILLS = frozenset({"hermes-agent", "memory-core"})\n'))
+        self.assertFalse(ok)
+        self.assertIn("memory-core", detail)
+        self.assertFalse(compat._essential(self._tree())[0])  # file gone
+
     def test_request_bodies(self):
         models = "".join(f"class {c}(BaseModel):\n" + "".join(f"    {f}: str\n" for f in fs) + "\n\n"
                          for c, fs in compat.REQUEST_BODIES.items())

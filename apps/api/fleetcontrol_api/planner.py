@@ -32,8 +32,10 @@ def compute_plan(bp: Blueprint, live: dict[str, dict], *, target_instance: str, 
             ops = [
                 {"op": "ensure_profile", "profile": name, "description": a.role, "provider": a.model.provider, "model": a.model.name},
                 {"op": "write_soul", "profile": name, "content": a.soul.render()},
-            ] + [{"op": "set_skill", "profile": name, "skill": s, "enabled": True} for s in a.skills] + [
-                {"op": "set_toolset", "profile": name, "toolset": t, "enabled": True} for t in a.toolsets
+                # Hermes starts a new profile with its default skills and toolsets on (18 toolsets on 0.21.2), so
+                # enabling the blueprint's alone leaves drift; sync makes the live lists exactly the blueprint's.
+                {"op": "sync_skills", "profile": name, "skills": list(a.skills)},
+                {"op": "sync_toolsets", "profile": name, "toolsets": list(a.toolsets)},
             ]
             rows.append(_row("create", f"profile {name}", f"Role, model {a.model.name}, {len(a.skills)} skills, {len(a.mcps)} MCPs", method, "medium", ops))
             continue

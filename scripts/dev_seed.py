@@ -137,6 +137,9 @@ class SimulatedAgent(threading.Thread):
             items = set(prof[key])
             (items.add if ch.get("enabled", True) else items.discard)(item)
             prof[key] = sorted(items)
+        elif ch["op"] in ("sync_skills", "sync_toolsets"):
+            key = "skills" if ch["op"] == "sync_skills" else "toolsets"
+            prof[key] = sorted(ch.get(key) or [])
 
 
 def wait(check, what: str, timeout: float = 30) -> None:

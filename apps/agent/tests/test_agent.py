@@ -62,6 +62,16 @@ class ApplyTest(unittest.TestCase):
         self.assertTrue(out["snapshot"].endswith("snap.tar.gz"))
         self.assertEqual([c[0] for c in h.calls], ["ensure_profile"])
 
+    def test_sync_ops_reach_hermes(self):
+        h = FakeHermes()
+        h.sync_skills = lambda *a: h.calls.append(("sync_skills", a))
+        h.sync_toolsets = lambda *a: h.calls.append(("sync_toolsets", a))
+        out = Jobs(AgentConfig(state_dir=tempfile.mkdtemp()), h).dispatch({"kind": "apply", "params": {"changes": [
+            {"op": "sync_skills", "profile": "p", "skills": ["a"]},
+            {"op": "sync_toolsets", "profile": "p", "toolsets": []}]}})
+        self.assertTrue(out["ok"])
+        self.assertEqual(h.calls, [("sync_skills", ("p", ["a"])), ("sync_toolsets", ("p", []))])
+
     def test_unknown_job_kind(self):
         out = Jobs(AgentConfig(state_dir=tempfile.mkdtemp()), FakeHermes()).dispatch({"kind": "nope"})
         self.assertFalse(out["ok"])
@@ -99,6 +109,46 @@ class SocketTest(unittest.TestCase):
         s.sendall(b'{"kind":"tool.post","tool":"x"}\n{"kind":"session.end"}\n'); s.close()
         got = [q.get(timeout=2), q.get(timeout=2)]
         self.assertEqual([g["kind"] for g in got], ["tool.post", "session.end"])
+
+
+class SyncTest(unittest.TestCase):
+    class Stub(HermesLocal):
+        """Dashboard with a fresh profile's defaults: most things on."""
+        def __init__(self):
+            super().__init__(HermesLocalConfig(hermes_home=tempfile.mkdtemp()))
+            self.toggled = []
+        def dashboard(self, route, body=None, **params):
+            if route == "toolsets.list":
+                return [{"name": "web", "enabled": True}, {"name": "file", "enabled": True}, {"name": "memory", "enabled": False}]
+            if route == "skills.list":
+                return [{"name": "a", "enabled": True}, {"name": "b", "enabled": False}, {"name": "hermes-agent", "enabled": True}]
+            self.toggled.append((route, params.get("toolset") or body.get("name"), body["enabled"]))
+
+    def test_toolsets_end_up_exactly_as_wanted(self):
+        h = self.Stub()
+        self.assertEqual(h.sync_toolsets("p", ["memory"]), ["file", "memory", "web"])
+        self.assertEqual(h.toggled, [("toolsets.toggle", "file", False), ("toolsets.toggle", "memory", True),
+                                     ("toolsets.toggle", "web", False)])
+
+    def test_skills_end_up_exactly_as_wanted(self):
+        h = self.Stub()
+        self.assertEqual(h.sync_skills("p", ["b"]), ["a", "b"])
+        self.assertEqual(h.toggled, [("skills.toggle", "a", False), ("skills.toggle", "b", True)])
+
+    def test_essential_skills_are_left_alone(self):
+        h = self.Stub()
+        self.assertEqual(h.sync_skills("p", ["hermes-agent"]), ["a"])  # listing it is harmless, not an error
+        self.assertEqual(h.toggled, [("skills.toggle", "a", False)])
+        desired = {"skills": [], "toolsets": []}
+        self.assertEqual(diff_managed(desired, {"skills": ["hermes-agent"], "toolsets": []}), [])
+        self.assertEqual(diff_managed(desired, {"skills": ["hermes-agent", "x"], "toolsets": []}),
+                         [{"field": "skills", "blueprint": [], "live": ["x"]}])
+
+    def test_unknown_name_fails_before_any_toggle(self):
+        h = self.Stub()
+        with self.assertRaises(HermesLocalError):
+            h.sync_toolsets("p", ["web", "no-such-toolset"])
+        self.assertEqual(h.toggled, [])
 
 
 class ConfigTest(unittest.TestCase):
@@ -215,6 +265,7 @@ class CapturedDashboardTest(unittest.TestCase):
         self.assertEqual(st["model"], {"provider": "nous", "name": "upstage/solar-pro4:free"})
         self.assertEqual(st["mcps"], [])  # {"servers": []} must not read as ["servers"]
         self.assertIn("claude-code", st["skills"])
+        self.assertNotIn("hermes-agent", st["skills"])  # essential: always on, never managed
         self.assertEqual(st["skills"], sorted(st["skills"]))
         self.assertIn("web", st["toolsets"])
         soul = h.responses[("GET", "/api/profiles/default/soul")]["content"]

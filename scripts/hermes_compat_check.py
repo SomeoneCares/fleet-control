@@ -111,6 +111,27 @@ def _hdr(root):
     return (ok, "ok" if ok else f"{want} not found in web_server.py")
 
 
+def _daemon_essential_skills():
+    """The skills fleetctl-agent leaves unmanaged, read from its source so the two cannot diverge."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "apps", "agent", "fleetctl_agent", "hermes_local.py"), encoding="utf-8") as f:
+        m = re.search(r"HERMES_ESSENTIAL_SKILLS\s*=\s*frozenset\(\{([^}]*)\}\)", f.read())
+    return set(re.findall(r'"([^"]+)"', m.group(1))) if m else set()
+
+
+@check("essential skills match the ones fleetctl-agent leaves unmanaged")
+def _essential(root):
+    rel = "agent/skill_utils.py"
+    if not os.path.exists(os.path.join(root, rel)):
+        return (False, f"{rel} gone; find where Hermes pins always-on skills")
+    m = re.search(r"ESSENTIAL_SKILLS\s*(?::[^=\n]*)?=\s*frozenset\(\{([^}]*)\}\)", read(root, rel))
+    if not m:
+        return (False, f"ESSENTIAL_SKILLS not found in {rel}")
+    upstream, ours = set(re.findall(r'"([^"]+)"', m.group(1))), _daemon_essential_skills()
+    ok = upstream == ours
+    return (ok, "ok" if ok else f"Hermes pins {sorted(upstream)}, fleetctl-agent leaves {sorted(ours)} unmanaged")
+
+
 # --- request bodies the daemon sends (hermes_cli/web_models.py) ---------------------------
 REQUEST_BODIES = {
     "ProfileCreate": ["name", "clone_from", "description", "provider", "model"],

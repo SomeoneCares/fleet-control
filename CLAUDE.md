@@ -65,8 +65,63 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   methods; never mutate a returned record. `FLEETCONTROL_DATABASE_URL` picks the database (unset = in-memory SQLite,
   what the tests use); `scripts/dev_api.py` uses `.fleetcontrol-dev.db` (`--fresh` starts over); CI runs the API
   tests a second time against a PostgreSQL 16 service. Unit tests must pass `Store("sqlite://")` explicitly.
-- NEXT: Docker Compose packaging (api, postgres, web; worker/redis when Slice 3 needs them); OIDC sign-in mapped
-  onto the same roles; Alembic migrations before the first schema change on a real install.
+- DONE (2026-09-16): Settings — General (workspace name, sign-in length, longest API token), Approvals (minimum
+  approvals per environment; `planner.compute_plan(default_approvals=...)` takes max(floor, blueprint target)),
+  API tokens (`Authorization: Bearer fct_…`, hashed, expiring, revocable; a token acts as its owner and cannot mint
+  tokens or change the password; writes by token need no X-Fleet-Control header). Observability and Notifications
+  tabs arrive with Slices 3 and 4. `settings.py` holds defaults and bounds.
+- DONE (2026-09-16): Slice 2 Fleet Architect (`architect.py`, `/api/v1/architect/*`, screen at `/architect`). Mission +
+  constraints go to a designated architect profile as a `hermes_run` agent job (`/p/<profile>/v1/runs`, polled; the
+  daemon runs it on a background thread); the answer must follow `fleetcontrol.proposal/v1` (validated; dangling
+  references dropped and listed under `adjustments`; unusable answers kept with the reason and the raw text).
+  Accept/edit/remove per agent, open questions → Ask again (the previous proposal, decisions and answers go back),
+  save accepted agents as a Blueprint v1 draft (constraints become policies). The architect is any profile you
+  choose, or the `fleet-control-architect` blueprint (one tool-less `fc-architect` profile, planned and applied like
+  any blueprint); on `hermesbo-lab-01` it is installed and chosen. Multiplex gateways serve new profiles without a
+  restart. Hermes 0.21.2 checks a named profile's OWN `API_SERVER_KEY` (its `.env`) for `/p/<profile>/` requests and
+  never falls back to the default key; the agent creates one (mode 600, stays on the host) the first time Fleet
+  Control asks a profile that has none, and the gateway picks it up without a restart. Admin/Fleet Architect ask and decide; every role that reads blueprints can read sessions.
+- DONE (2026-09-16): Slice 3 part 1 — Test Lab and Assurance (`testlab.py`, `/api/v1/testlab/*`, `/api/v1/assurance/*`,
+  screens at `/testlab` and `/assurance`). A test runs its scenario on the target agent's profile on a lab or staging
+  instance (`run_test` job, background thread); the agent returns output, usage, duration and every tool call from the
+  Hermes session transcript (`GET /api/sessions/{id}/messages`, paged oldest-first). `evaluate()` judges required and
+  forbidden tools (MCP tools are `mcp_<server>__<tool>`), the expected artifact, the evaluator and the limits, and
+  turns them into claims with the four verdicts; missing transcript = Not verifiable, never a guess. Tests are edited
+  on drafts (`PUT/DELETE /api/v1/blueprints/{name}/{version}/tests/{id}`). Production applies are gated on the
+  version's agent tests having passed (Settings → Approvals, `require_tests_for_production`, default on; workflow
+  tests do not gate until Slice 5). Assurance: claims, 24 h summary, CSV export.
+- DONE (2026-09-16): Slice 3 part 2 — Integrations (`integrations.py`, `/api/v1/integrations*`, screen at
+  `/integrations`). What exists comes from the instances (agent jobs `mcp_discover`, which connects to each MCP
+  server to list its tools, and `mcp_write` for add/remove/enable/disable); who may use it comes from the blueprints
+  (an agent's `mcps`/`model` and the tool allow- and deny-lists in policies). Server configuration lives on the
+  instance, never in a blueprint, and **no credentials pass through Fleet Control**: a server is added by url or
+  command only. `hermes_compat_check.py` now pins `/api/mcp/servers/{name}/test` and `/enabled`.
+- DONE (2026-09-16): Settings → Observability (read-only, honest): per instance, whether Assurance can read the
+  Hermes session transcript (any paired agent), and the state of the `fleetcontrol` and Langfuse plugins from the
+  capability report. Enabling a plugin changes the instance, so it is done there; Langfuse keys never reach Fleet
+  Control. Slice 3 is complete (Test Lab, Assurance, Integrations, Observability).
+- DONE (2026-09-16): Slice 4 part 1 — Content zones (`content.py`, `/api/v1/content/*`, screen at `/content`) and
+  Fleet outputs (`outputs.py`, `/api/v1/outputs*`, screen at `/outputs`). A zone names the roles that may read it
+  (an Admin always may) and carries a classification; every file and output lives in one, so the zone is the single
+  answer to "who sees this". An output keeps its provenance — which agent produced it, from which run, on which
+  instance — and agents file their own through `POST /agent/v1/instances/{id}/outputs`.
+- DONE (2026-09-16): Slice 4 part 2 — Decision Rooms backend (`rooms.py`, `/api/v1/rooms*`). A room holds one
+  question, a case, its content zone, evidence (files, outputs, assurance claims with their verdicts, notes),
+  findings from agents, and the options. Decisions are append-only, one per person, each with a rationale; the room
+  closes when the decisions it needs are in, and a named second approver keeps it open until they decide too (the
+  room reports when the two chose differently instead of hiding it). Admins, Fleet Architects and Operators open
+  rooms; **Admins and Approvers decide** (`rooms.decide`); nobody opens a room into a zone they could not then read.
+  Agents open rooms and file findings through `/agent/v1` and never decide. Each decision is a read-change-write in
+  one transaction (`store.update_room`), so two people deciding at once cannot lose one another's decision.
+  Screens (Decision Rooms, My decisions) come next.
+- NOTE: on Basem's Windows box `python3` is the Microsoft Store stub; run the suites as
+  `PYTHON=.venv/Scripts/python bash scripts/test.sh` (with `PYTHONIOENCODING=utf-8`).
+- PLAN (Basem, 2026-09-16): complete the whole portal before Docker, every screen working end to end (real backend,
+  real Hermes runs on the lab host where needed), in build-document order: Slice 2 Fleet Architect → Slice 3 Test
+  Lab, Assurance, Integrations (+ Settings → Observability) → Slice 4 Workspace, Decision Rooms, Ask the fleet,
+  Fleet outputs, Messaging, Content (+ Notifications, Access inspector) → Slice 5 Workflows.
+- LATER: Docker Compose packaging; OIDC sign-in mapped onto the same roles; Alembic migrations before the first
+  schema change on a real install.
 
 ## Working agreements
 - Keep tests runnable with `python3 -m unittest` (no pytest-only features). Add tests with every module.

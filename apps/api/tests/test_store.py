@@ -139,5 +139,40 @@ class QueueAndTransitionTest(unittest.TestCase):
             self.s.update_user("x@example.org", email="y@example.org")
 
 
+class TestRunStoreTest(unittest.TestCase):
+    def test_runs_are_filed_updated_and_listed_newest_first(self):
+        s = Store("sqlite://")
+        for i, test in enumerate(("a", "b", "a")):
+            s.save_test_run({"id": f"tr_{i}", "blueprint": "aml", "version": 3, "test_id": test, "instance_id": "lab",
+                             "status": "running", "created_at": 100.0 + i})
+        s.update_test_run("tr_2", lambda d: d.update(status="passed", checks=[]))
+        self.assertEqual([r["id"] for r in s.list_test_runs(test_id="a")], ["tr_2", "tr_0"])
+        self.assertEqual(s.get_test_run("tr_2")["status"], "passed")
+        self.assertEqual([r["id"] for r in s.list_test_runs(blueprint="aml", since=101.0)], ["tr_2", "tr_1"])
+        self.assertIsNone(s.update_test_run("nope", lambda d: None))
+
+
+class ApiTokenStoreTest(unittest.TestCase):
+    def test_tokens_are_hashed_and_die_when_revoked(self):
+        s = Store("sqlite://")
+        s.add_user("ci@example.org", "CI", "operator", "h")
+        rec, secret = s.create_api_token("ci@example.org", "pipeline", time.time() + 60)
+        with s.engine.connect() as c:
+            self.assertNotIn(secret, repr(c.exec_driver_sql("select * from api_tokens").fetchall()))
+        user, tok = s.api_token_user(secret)
+        self.assertEqual((user["email"], tok["id"]), ("ci@example.org", rec["id"]))
+        self.assertIsNotNone(s.get_api_token(rec["id"])["last_used_at"])
+        s.revoke_api_token(rec["id"])
+        self.assertIsNone(s.api_token_user(secret))
+
+    def test_settings_keep_who_changed_them(self):
+        s = Store("sqlite://")
+        self.assertEqual(s.get_settings(), {})
+        s.set_settings({"approvals_production": 3}, "admin@example.org")
+        s.set_settings({"approvals_production": 4}, "boss@example.org")
+        self.assertEqual(s.get_settings(), {"approvals_production": 4})
+        self.assertEqual(s.settings_updated()["by"], "boss@example.org")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -13,7 +13,7 @@ packages/
 apps/
   agent/              fleetctl-agent — host daemon: plugin socket, outbound connection, jobs (import, plan-apply, drift, policy push, snapshot, tests)
   api/                fleetcontrol-api — FastAPI control plane (web routes + agent transport), planner, in-memory store
-  web/                React client: Slice 1 screens (Instances, Blueprints, Plan, Drift, Designer, Studio, Audit); see apps/web/README.md
+  web/                React client: Slice 1 screens (Instances, Blueprints, Plan, Drift, Designer, Studio, Audit, Access, Settings) and the Slice 2 Fleet Architect; see apps/web/README.md
 scripts/    test.sh · hermes_compat_check.py (nightly against upstream) · install-agent.sh (one-liner on a Hermes host)
 ```
 
@@ -40,7 +40,8 @@ pip install -e packages/blueprint_schema -e apps/api[dev]
 uvicorn fleetcontrol_api.main:app --port 8080
 ```
 Every `/api/v1` route needs a signed-in person (session cookie from `POST /api/v1/auth/login`; writes also send
-`X-Fleet-Control: 1`). On the first start set `FLEETCONTROL_ADMIN_EMAIL` (and optionally `FLEETCONTROL_ADMIN_PASSWORD`;
+`X-Fleet-Control: 1`), or an API token from Settings → API tokens (`Authorization: Bearer fct_…`; it acts as its
+owner). On the first start set `FLEETCONTROL_ADMIN_EMAIL` (and optionally `FLEETCONTROL_ADMIN_PASSWORD`;
 otherwise a one-time password is printed), and `FLEETCONTROL_COOKIE_SECURE=1` behind HTTPS. For local development,
 `python scripts/dev_api.py` does this for you and keeps the password in the git-ignored `.fleetcontrol-dev-credentials.json`;
 `python scripts/dev_seed.py` then adds demo data and one person per role.
@@ -54,6 +55,6 @@ Then: `POST /api/v1/instances` → copy `install_command` → run `scripts/insta
 
 ## Status
 
-Scaffold. Schema, planner, plugin and daemon job logic are unit-tested; the API is smoke-tested in CI. The dashboard routes the daemon uses are verified against a real Hermes 0.21.2 host (`docs/dashboard-capture-0.21.2*.json`). The Slice 1 exit test passed on that host. Not yet done: Docker Compose packaging, OIDC single sign-on, and everything in Slices 2–5 of the build document.
+Scaffold. Schema, planner, plugin and daemon job logic are unit-tested; the API is smoke-tested in CI. The dashboard routes the daemon uses are verified against a real Hermes 0.21.2 host (`docs/dashboard-capture-0.21.2*.json`). The Slice 1 exit test passed on that host. Slice 2 (Fleet Architect) works against a real architect profile. Not yet done: Slices 3–5 of the build document, Docker Compose packaging, and OIDC single sign-on.
 
 Design canvas: the "Fleet Control Redesign" artifact on claude.ai. Regenerate a screen with `cd design && python3 build.py <Name> <nav>`.

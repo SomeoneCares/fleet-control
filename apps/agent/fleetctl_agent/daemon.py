@@ -27,11 +27,15 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
-from .hermes_local import HermesLocal, HermesLocalConfig, diff_managed
+from .hermes_local import HermesLocal, HermesLocalConfig, HermesLocalError, diff_managed, tool_calls_from_messages
 
 logger = logging.getLogger("fleetctl-agent")
 
 AGENT_VERSION = "0.1.0"
+
+# Jobs that wait on a Hermes run (minutes) run on their own thread, so imports, applies and drift scans
+# queued behind them are not held up.
+BACKGROUND_JOBS = frozenset({"hermes_run", "run_test", "mcp_discover"})
 
 
 @dataclass
@@ -152,6 +156,9 @@ class Jobs:
             "push_policy": self.push_policy,
             "snapshot": self.snapshot,
             "run_test": self.run_test,
+            "hermes_run": self.hermes_run,
+            "mcp_discover": self.mcp_discover,
+            "mcp_write": self.mcp_write,
         }
 
     def dispatch(self, job: dict) -> dict:
@@ -246,10 +253,78 @@ class Jobs:
     def snapshot(self, p: dict) -> dict:
         return {"snapshot": self.hermes.snapshot(os.path.join(self.cfg.state_dir, "snapshots"))}
 
+    def mcp_discover(self, p: dict) -> dict:
+        """params: {profiles: [...], probe: true}: the MCP servers of each profile and, for the enabled ones,
+        the tools they expose (each probe connects to the server, so this job runs on its own thread)."""
+        out: dict[str, list[dict]] = {}
+        for profile in p.get("profiles") or []:
+            servers = []
+            for s in self.hermes.mcp_list(profile):
+                row = {k: s[k] for k in ("name", "transport", "enabled", "url", "command", "auth", "tool_count") if k in s}
+                if p.get("probe", True) and s.get("enabled", True) and s.get("name"):
+                    probe = self.hermes.mcp_probe(profile, s["name"])
+                    row["ok"] = bool(probe.get("ok"))
+                    row["error"] = probe.get("error")
+                    row["tools"] = [{"name": t.get("name"), "description": (t.get("description") or "")[:200]}
+                                    for t in (probe.get("tools") or [])][:100]
+                servers.append(row)
+            out[profile] = servers
+        return {"servers": out, "at": time.time()}
+
+    def mcp_write(self, p: dict) -> dict:
+        """params: {profile, action: add|remove|enable|disable, server?, config?}. Credentials are never sent
+        through Fleet Control: a server is added by url or command only, and secrets stay on this host."""
+        profile, action = p["profile"], p["action"]
+        if action == "add":
+            config = dict(p["config"])
+            server = config["name"]
+            out = self.hermes.mcp_add(profile, config)
+        elif action == "remove":
+            server, out = p["server"], self.hermes.mcp_remove(profile, p["server"])
+        elif action in ("enable", "disable"):
+            server, out = p["server"], self.hermes.mcp_set_enabled(profile, p["server"], action == "enable")
+        else:
+            raise ValueError(f"unknown MCP action {action!r}")
+        return {"action": action, "profile": profile, "server": server, "result": out}
+
+    def _ensure_key(self, profile: Optional[str]) -> list[str]:
+        """A named profile needs its own API_SERVER_KEY for /p/<profile>/ runs; create one on this host when it
+        has none (the profile was chosen for Fleet Control to run), and say so."""
+        if profile not in (None, "", "default") and not self.hermes.profile_api_key(profile):
+            self.hermes.ensure_profile_api_key(profile)
+            return [f"gave profile {profile} its own API_SERVER_KEY (in its .env on this host)"]
+        return []
+
     def run_test(self, p: dict) -> dict:
-        """Submit a test scenario as a /v1 run; evidence arrives via the plugin. Returns run + session ids."""
-        run = self.hermes.api("runs.create", {"input": p["scenario"], "metadata": {"fleetcontrol_test": p.get("test_id")}})
-        return {"run_id": run.get("run_id"), "status": run.get("status")}
+        """params: {profile, scenario, timeout?}: run a test scenario on a profile (Test Lab) and collect the evidence
+        Fleet Control judges it by: the run's output, usage and duration, and every tool call in its session
+        transcript. ``ok`` means the test ran; whether it passed is Fleet Control's call."""
+        profile = p.get("profile")
+        notes = self._ensure_key(profile)
+        started = time.monotonic()
+        out = self.hermes.run_agent(profile, p["scenario"], p.get("instructions"), float(p.get("timeout", 300)))
+        out["duration_s"] = round(time.monotonic() - started, 1)
+        out["tool_calls"], out["evidence"] = None, "none"
+        if out.get("session_id"):
+            try:
+                out["tool_calls"] = tool_calls_from_messages(self.hermes.session_messages(profile, out["session_id"]))
+                out["evidence"] = "transcript"
+            except HermesLocalError as exc:
+                out["evidence_error"] = str(exc)
+        out["ok"] = True
+        if notes:
+            out["notes"] = notes
+        return out
+
+    def hermes_run(self, p: dict) -> dict:
+        """params: {profile, input, instructions?, timeout?}: one Hermes /v1 run, waited for (Fleet Architect)."""
+        profile = p.get("profile")
+        notes = self._ensure_key(profile)
+        out = self.hermes.run_agent(profile, p["input"], p.get("instructions"), float(p.get("timeout", 600)))
+        out["ok"] = out.get("status") == "completed"
+        if notes:
+            out["notes"] = notes
+        return out
 
 
 # ----------------------------------------------------------------------------- main loop
@@ -332,11 +407,17 @@ class AgentDaemon:
                 continue
             if not job:
                 continue
-            result = self.jobs.dispatch(job)
-            try:
-                self.cp.job_result(job["id"], result)
-            except Exception as exc:
-                logger.warning("job result delivery failed: %s", exc)
+            if job.get("kind") in BACKGROUND_JOBS:
+                threading.Thread(target=self._run_and_report, args=(job,), name=f"job-{job['id']}", daemon=True).start()
+            else:
+                self._run_and_report(job)
+
+    def _run_and_report(self, job: dict) -> None:
+        result = self.jobs.dispatch(job)
+        try:
+            self.cp.job_result(job["id"], result)
+        except Exception as exc:
+            logger.warning("job result delivery failed: %s", exc)
 
 
 def main() -> None:

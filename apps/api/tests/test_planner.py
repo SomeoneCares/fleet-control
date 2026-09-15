@@ -48,6 +48,18 @@ class PlannerTest(unittest.TestCase):
         self.assertIn(("write_soul", None), ops)
         self.assertEqual(plan["unmanaged_profiles"], ["unmanaged-bot"])
 
+    def test_the_organisation_floor_and_the_blueprint_target(self):
+        live = {k: dict(v) for k, v in self.desired.items()}
+        floor = lambda prod, stg=0: {"production": prod, "staging": stg, "lab": 0}
+        # the example's production target asks for 2: a floor of 3 raises it, a floor of 1 cannot lower it
+        for prod, want in ((3, 3), (1, 2)):
+            plan = compute_plan(self.bp, live, target_instance="hermes-prod-eu-01", agent_installed=True,
+                                environment="production", default_approvals=floor(prod))
+            self.assertEqual(plan["approvals_required"], want)
+        plan = compute_plan(self.bp, live, target_instance="some-staging", agent_installed=True, environment="staging",
+                            default_approvals=floor(2, 1))
+        self.assertEqual(plan["approvals_required"], 1)
+
     def test_production_needs_two_approvals_even_when_not_a_target(self):
         plan = compute_plan(self.bp, {}, target_instance="hermes-prod-us-02", agent_installed=True, environment="production")
         self.assertEqual(plan["approvals_required"], 2)

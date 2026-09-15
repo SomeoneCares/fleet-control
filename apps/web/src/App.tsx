@@ -7,9 +7,16 @@ import { AccessScreen } from "./screens/Access";
 import { ApplyPlanScreen } from "./screens/ApplyPlan";
 import { AuditScreen } from "./screens/Audit";
 import { BlueprintsScreen } from "./screens/Blueprints";
+import { ContentScreen } from "./screens/Content";
 import { DesignerScreen } from "./screens/Designer";
+import { FleetArchitectScreen } from "./screens/FleetArchitect";
 import { InstancesScreen } from "./screens/Instances";
+import { IntegrationsScreen } from "./screens/Integrations";
 import { NotYetScreen } from "./screens/NotYet";
+import { OutputsScreen } from "./screens/Outputs";
+import { SettingsScreen } from "./screens/Settings";
+import { AssuranceScreen } from "./screens/Assurance";
+import { TestLabScreen } from "./screens/TestLab";
 import { StudioScreen } from "./screens/Studio";
 import { WorkspaceHome } from "./screens/Workspace";
 
@@ -43,10 +50,17 @@ export const router = createBrowserRouter([
       { path: "instances/:id/drift", element: guarded("instances.read", <InstancesScreen />) },
       { path: "blueprints", element: guarded("blueprints.read", <BlueprintsScreen />) },
       { path: "plans/:id", element: guarded("plans.read", <ApplyPlanScreen />) },
+      { path: "architect", element: guarded("blueprints.read", <FleetArchitectScreen />) },
       { path: "designer", element: guarded("blueprints.read", <DesignerScreen />) },
       { path: "studio", element: guarded("blueprints.read", <StudioScreen />) },
       { path: "audit", element: guarded("audit.read", <AuditScreen />) },
       { path: "access", element: guarded("users.read", <AccessScreen />) },
+      { path: "content", element: guarded("content.read", <ContentScreen />) },
+      { path: "outputs", element: guarded("content.read", <OutputsScreen />) },
+      { path: "integrations", element: guarded("instances.read", <IntegrationsScreen />) },
+      { path: "testlab", element: guarded("blueprints.read", <TestLabScreen />) },
+      { path: "assurance", element: guarded("assurance.read", <AssuranceScreen />) },
+      { path: "settings", element: <SettingsScreen /> },  // every role: tabs follow permissions (API tokens for all)
       { path: "soon/:key", element: <NotYetScreen /> },
       { path: "*", element: <Home /> },
     ],

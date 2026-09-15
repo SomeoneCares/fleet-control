@@ -40,7 +40,16 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     "drift.resolve": ADMIN_PORTAL,  # accepting into a blueprint also needs blueprints.write
     "audit.read": ADMIN_PORTAL | {"viewer"},
     "users.read": frozenset({"admin"}),
-    "users.manage": frozenset({"admin"}),
+    "users.manage": frozenset({"admin"}),  # also: see and revoke everyone's API tokens
+    "rooms.read": _ALL,  # Decision Rooms; the room's content zone still decides what is shown (rooms.py)
+    "rooms.open": ADMIN_PORTAL,
+    "rooms.decide": frozenset({"admin", "approver"}),  # build document §2.2: Approvers decide in Decision Rooms
+    "content.read": _ALL,  # zones gate what each person actually sees (content.py)
+    "content.manage": frozenset({"admin", "fleet_architect"}),
+    "tests.run": ADMIN_PORTAL,  # Test Lab: run tests on lab and staging instances
+    "assurance.read": ADMIN_PORTAL,
+    "settings.read": ADMIN_PORTAL,  # Settings → General and Approvals (everyone manages their own API tokens)
+    "settings.manage": frozenset({"admin"}),
 }
 
 MIN_PASSWORD_LENGTH = 12

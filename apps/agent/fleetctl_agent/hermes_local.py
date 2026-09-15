@@ -21,7 +21,9 @@ import json
 import os
 import shutil
 import subprocess
+import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
@@ -34,6 +36,9 @@ DASHBOARD_SESSION_HEADER = "X-Hermes-Session-Token"
 # the disabled list silently drops them). Fleet Control leaves them unmanaged: not in live state,
 # not synced, never drift. scripts/hermes_compat_check.py fails when upstream's set changes.
 HERMES_ESSENTIAL_SKILLS = frozenset({"hermes-agent"})
+
+# Terminal run statuses (TERMINAL_STATUSES in gateway/platforms/api_server_runs.py).
+TERMINAL_RUN_STATUSES = frozenset({"completed", "failed", "cancelled"})
 
 # Dashboard backend routes (hermes_cli/web_routers/*). Request bodies are the web_models.py
 # classes named below; response shapes are as captured on 0.21.2.
@@ -56,6 +61,8 @@ ROUTES = {
     "mcp.list": ("GET", "/api/mcp/servers?profile={name}"),  # {"servers": [{name, transport, enabled, ...}]}
     "mcp.create": ("POST", "/api/mcp/servers?profile={name}"),  # MCPServerCreate{name, url|command, args, env, auth}
     "mcp.delete": ("DELETE", "/api/mcp/servers/{server}?profile={name}"),
+    "mcp.test": ("POST", "/api/mcp/servers/{server}/test?profile={name}"),  # connects and lists tools -> {ok, tools, error}
+    "mcp.enabled": ("PUT", "/api/mcp/servers/{server}/enabled?profile={name}"),  # MCPEnabledToggle{enabled, profile}
     "messaging.platforms": ("GET", "/api/messaging/platforms?profile={name}"),
     "messaging.platform.put": ("PUT", "/api/messaging/platforms/{platform}?profile={name}"),  # not captured yet
     # Webhook routes are not profile-scoped: they act on the dashboard process's own home.
@@ -71,6 +78,8 @@ API_ROUTES = {
     "runs.get": ("GET", "/v1/runs/{run_id}"),
     "runs.events": ("GET", "/v1/runs/{run_id}/events"),
     "sessions.messages": ("GET", "/api/sessions/{session_id}/messages"),  # after-the-fact evidence: full tool_calls
+    # the same route, paged oldest-first (the default page is the LATEST 500 messages)
+    "sessions.messages.page": ("GET", "/api/sessions/{session_id}/messages?order=oldest&limit={limit}&offset={offset}"),
     "sessions.list": ("GET", "/api/sessions?include_children=true"),
 }
 
@@ -122,10 +131,115 @@ class HermesLocal:
         headers = {DASHBOARD_SESSION_HEADER: self.cfg.dashboard_token} if self.cfg.dashboard_token else {}
         return self._request(self.cfg.dashboard_url, method, path.format(**params), body, headers)
 
-    def api(self, route: str, body: Optional[dict] = None, **params: str) -> Any:
+    def api(self, route: str, body: Optional[dict] = None, *, prefix: str = "", key: Optional[str] = None, **params: str) -> Any:
         method, path = API_ROUTES[route]
-        headers = {"Authorization": f"Bearer {self.cfg.api_key}"} if self.cfg.api_key else {}
-        return self._request(self.cfg.api_url, method, path.format(**params), body, headers)
+        key = key or self.cfg.api_key
+        headers = {"Authorization": f"Bearer {key}"} if key else {}
+        return self._request(self.cfg.api_url, method, prefix + path.format(**params), body, headers)
+
+    # ------------------------------------------------------------------ MCP servers (Integrations)
+
+    def mcp_list(self, profile: str) -> list[dict]:
+        """Every MCP server configured on a profile, as the dashboard summarises them."""
+        data = self.dashboard("mcp.list", name=profile)
+        servers = data.get("servers") if isinstance(data, dict) else data
+        return [s for s in (servers or []) if isinstance(s, dict)]
+
+    def mcp_probe(self, profile: str, server: str) -> dict:
+        """Connect to one server and list its tools: {ok, tools: [{name, description}], error}."""
+        return self.dashboard("mcp.test", name=profile, server=server) or {}
+
+    def mcp_add(self, profile: str, config: dict) -> dict:
+        return self.dashboard("mcp.create", config, name=profile) or {}
+
+    def mcp_remove(self, profile: str, server: str) -> dict:
+        return self.dashboard("mcp.delete", name=profile, server=server) or {}
+
+    def mcp_set_enabled(self, profile: str, server: str, enabled: bool) -> dict:
+        return self.dashboard("mcp.enabled", {"enabled": enabled, "profile": profile}, name=profile, server=server) or {}
+
+    # ------------------------------------------------------------------ per-profile API keys
+
+    def _profile_env(self, profile: str) -> str:
+        return os.path.join(self.cfg.hermes_home, "profiles", profile, ".env")
+
+    def profile_api_key(self, profile: Optional[str]) -> Optional[str]:
+        """The key the API server expects for ``profile``. Hermes 0.21.2 checks a named profile's own
+        API_SERVER_KEY (its .env) for /p/<profile>/ requests and never falls back to the default key."""
+        if profile in (None, "", "default"):
+            return self.cfg.api_key
+        return dotenv_value(self._profile_env(profile), "API_SERVER_KEY")
+
+    def ensure_profile_api_key(self, profile: str) -> tuple[str, bool]:
+        """(key, created): give a named profile an API_SERVER_KEY when it has none. The key stays on this
+        host (the profile's .env, mode 600); Fleet Control never sees it."""
+        key = self.profile_api_key(profile)
+        if key:
+            return key, False
+        import secrets
+
+        path = self._profile_env(profile)
+        if not os.path.isdir(os.path.dirname(path)):
+            raise HermesLocalError(f"profile {profile!r} not found on this instance")
+        key = secrets.token_urlsafe(32)
+        needs_newline = os.path.exists(path) and os.path.getsize(path) > 0 and not open(path, "rb").read().endswith(b"\n")
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as f:
+            f.write(("\n" if needs_newline else "") + f"API_SERVER_KEY={key}\n")
+        os.chmod(path, 0o600)
+        return key, True
+
+    # ------------------------------------------------------------------ session transcripts (evidence)
+
+    def session_messages(self, profile: Optional[str], session_id: str, max_messages: int = 2000) -> list[dict]:
+        """A session's messages, oldest first (tool calls and their results included)."""
+        prefix = "" if profile in (None, "", "default") else "/p/" + urllib.parse.quote(profile, safe="")
+        key = self.profile_api_key(profile)
+        out: list[dict] = []
+        while len(out) < max_messages:
+            page = self.api("sessions.messages.page", prefix=prefix, key=key, session_id=urllib.parse.quote(session_id, safe=""),
+                            limit="500", offset=str(len(out))) or {}
+            data = page.get("data") if isinstance(page, dict) else page
+            data = [m for m in (data or []) if isinstance(m, dict)]
+            out.extend(data)
+            if len(data) < 500:
+                break
+        return out[:max_messages]
+
+    # ------------------------------------------------------------------ runs
+
+    def run_agent(self, profile: Optional[str], prompt: str, instructions: Optional[str] = None,
+                  timeout: float = 600.0, poll_seconds: float = 2.0) -> dict:
+        """One /v1 run on ``profile``, waited for. A multiplexed gateway serves named profiles under
+        /p/<profile>/ (hermes-agent 0.21.2, gateway/platforms/api_server.py); ``default`` has no prefix.
+        Returns {run_id, status, output, error, usage}; status is "timeout" when no result came in time."""
+        prefix = "" if profile in (None, "", "default") else "/p/" + urllib.parse.quote(profile, safe="")
+        key = self.profile_api_key(profile)
+        if prefix and not key:
+            raise HermesLocalError(f"profile {profile!r} has no API_SERVER_KEY in its .env; Hermes checks a named "
+                                   f"profile's own key for /p/{profile}/ runs")
+        body: dict = {"input": prompt}
+        if instructions:
+            body["instructions"] = instructions
+        try:
+            status = self.api("runs.create", body, prefix=prefix, key=key) or {}
+        except HermesLocalError as exc:
+            if prefix and "-> 401" in str(exc):
+                raise HermesLocalError(f"{exc} (the gateway has not accepted {profile}'s API_SERVER_KEY; "
+                                       "restart it so it reads the profile's .env: hermes gateway restart)") from exc
+            raise
+        run_id = status.get("run_id")
+        if not run_id:
+            raise HermesLocalError(f"the run did not start: {str(status)[:300]}")
+        deadline = time.monotonic() + timeout
+        while status.get("status") not in TERMINAL_RUN_STATUSES:
+            if time.monotonic() >= deadline:
+                return {"run_id": run_id, "status": "timeout", "output": None,
+                        "error": f"no result after {int(timeout)} s", "usage": None}
+            time.sleep(poll_seconds)
+            status = self.api("runs.get", prefix=prefix, key=key, run_id=run_id) or {}
+        return {"run_id": run_id, "status": status.get("status"), "output": status.get("output"),
+                "error": status.get("error"), "usage": status.get("usage"), "session_id": status.get("session_id")}
 
     def cli(self, *args: str, profile: Optional[str] = None, timeout: float = 120) -> str:
         cmd = [self.cfg.hermes_bin]
@@ -303,6 +417,57 @@ class HermesLocal:
                 if os.path.exists(p):
                     tar.add(p, arcname=entry)
         return path
+
+
+def tool_calls_from_messages(messages: list[dict]) -> list[dict]:
+    """[{name, arguments, result, answered}] in call order, from a session transcript. Hermes stores tool calls
+    OpenAI-style on assistant messages (``tool_calls: [{id, type, function: {name, arguments}}]``); results are
+    ``role: "tool"`` messages that point back with ``tool_call_id``. Arguments and results are cut to 1,000 chars."""
+    results = {m.get("tool_call_id"): m for m in messages if m.get("role") == "tool" and m.get("tool_call_id")}
+    out = []
+    for m in messages:
+        calls = m.get("tool_calls") if m.get("role") == "assistant" else None
+        if isinstance(calls, str):
+            try:
+                calls = json.loads(calls)
+            except json.JSONDecodeError:
+                calls = None
+        for tc in calls or []:
+            if not isinstance(tc, dict):
+                continue
+            fn = tc.get("function") if isinstance(tc.get("function"), dict) else {}
+            name = fn.get("name") or tc.get("name") or ""
+            args = fn.get("arguments", tc.get("arguments"))
+            if not isinstance(args, str):
+                args = json.dumps(args, default=str) if args is not None else ""
+            res = results.get(tc.get("id"))
+            content = None if res is None else res.get("content")
+            out.append({"name": name, "arguments": args[:1000],
+                        "result": None if content is None else str(content)[:1000], "answered": res is not None})
+    return out
+
+
+def dotenv_value(path: str, name: str) -> Optional[str]:
+    """``name``'s value in a .env file (last assignment wins, quotes stripped), or None."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return None
+    value = None
+    for line in lines:
+        line = line.strip()
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, raw = line.partition("=")
+        if key.strip() == name:
+            raw = raw.strip()
+            if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "\"'":
+                raw = raw[1:-1]
+            value = raw or None
+    return value
 
 
 # ---------------------------------------------------------------------- drift

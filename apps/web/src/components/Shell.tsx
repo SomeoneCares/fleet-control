@@ -18,19 +18,19 @@ export interface NavItem {
 // Build document §3.1: one shell on every admin screen.
 export const NAV: { group: string; items: NavItem[] }[] = [
   { group: "Design", items: [
-    { key: "fleet-architect", label: "Fleet Architect", icon: "spark", slice: 2 },
+    { key: "fleet-architect", label: "Fleet Architect", icon: "spark", to: "/architect" },
     { key: "fleet-designer", label: "Fleet Designer", icon: "graph", to: "/designer" },
     { key: "agent-studio", label: "Agent Studio", icon: "bot", to: "/studio" },
     { key: "workflows", label: "Workflows", icon: "flow", slice: 5 },
   ] },
   { group: "Operate", items: [
     { key: "decision-rooms", label: "Decision Rooms", icon: "chat", slice: 4 },
-    { key: "assurance", label: "Assurance", icon: "shield", slice: 3 },
-    { key: "test-lab", label: "Test Lab", icon: "flask", slice: 3 },
+    { key: "assurance", label: "Assurance", icon: "shield", to: "/assurance", permission: "assurance.read" },
+    { key: "test-lab", label: "Test Lab", icon: "flask", to: "/testlab" },
   ] },
   { group: "Estate", items: [
     { key: "instances", label: "Instances", icon: "server", to: "/instances" },
-    { key: "integrations", label: "Integrations", icon: "plug", slice: 3 },
+    { key: "integrations", label: "Integrations", icon: "plug", to: "/integrations", permission: "instances.read" },
     { key: "messaging", label: "Messaging", icon: "message", slice: 4 },
   ] },
   { group: "Govern", items: [
@@ -39,7 +39,7 @@ export const NAV: { group: string; items: NavItem[] }[] = [
   ] },
   { group: "Library", items: [
     { key: "blueprints", label: "Blueprints", icon: "layers", to: "/blueprints" },
-    { key: "content", label: "Content", icon: "folder", slice: 4 },
+    { key: "content", label: "Content", icon: "folder", to: "/content", permission: "content.read" },
   ] },
 ];
 
@@ -49,10 +49,10 @@ export const WORKSPACE_NAV: { group: string; items: NavItem[] }[] = [
     { key: "workspace", label: "Home", icon: "chat", to: "/workspace" },
     { key: "audit-log", label: "Audit log", icon: "file", to: "/audit", permission: "audit.read" },
   ] },
-  { group: "Arrives in Slice 4", items: [
+  { group: "Fleet", items: [
+    { key: "fleet-outputs", label: "Fleet outputs", icon: "folder", to: "/outputs", permission: "content.read" },
     { key: "my-decisions", label: "My decisions", icon: "check", slice: 4 },
     { key: "decision-rooms", label: "Decision Rooms", icon: "chat", slice: 4 },
-    { key: "fleet-outputs", label: "Fleet outputs", icon: "folder", slice: 4 },
     { key: "ask-the-fleet", label: "Ask the fleet", icon: "spark", slice: 4 },
   ] },
 ];
@@ -95,7 +95,9 @@ export function Shell() {
           <span className="size-8 rounded-control bg-primary text-on-primary flex items-center justify-center"><Icon name="logo" size={18} /></span>
           <div className="leading-tight">
             <div className="text-[14px] font-bold">Fleet Control</div>
-            <div className="text-[11px] text-text-secondary">for Hermes Agent</div>
+            <div className="text-[11px] text-text-secondary truncate max-w-[180px]">
+              {me.workspace_name && me.workspace_name !== "Fleet Control" ? me.workspace_name : "for Hermes Agent"}
+            </div>
           </div>
         </div>
         <div className="flex-1" />
@@ -131,11 +133,9 @@ export function Shell() {
             </div>
           ))}
           <div className="flex-1" />
-          {me.portal === "admin" && (
-            <NavLink to="/soon/settings" className={({ isActive }) => `${ITEM} ${isActive ? ACTIVE : IDLE} opacity-60`}>
-              <Icon name="gear" /> Settings
-            </NavLink>
-          )}
+          <NavLink to="/settings" className={({ isActive }) => `${ITEM} ${isActive ? ACTIVE : IDLE}`}>
+            <Icon name="gear" /> Settings
+          </NavLink>
           {instances && (
             <div className="text-small text-text-secondary px-2.5 mt-3">
               {`Connected to ${instances.length} Hermes instance${instances.length === 1 ? "" : "s"}`}

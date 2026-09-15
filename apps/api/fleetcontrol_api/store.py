@@ -20,7 +20,7 @@ import threading
 import time
 import uuid
 from contextlib import contextmanager
-from typing import Any, Iterator, Optional
+from typing import Any, Callable, Iterator, Optional
 
 from sqlalchemy import (
     JSON, Boolean, Column, Float, Integer, MetaData, String, Table, Text, create_engine, delete, func, insert, select,
@@ -144,6 +144,81 @@ APPLIED = Table(  # the last successful apply per instance
     Column("version", Integer, nullable=False),
     Column("plan_id", String(32), nullable=False),
     Column("at", Float, nullable=False),
+)
+
+SETTINGS = Table(  # Settings → General and Approvals; unset keys take fleetcontrol_api.settings.DEFAULTS
+    "settings", META,
+    Column("key", String(64), primary_key=True),
+    Column("value", Doc, nullable=False),
+    Column("updated_at", Float, nullable=False),
+    Column("updated_by", String(320), nullable=False),
+)
+API_TOKENS = Table(  # automation tokens; each acts as its owner, never with more than the owner's role
+    "api_tokens", META,
+    Column("id", String(32), primary_key=True),
+    Column("key", String(64), nullable=False, unique=True),  # sha256 of the token
+    Column("owner", String(320), nullable=False, index=True),
+    Column("name", Text, nullable=False),
+    Column("created_at", Float, nullable=False),
+    Column("expires_at", Float, nullable=False),
+    Column("last_used_at", Float),
+    Column("revoked_at", Float),
+)
+_TOKEN_FIELDS = ("id", "owner", "name", "created_at", "expires_at", "last_used_at", "revoked_at")
+CONTENT_ZONES = Table(  # what agents and people may read (content.py)
+    "content_zones", META,
+    Column("id", String(64), primary_key=True),
+    Column("created_at", Float, nullable=False),
+    Column("doc", Doc, nullable=False),
+)
+CONTENT_FILES = Table(
+    "content_files", META,
+    Column("id", String(32), primary_key=True),
+    Column("zone", String(64), nullable=False, index=True),
+    Column("at", Float, nullable=False, index=True),
+    Column("doc", Doc, nullable=False),  # name, classification, text, size, uploaded_by
+)
+DECISION_ROOMS = Table(  # a governed question, its evidence and the decisions (rooms.py)
+    "decision_rooms", META,
+    Column("id", String(32), primary_key=True),
+    Column("zone", String(64), nullable=False, index=True),
+    Column("status", String(16), nullable=False, index=True),
+    Column("case", String(64), index=True),
+    Column("created_at", Float, nullable=False, index=True),
+    Column("doc", Doc, nullable=False),
+)
+OUTPUTS = Table(  # what the fleet produced, in a content zone (outputs.py)
+    "outputs", META,
+    Column("id", String(32), primary_key=True),
+    Column("zone", String(64), nullable=False, index=True),
+    Column("case", String(64), index=True),
+    Column("at", Float, nullable=False, index=True),
+    Column("doc", Doc, nullable=False),
+)
+INTEGRATIONS = Table(  # the last MCP discovery per instance (integrations.py)
+    "integrations", META,
+    Column("instance_id", String(64), primary_key=True),
+    Column("at", Float, nullable=False),
+    Column("servers", Doc, nullable=False),  # {profile: [{name, enabled, transport, ok, error, tools: [...]}]}
+)
+TEST_RUNS = Table(  # Test Lab: one row per test run, with its checks and claims (testlab.py)
+    "test_runs", META,
+    Column("id", String(32), primary_key=True),
+    Column("blueprint", String(64), nullable=False, index=True),
+    Column("version", Integer, nullable=False),
+    Column("test_id", String(64), nullable=False, index=True),
+    Column("instance_id", String(64), nullable=False, index=True),
+    Column("status", String(16), nullable=False, index=True),  # running | passed | failed | not_verifiable | error
+    Column("created_at", Float, nullable=False, index=True),
+    Column("doc", Doc, nullable=False),
+)
+ARCHITECT_SESSIONS = Table(  # Fleet Architect: mission, constraints, proposal versions, decisions (architect.py)
+    "architect_sessions", META,
+    Column("id", String(32), primary_key=True),
+    Column("created_by", String(320), nullable=False),
+    Column("created_at", Float, nullable=False, index=True),
+    Column("updated_at", Float, nullable=False),
+    Column("doc", Doc, nullable=False),
 )
 
 USER_FIELDS = frozenset({"name", "role", "password_hash", "disabled", "last_login"})
@@ -600,3 +675,252 @@ class Store:
             q = q.where(EVENTS.c.kind == kind)
         with self._tx() as c:
             return [r["doc"] for r in reversed(_all(c, q))]
+
+    # ---- workspace settings --------------------------------------------------
+    def get_settings(self) -> dict[str, Any]:
+        """Stored values only; fleetcontrol_api.settings.effective merges them over the defaults."""
+        with self._tx() as c:
+            return {r["key"]: r["value"] for r in _all(c, select(SETTINGS.c.key, SETTINGS.c.value))}
+
+    def settings_updated(self) -> Optional[dict]:
+        with self._tx() as c:
+            row = _one(c, select(SETTINGS.c.updated_at, SETTINGS.c.updated_by).order_by(SETTINGS.c.updated_at.desc()).limit(1))
+        return {"at": row["updated_at"], "by": row["updated_by"]} if row else None
+
+    def set_settings(self, values: dict[str, Any], by: str) -> None:
+        now = time.time()
+        with self._tx() as c:
+            for key, value in values.items():
+                _upsert(c, SETTINGS, {"key": key}, {"value": value, "updated_at": now, "updated_by": by})
+
+    # ---- API tokens ------------------------------------------------------------
+    def create_api_token(self, owner: str, name: str, expires_at: float) -> tuple[dict, str]:
+        """(record, secret): the secret is returned once; only its hash is kept."""
+        secret = "fct_" + secrets.token_urlsafe(32)
+        rec = {"id": "tok_" + uuid.uuid4().hex[:12], "owner": owner, "name": name, "created_at": time.time(),
+               "expires_at": expires_at, "last_used_at": None, "revoked_at": None}
+        with self._tx() as c:
+            c.execute(insert(API_TOKENS).values(key=_hash(secret), **rec))
+        return rec, secret
+
+    def list_api_tokens(self, owner: Optional[str] = None) -> list[dict]:
+        q = select(*[API_TOKENS.c[k] for k in _TOKEN_FIELDS]).order_by(API_TOKENS.c.created_at.desc())
+        if owner:
+            q = q.where(API_TOKENS.c.owner == owner)
+        with self._tx() as c:
+            return _all(c, q)
+
+    def get_api_token(self, token_id: str) -> Optional[dict]:
+        with self._tx() as c:
+            return _one(c, select(*[API_TOKENS.c[k] for k in _TOKEN_FIELDS]).where(API_TOKENS.c.id == token_id))
+
+    def revoke_api_token(self, token_id: str) -> Optional[dict]:
+        with self._tx() as c:
+            c.execute(update(API_TOKENS).where(API_TOKENS.c.id == token_id, API_TOKENS.c.revoked_at.is_(None))
+                      .values(revoked_at=time.time()))
+            return _one(c, select(*[API_TOKENS.c[k] for k in _TOKEN_FIELDS]).where(API_TOKENS.c.id == token_id))
+
+    def api_token_user(self, secret: str) -> Optional[tuple[dict, dict]]:
+        """(owner, token) for a live token, recording its use; None when unknown, expired, revoked or the owner is disabled."""
+        now = time.time()
+        with self._tx() as c:
+            tok = _one(c, select(*[API_TOKENS.c[k] for k in _TOKEN_FIELDS]).where(API_TOKENS.c.key == _hash(secret)))
+            if not tok or tok["revoked_at"] is not None or tok["expires_at"] <= now:
+                return None
+            user = _one(c, select(USERS).where(USERS.c.email == tok["owner"]))
+            if not user or user["disabled"]:
+                return None
+            c.execute(update(API_TOKENS).where(API_TOKENS.c.id == tok["id"]).values(last_used_at=now))
+            tok["last_used_at"] = now
+            return user, tok
+
+    # ---- Content zones and files ---------------------------------------------------
+    def save_zone(self, zone: dict) -> dict:
+        with self._tx() as c:
+            _upsert(c, CONTENT_ZONES, {"id": zone["id"]}, {"created_at": zone["created_at"], "doc": zone})
+        return zone
+
+    def get_zone(self, zone_id: str) -> Optional[dict]:
+        with self._tx() as c:
+            row = _one(c, select(CONTENT_ZONES.c.doc).where(CONTENT_ZONES.c.id == zone_id))
+        return row["doc"] if row else None
+
+    def list_zones(self) -> list[dict]:
+        with self._tx() as c:
+            return [r["doc"] for r in _all(c, select(CONTENT_ZONES.c.doc).order_by(CONTENT_ZONES.c.created_at))]
+
+    def delete_zone(self, zone_id: str) -> bool:
+        with self._tx() as c:
+            return c.execute(delete(CONTENT_ZONES).where(CONTENT_ZONES.c.id == zone_id)).rowcount > 0
+
+    def save_file(self, doc: dict) -> dict:
+        with self._tx() as c:
+            _upsert(c, CONTENT_FILES, {"id": doc["id"]}, {"zone": doc["zone"], "at": doc["at"], "doc": doc})
+        return doc
+
+    def get_file(self, file_id: str) -> Optional[dict]:
+        with self._tx() as c:
+            row = _one(c, select(CONTENT_FILES.c.doc).where(CONTENT_FILES.c.id == file_id))
+        return row["doc"] if row else None
+
+    def list_files(self, zones: Optional[list[str]] = None, limit: int = 500) -> list[dict]:
+        """Newest first; ``zones`` limits it to the zones the caller may read (an empty list means none)."""
+        q = select(CONTENT_FILES.c.doc).order_by(CONTENT_FILES.c.at.desc()).limit(limit)
+        if zones is not None:
+            if not zones:
+                return []
+            q = q.where(CONTENT_FILES.c.zone.in_(zones))
+        with self._tx() as c:
+            return [r["doc"] for r in _all(c, q)]
+
+    def count_files(self) -> dict[str, int]:
+        with self._tx() as c:
+            rows = c.execute(select(CONTENT_FILES.c.zone, func.count()).group_by(CONTENT_FILES.c.zone)).all()
+        return {zone: n for zone, n in rows}
+
+    def delete_file(self, file_id: str) -> bool:
+        with self._tx() as c:
+            return c.execute(delete(CONTENT_FILES).where(CONTENT_FILES.c.id == file_id)).rowcount > 0
+
+    # ---- Decision Rooms -------------------------------------------------------------
+    def save_room(self, room: dict) -> dict:
+        with self._tx() as c:
+            _upsert(c, DECISION_ROOMS, {"id": room["id"]},
+                    {"zone": room["zone"], "status": room["status"], "case": room.get("case"),
+                     "created_at": room["created_at"], "doc": room})
+        return room
+
+    def get_room(self, room_id: str) -> Optional[dict]:
+        with self._tx() as c:
+            row = _one(c, select(DECISION_ROOMS.c.doc).where(DECISION_ROOMS.c.id == room_id))
+        return row["doc"] if row else None
+
+    def list_rooms(self, zones: Optional[list[str]] = None, *, status: Optional[str] = None, case: Optional[str] = None,
+                   limit: int = 200) -> list[dict]:
+        """Newest first; ``zones`` limits it to what the caller may read (an empty list means none)."""
+        q = select(DECISION_ROOMS.c.doc).order_by(DECISION_ROOMS.c.created_at.desc()).limit(limit)
+        if zones is not None:
+            if not zones:
+                return []
+            q = q.where(DECISION_ROOMS.c.zone.in_(zones))
+        if status:
+            q = q.where(DECISION_ROOMS.c.status == status)
+        if case:
+            q = q.where(DECISION_ROOMS.c.case == case)
+        with self._tx() as c:
+            return [r["doc"] for r in _all(c, q)]
+
+    def update_room(self, room_id: str, change: Callable[[dict], None]) -> Optional[dict]:
+        """Load, change and save one room in a transaction: two people can decide at the same moment."""
+        with self._tx() as c:
+            row = _one(c, select(DECISION_ROOMS.c.doc).where(DECISION_ROOMS.c.id == room_id))
+            if not row:
+                return None
+            room = row["doc"]
+            change(room)
+            c.execute(update(DECISION_ROOMS).where(DECISION_ROOMS.c.id == room_id)
+                      .values(status=room["status"], doc=room))
+            return room
+
+    # ---- Fleet outputs --------------------------------------------------------------
+    def save_output(self, doc: dict) -> dict:
+        with self._tx() as c:
+            _upsert(c, OUTPUTS, {"id": doc["id"]}, {"zone": doc["zone"], "case": doc.get("case"), "at": doc["at"], "doc": doc})
+        return doc
+
+    def get_output(self, output_id: str) -> Optional[dict]:
+        with self._tx() as c:
+            row = _one(c, select(OUTPUTS.c.doc).where(OUTPUTS.c.id == output_id))
+        return row["doc"] if row else None
+
+    def list_outputs(self, zones: Optional[list[str]] = None, *, case: Optional[str] = None, limit: int = 200) -> list[dict]:
+        """Newest first; ``zones`` limits it to what the caller may read (an empty list means none)."""
+        q = select(OUTPUTS.c.doc).order_by(OUTPUTS.c.at.desc()).limit(limit)
+        if zones is not None:
+            if not zones:
+                return []
+            q = q.where(OUTPUTS.c.zone.in_(zones))
+        if case:
+            q = q.where(OUTPUTS.c.case == case)
+        with self._tx() as c:
+            return [r["doc"] for r in _all(c, q)]
+
+    def delete_output(self, output_id: str) -> bool:
+        with self._tx() as c:
+            return c.execute(delete(OUTPUTS).where(OUTPUTS.c.id == output_id)).rowcount > 0
+
+    # ---- Integrations (MCP discovery) ---------------------------------------------
+    def save_integrations(self, instance_id: str, servers: dict, at: float) -> None:
+        with self._tx() as c:
+            _upsert(c, INTEGRATIONS, {"instance_id": instance_id}, {"at": at, "servers": servers})
+
+    def integrations(self) -> dict[str, dict]:
+        """{instance_id: {"at": …, "servers": {profile: [...]}}} from the last discovery of each instance."""
+        with self._tx() as c:
+            rows = _all(c, select(INTEGRATIONS))
+        return {r["instance_id"]: {"at": r["at"], "servers": r["servers"]} for r in rows}
+
+    # ---- Test Lab runs ------------------------------------------------------------
+    def save_test_run(self, doc: dict) -> dict:
+        with self._tx() as c:
+            _upsert(c, TEST_RUNS, {"id": doc["id"]},
+                    {"blueprint": doc["blueprint"], "version": doc["version"], "test_id": doc["test_id"],
+                     "instance_id": doc["instance_id"], "status": doc["status"], "created_at": doc["created_at"], "doc": doc})
+        return doc
+
+    def get_test_run(self, run_id: str) -> Optional[dict]:
+        with self._tx() as c:
+            row = _one(c, select(TEST_RUNS.c.doc).where(TEST_RUNS.c.id == run_id))
+        return row["doc"] if row else None
+
+    def update_test_run(self, run_id: str, change: Callable[[dict], None]) -> Optional[dict]:
+        with self._tx() as c:
+            row = _one(c, select(TEST_RUNS.c.doc).where(TEST_RUNS.c.id == run_id))
+            if not row:
+                return None
+            doc = row["doc"]
+            change(doc)
+            c.execute(update(TEST_RUNS).where(TEST_RUNS.c.id == run_id).values(status=doc["status"], doc=doc))
+            return doc
+
+    def list_test_runs(self, *, blueprint: Optional[str] = None, version: Optional[int] = None, test_id: Optional[str] = None,
+                       instance_id: Optional[str] = None, since: Optional[float] = None, limit: int = 200) -> list[dict]:
+        """Newest first."""
+        q = select(TEST_RUNS.c.doc).order_by(TEST_RUNS.c.created_at.desc()).limit(limit)
+        for col, value in ((TEST_RUNS.c.blueprint, blueprint), (TEST_RUNS.c.version, version), (TEST_RUNS.c.test_id, test_id),
+                           (TEST_RUNS.c.instance_id, instance_id)):
+            if value is not None:
+                q = q.where(col == value)
+        if since is not None:
+            q = q.where(TEST_RUNS.c.created_at >= since)
+        with self._tx() as c:
+            return [r["doc"] for r in _all(c, q)]
+
+    # ---- Fleet Architect sessions ------------------------------------------------
+    def save_architect_session(self, doc: dict) -> dict:
+        with self._tx() as c:
+            _upsert(c, ARCHITECT_SESSIONS, {"id": doc["id"]},
+                    {"created_by": doc["created_by"], "created_at": doc["created_at"], "updated_at": doc["updated_at"], "doc": doc})
+        return doc
+
+    def get_architect_session(self, session_id: str) -> Optional[dict]:
+        with self._tx() as c:
+            row = _one(c, select(ARCHITECT_SESSIONS.c.doc).where(ARCHITECT_SESSIONS.c.id == session_id))
+        return row["doc"] if row else None
+
+    def list_architect_sessions(self) -> list[dict]:
+        with self._tx() as c:
+            return [r["doc"] for r in _all(c, select(ARCHITECT_SESSIONS.c.doc).order_by(ARCHITECT_SESSIONS.c.created_at.desc()))]
+
+    def update_architect_session(self, session_id: str, change: Callable[[dict], None]) -> Optional[dict]:
+        """Load, change and save one session in a single transaction (a run result and a person's edit can race)."""
+        with self._tx() as c:
+            row = _one(c, select(ARCHITECT_SESSIONS.c.doc).where(ARCHITECT_SESSIONS.c.id == session_id))
+            if not row:
+                return None
+            doc = row["doc"]
+            change(doc)
+            doc["updated_at"] = time.time()
+            c.execute(update(ARCHITECT_SESSIONS).where(ARCHITECT_SESSIONS.c.id == session_id)
+                      .values(updated_at=doc["updated_at"], doc=doc))
+            return doc

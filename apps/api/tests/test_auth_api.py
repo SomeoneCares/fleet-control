@@ -84,6 +84,9 @@ class ApprovalRulesTest(unittest.TestCase):
     Architects and Operators may approve staging; production applies by Admin or Operator after enough approvals."""
 
     def setUp(self):
+        # these tests are about who approves and applies; the test-suite gate has its own tests (test_testlab_api)
+        store.set_settings({"require_tests_for_production": False}, "tests")
+        self.addCleanup(store.set_settings, {"require_tests_for_production": True}, "tests")
         self.admin = signed_in("admin")
         self.inst = "prod-" + os.urandom(3).hex()
         pair = self.admin.post("/api/v1/instances", json={"id": self.inst, "environment": "production", "mode": "agent"}).json()["pairing_token"]

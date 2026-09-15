@@ -5,7 +5,9 @@ Connect drawer, the day-one empty state, and a blueprint created from what an in
 **Plan before apply** (approvals, apply, outcome), **Drift** resolution (accept / revert / ignore once / exception),
 **Fleet Designer** (read-mostly topology laid out from the workflow, with an inspector), **Agent Studio** (edit an
 agent's managed fields; applied versions are immutable, so saving creates a draft) and the **Audit log** (filters,
-CSV export). **Sign in** gates everything; the **Access** screen (Admin) manages people and shows roles and agent
+CSV export). **Sign in** gates everything; **Settings** holds General, Approvals and API tokens; the **Fleet Architect** sends a
+mission to an architect Hermes profile and saves the agents you accept as a blueprint draft; **Test Lab** runs a
+blueprint's tests on a lab or staging instance and **Assurance** shows each claim with its verdict and evidence; the **Access** screen (Admin) manages people and shows roles and agent
 permissions; Approvers and Viewers land on a **Workspace home** listing plans that wait for their approval. Buttons
 follow the signed-in role, and a missing Approve button says why. The other navigation items open a page naming the
 slice they arrive in.

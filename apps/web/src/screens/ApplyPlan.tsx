@@ -149,9 +149,22 @@ function Preflight({ plan }: { plan: Plan }) {
         detail={plan.approvals_required ? `${plan.approvals.length} of ${plan.approvals_required} for ${ENV_LABEL[plan.environment].toLowerCase()}${plan.approvals.length ? ` (${plan.approvals.join(", ")})` : ""}` : `Not needed for ${ENV_LABEL[plan.environment].toLowerCase()}`} />
       <Check icon="shield" tone="neutral" title="Policies"
         detail={`${deny} blocked and ${approve} approval-gated tool rules pushed to ${policyProfiles.length} profiles first`} />
-      <Check icon="flask" tone="neutral" title="Tests" detail="No test suite gates plans yet (Test Lab arrives in Slice 3)" />
+      <TestsCheck plan={plan} />
     </Card>
   );
+}
+
+function TestsCheck({ plan }: { plan: Plan }) {
+  const { data: pre } = useLoad(() => api.planPreflight(plan.id), [plan.id, plan.status]);
+  if (!pre) return <Check icon="flask" tone="neutral" title="Tests" detail="Checking the suite…" />;
+  if (!pre.total) {
+    return <Check icon="flask" tone="neutral" title="Tests"
+      detail={pre.deferred.length ? `Only workflow tests (${pre.deferred.length}); they run with Workflows` : "This blueprint version has no tests"} />;
+  }
+  const all = pre.passed === pre.total;
+  const detail = `${pre.passed} of ${pre.total} passed on lab or staging`
+    + (pre.required ? (pre.satisfied ? " · production gate met" : " · production waits for all of them (Test Lab)") : "");
+  return <Check icon={all ? "checkCircle" : pre.required ? "xCircle" : "clock"} tone={all ? "success" : pre.required ? "error" : "warning"} title="Tests" detail={detail} />;
 }
 
 function WhatHappens() {

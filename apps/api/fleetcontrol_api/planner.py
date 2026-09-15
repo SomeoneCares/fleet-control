@@ -17,7 +17,11 @@ def _row(kind: str, obj: str, description: str, method: str, risk: str = "low", 
     return {"kind": kind, "symbol": SYMBOL[kind], "object": obj, "description": description, "method": method, "risk": risk, "ops": ops or []}
 
 
-def compute_plan(bp: Blueprint, live: dict[str, dict], *, target_instance: str, agent_installed: bool, environment: str) -> dict:
+DEFAULT_APPROVALS = {"production": 2, "staging": 0, "lab": 0}  # build document §7; Settings → Approvals changes them
+
+
+def compute_plan(bp: Blueprint, live: dict[str, dict], *, target_instance: str, agent_installed: bool, environment: str,
+                 default_approvals: dict[str, int] | None = None) -> dict:
     """``live`` is {profile_name: live_profile_state} from the agent's import/drift jobs.
     Profiles present live but not in the blueprint are reported as unmanaged, never removed."""
     method = "Agent" if agent_installed else "API (read-only)"
@@ -73,9 +77,11 @@ def compute_plan(bp: Blueprint, live: dict[str, dict], *, target_instance: str, 
 
     unmanaged = sorted(set(live) - set(desired))
 
-    # approvals before apply: what the blueprint's target says, else two for production (build document §7)
-    approvals_required = next((t.requires_approvals for t in bp.targets if t.instance == target_instance),
-                              2 if environment == "production" else 0)
+    # approvals before apply: the organisation's floor for this environment (Settings → Approvals); a blueprint
+    # target may ask for more, never fewer
+    floor = (default_approvals or DEFAULT_APPROVALS).get(environment, 0)
+    target = next((t.requires_approvals for t in bp.targets if t.instance == target_instance), 0)
+    approvals_required = max(floor, target)
     for p in bp.policies:
         if p.enforcement == "approve":
             rows.append(_row("approval", f"policy {p.id}", p.description + " — enforced by the agent's pre_tool_call hook", "Agent" if agent_installed else "not enforced (no agent)", "high"))

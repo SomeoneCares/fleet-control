@@ -3,7 +3,8 @@ import hashlib, json, os, socket, tempfile, threading, time, unittest, queue
 from unittest import mock
 
 from fleetctl_agent.hermes_local import (
-    API_ROUTES, DASHBOARD_SESSION_HEADER, ROUTES, HermesLocal, HermesLocalConfig, HermesLocalError, diff_managed,
+    API_ROUTES, DASHBOARD_SESSION_HEADER, ROUTES, HermesLocal, HermesLocalConfig, HermesLocalError, diff_managed, dotenv_value,
+    tool_calls_from_messages,
 )
 import urllib.error
 
@@ -149,6 +150,131 @@ class SyncTest(unittest.TestCase):
         with self.assertRaises(HermesLocalError):
             h.sync_toolsets("p", ["web", "no-such-toolset"])
         self.assertEqual(h.toggled, [])
+
+
+class HermesRunTest(unittest.TestCase):
+    class Stub(HermesLocal):
+        """API server that answers the create call, then the queued status list, one per poll. The fc-architect
+        profile has its own API_SERVER_KEY, as Hermes 0.21.2 requires for /p/<profile>/ requests."""
+        def __init__(self, statuses):
+            super().__init__(HermesLocalConfig(hermes_home=tempfile.mkdtemp(), api_key="default-key"))
+            os.makedirs(os.path.join(self.cfg.hermes_home, "profiles", "fc-architect"))
+            with open(os.path.join(self.cfg.hermes_home, "profiles", "fc-architect", ".env"), "w") as f:
+                f.write("OPENROUTER_API_KEY=x\nAPI_SERVER_KEY='profile-key'\n")
+            self.statuses, self.sent = list(statuses), []
+        def _request(self, base, method, path, body=None, headers=None):
+            self.sent.append((method, path, body, (headers or {}).get("Authorization")))
+            return {"run_id": "run_1", "status": "queued"} if method == "POST" else self.statuses.pop(0)
+
+    def test_named_profiles_use_the_multiplex_prefix_their_own_key_and_are_waited_for(self):
+        h = self.Stub([{"status": "running"}, {"status": "completed", "output": "{}", "usage": {"total_tokens": 9}, "session_id": "s1"}])
+        out = h.run_agent("fc-architect", "the mission", "the contract", timeout=5, poll_seconds=0)
+        self.assertEqual(out, {"run_id": "run_1", "status": "completed", "output": "{}", "error": None, "usage": {"total_tokens": 9},
+                               "session_id": "s1"})
+        self.assertEqual([s[:2] for s in h.sent], [("POST", "/p/fc-architect/v1/runs"), ("GET", "/p/fc-architect/v1/runs/run_1"),
+                                                   ("GET", "/p/fc-architect/v1/runs/run_1")])
+        self.assertEqual(h.sent[0][2], {"input": "the mission", "instructions": "the contract"})
+        self.assertEqual({s[3] for s in h.sent}, {"Bearer profile-key"})
+
+    def test_a_named_profile_without_its_own_key_is_refused_before_calling_hermes(self):
+        h = self.Stub([])
+        with self.assertRaises(HermesLocalError) as ctx:
+            h.run_agent("bid-orchestrator", "x", timeout=1, poll_seconds=0)
+        self.assertIn("API_SERVER_KEY", str(ctx.exception))
+        self.assertEqual(h.sent, [])
+
+    def test_the_default_profile_has_no_prefix_and_a_slow_run_times_out(self):
+        h = self.Stub([{"status": "running"}] * 500)
+        out = h.run_agent("default", "x", timeout=0.05, poll_seconds=0.005)
+        self.assertEqual((out["status"], h.sent[0][1], h.sent[0][3]), ("timeout", "/v1/runs", "Bearer default-key"))
+
+    def test_hermes_run_job_reports_a_failed_run(self):
+        h = FakeHermes()
+        h.profile_api_key = lambda p: "k"
+        h.run_agent = lambda *a: {"run_id": "r", "status": "failed", "output": None, "error": "provider down", "usage": None}
+        out = Jobs(AgentConfig(state_dir=tempfile.mkdtemp()), h).dispatch({"kind": "hermes_run", "params": {"profile": "p", "input": "i"}})
+        self.assertEqual((out["ok"], out["error"]), (False, "provider down"))
+        self.assertNotIn("notes", out)
+
+    def test_hermes_run_job_gives_a_profile_without_a_key_its_own(self):
+        h = FakeHermes()
+        h.profile_api_key = lambda p: None
+        h.ensure_profile_api_key = lambda p: h.calls.append(("ensure_key", p)) or ("new", True)
+        h.run_agent = lambda *a: {"run_id": "r", "status": "completed", "output": "{}", "error": None, "usage": None}
+        out = Jobs(AgentConfig(state_dir=tempfile.mkdtemp()), h).dispatch({"kind": "hermes_run", "params": {"profile": "fc-architect", "input": "i"}})
+        self.assertTrue(out["ok"])
+        self.assertEqual(h.calls, [("ensure_key", "fc-architect")])
+        self.assertIn("API_SERVER_KEY", out["notes"][0])
+
+
+class EvidenceTest(unittest.TestCase):
+    TRANSCRIPT = [
+        {"role": "user", "content": "Screen Zephyr Maritime Ltd"},
+        {"role": "assistant", "content": None, "tool_calls": [
+            {"id": "c1", "type": "function", "function": {"name": "mcp_opensanctions__search", "arguments": "{\"q\": \"Zephyr\"}"}},
+            {"id": "c2", "type": "function", "function": {"name": "write_file", "arguments": {"path": "screening-result.json"}}}]},
+        {"role": "tool", "tool_call_id": "c1", "tool_name": "mcp_opensanctions__search", "content": "0 matches"},
+        {"role": "assistant", "content": "Done.", "tool_calls": json.dumps([{"id": "c3", "function": {"name": "web_search", "arguments": "{}"}}])},
+    ]
+
+    def test_tool_calls_come_out_in_order_with_their_results(self):
+        calls = tool_calls_from_messages(self.TRANSCRIPT)
+        self.assertEqual([c["name"] for c in calls], ["mcp_opensanctions__search", "write_file", "web_search"])
+        self.assertEqual((calls[0]["result"], calls[0]["answered"]), ("0 matches", True))
+        self.assertEqual((calls[1]["arguments"], calls[1]["answered"]), ('{"path": "screening-result.json"}', False))
+
+    def test_transcripts_are_read_page_by_page_oldest_first(self):
+        h = HermesLocal(HermesLocalConfig(hermes_home=tempfile.mkdtemp(), api_key="k"))
+        pages = [{"data": [{"role": "user"}] * 500}, {"data": [{"role": "assistant"}] * 20}]
+        sent = []
+        h._request = lambda base, method, path, body=None, headers=None: sent.append(path) or pages.pop(0)
+        self.assertEqual(len(h.session_messages("default", "s/1")), 520)
+        self.assertEqual(sent, ["/api/sessions/s%2F1/messages?order=oldest&limit=500&offset=0",
+                                "/api/sessions/s%2F1/messages?order=oldest&limit=500&offset=500"])
+
+    def test_run_test_job_returns_the_evidence(self):
+        h = FakeHermes()
+        h.profile_api_key = lambda p: "k"
+        h.run_agent = lambda *a: {"run_id": "r", "status": "completed", "output": "ok", "error": None, "usage": {"total_tokens": 50}, "session_id": "s1"}
+        h.session_messages = lambda profile, sid: self.TRANSCRIPT
+        out = Jobs(AgentConfig(state_dir=tempfile.mkdtemp()), h).dispatch({"kind": "run_test", "params": {"profile": "screener", "scenario": "x"}})
+        self.assertEqual((out["ok"], out["evidence"], len(out["tool_calls"])), (True, "transcript", 3))
+        self.assertGreaterEqual(out["duration_s"], 0)
+        def unreadable(profile, sid):
+            raise HermesLocalError("GET … -> 404")
+        h.session_messages = unreadable
+        out = Jobs(AgentConfig(state_dir=tempfile.mkdtemp()), h).dispatch({"kind": "run_test", "params": {"profile": "screener", "scenario": "x"}})
+        self.assertEqual((out["evidence"], out["tool_calls"]), ("none", None))
+        self.assertIn("404", out["evidence_error"])
+
+
+class ProfileKeyTest(unittest.TestCase):
+    def setUp(self):
+        self.h = HermesLocal(HermesLocalConfig(hermes_home=tempfile.mkdtemp(), api_key="default-key"))
+        self.dir = os.path.join(self.h.cfg.hermes_home, "profiles", "fc-architect")
+        os.makedirs(self.dir)
+        self.env = os.path.join(self.dir, ".env")
+
+    def test_dotenv_values(self):
+        with open(self.env, "w") as f:
+            f.write("# API_SERVER_KEY=commented\nexport API_SERVER_KEY=\"first\"\nOTHER=1\nAPI_SERVER_KEY='second'\n")
+        self.assertEqual(dotenv_value(self.env, "API_SERVER_KEY"), "second")
+        self.assertIsNone(dotenv_value(self.env, "MISSING"))
+        self.assertIsNone(dotenv_value(os.path.join(self.dir, "nope.env"), "API_SERVER_KEY"))
+        self.assertEqual(self.h.profile_api_key("default"), "default-key")
+
+    def test_a_key_is_created_once_and_kept_private(self):
+        with open(self.env, "w") as f:
+            f.write("OPENROUTER_API_KEY=x")  # no trailing newline
+        key, created = self.h.ensure_profile_api_key("fc-architect")
+        self.assertTrue(created and len(key) >= 32)
+        self.assertEqual(self.h.ensure_profile_api_key("fc-architect"), (key, False))
+        with open(self.env) as f:
+            self.assertEqual(f.read(), f"OPENROUTER_API_KEY=x\nAPI_SERVER_KEY={key}\n")
+        if os.name != "nt":
+            self.assertEqual(os.stat(self.env).st_mode & 0o777, 0o600)
+        with self.assertRaises(HermesLocalError):
+            self.h.ensure_profile_api_key("no-such-profile")
 
 
 class ConfigTest(unittest.TestCase):

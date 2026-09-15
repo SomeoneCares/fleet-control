@@ -66,7 +66,7 @@ DASHBOARD_ROUTES = {
     "hermes_cli/web_routers/profiles.py": ['"/api/profiles"', '"/api/profiles/{name}/soul"', '"/api/profiles/{name}/model"', '"/api/profiles/{name}/description"'],
     "hermes_cli/web_routers/skills.py": ['"/api/skills"', '"/api/skills/toggle"'],
     "hermes_cli/web_routers/tools.py": ['"/api/tools/toolsets"'],
-    "hermes_cli/web_routers/mcp.py": ['"/api/mcp/servers"'],
+    "hermes_cli/web_routers/mcp.py": ['"/api/mcp/servers"', '"/api/mcp/servers/{name}/test"', '"/api/mcp/servers/{name}/enabled"'],
     "hermes_cli/web_routers/messaging.py": ['"/api/messaging/platforms"'],
     "hermes_cli/web_routers/ops.py": ['"/api/webhooks"'],
     "hermes_cli/web_routers/status.py": ['"/api/status"'],

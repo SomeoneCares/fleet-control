@@ -81,6 +81,37 @@ def soul_hash(text: str) -> str:
     return "sha256:" + hashlib.sha256((text.rstrip() + "\n").encode("utf-8")).hexdigest()
 
 
+_DEMO_LOCAL = {"provider": "local", "name": "llama-4-70b-q4"}
+_DEMO_CLOUD = {"provider": "anthropic", "name": "claude-sonnet", "data_class": "redacted-only"}
+DEMO_PROPOSAL = {  # what the simulated architect proposes for any mission
+    "schema": "fleetcontrol.proposal/v1",
+    "summary": "One orchestrator with three specialists: intake and checks run in parallel on local models, and a reviewer "
+               "challenges the result before any person sees it.",
+    "agents": [
+        {"id": "case-orchestrator", "name": "Case Orchestrator", "role": "Owns each case, routes work and assembles the file for people.",
+         "model": _DEMO_CLOUD, "soul": {"objective": "Coordinate one case from intake to a reviewed recommendation.",
+                                        "boundaries": ["Never contact external systems directly."]},
+         "skills": ["case-routing", "evidence-ledger"], "delegates_to": ["intake-clerk", "checker", "reviewer"]},
+        {"id": "intake-clerk", "name": "Intake Clerk", "role": "Extracts the facts of each case from the source documents.",
+         "model": _DEMO_LOCAL, "soul": {"objective": "Turn source documents into a structured case record."}, "skills": ["entity-resolution"]},
+        {"id": "checker", "name": "Checker", "role": "Checks names and counterparties against the required lists.",
+         "model": _DEMO_LOCAL, "soul": {"objective": "Screen every party and return matches with confidence.",
+                                        "boundaries": ["Never mark a check complete without a list result."]},
+         "skills": ["name-matching", "list-versioning"], "mcps": ["opensanctions"]},
+        {"id": "reviewer", "name": "Reviewer", "role": "Argues against the recommendation before a person sees it.",
+         "model": _DEMO_CLOUD, "soul": {"objective": "Find the strongest objection and cite the case file for it."},
+         "skills": ["counter-argument", "citation-check"]},
+    ],
+    "tests": [
+        {"id": "checker-uses-the-lists", "target": "checker", "scenario": "Screen \"Zephyr Maritime Ltd\" and its two directors.",
+         "required_tools": ["opensanctions.search"], "forbidden_tools": ["web.fetch"]},
+        {"id": "reviewer-objects", "target": "reviewer", "scenario": "A recommendation that claims zero matches with no check attached."},
+    ],
+    "open_questions": ["Which systems hold the source records?", "Should the reviewer block the recommendation, or only flag it, when it disagrees?"],
+    "estimate": {"cost_per_day_usd": "6-12", "basis": "about 40 cases a day"},
+}
+
+
 class SimulatedAgent(threading.Thread):
     """Answers the jobs a real fleetctl-agent would, against an in-memory Hermes (``profiles``)."""
 
@@ -111,6 +142,19 @@ class SimulatedAgent(threading.Thread):
                 elif diffs := diff_managed(desired, self.profiles[name]):
                     drift[name] = diffs
             return {"ok": True, "drift": drift, "scanned": list(p.get("managed") or {})}
+        if kind == "run_test":  # Test Lab: behave as the test expects (the real agent ignores these hints)
+            hints = p.get("hints") or {}
+            calls = [{"name": ("mcp_" + t.replace(".", "__", 1)) if "." in t else t, "arguments": "{}", "result": "ok", "answered": True}
+                     for t in hints.get("required_tools") or []]
+            if hints.get("expected_artifact"):
+                calls.append({"name": "write_file", "arguments": json.dumps({"path": hints["expected_artifact"]}), "result": "ok", "answered": True})
+            output = json.dumps({"match_count": 0, "matches": [], "list_versions": {"OFAC": "2026-09-15"}, "screened_at": "2026-09-16",
+                                 "entities": [], "edges": [], "ubo_candidates": [], "note": hints.get("expected") or "done"})
+            return {"ok": True, "status": "completed", "output": output, "usage": {"total_tokens": 1200}, "duration_s": 8.0,
+                    "tool_calls": calls, "evidence": "transcript", "session_id": "demo-session", "run_id": "run_demo"}
+        if kind == "hermes_run":  # the Fleet Architect: answer as an architect profile would (fleetcontrol.proposal/v1)
+            return {"ok": True, "status": "completed", "run_id": "run_demo", "output": json.dumps(DEMO_PROPOSAL),
+                    "usage": {"total_tokens": 0}}
         if kind == "push_policy":
             return {"ok": True, "written": sorted((p.get("profiles") or {}).keys())}
         if kind == "apply":

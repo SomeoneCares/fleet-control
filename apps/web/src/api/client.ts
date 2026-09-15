@@ -6,6 +6,7 @@ export type InstanceMode = "agent" | "api-only";
 export type RoleName = "admin" | "fleet_architect" | "operator" | "approver" | "viewer";
 
 export interface Me {
+  workspace_name?: string;
   email: string;
   name: string;
   role: RoleName;
@@ -115,6 +116,304 @@ export interface ResolveResult {
   status?: string;
   expires_at?: number;
 }
+
+export interface SettingsValues {
+  workspace_name: string;
+  session_hours: number;
+  approvals_production: number;
+  approvals_staging: number;
+  approvals_lab: number;
+  require_tests_for_production: boolean;
+  token_max_days: number;
+}
+
+export interface SettingsDoc {
+  values: SettingsValues;
+  defaults: SettingsValues;
+  updated: { at: number; by: string } | null;
+}
+
+export interface ApiToken {
+  id: string;
+  owner: string;
+  name: string;
+  created_at: number;
+  expires_at: number;
+  last_used_at: number | null;
+  revoked_at: number | null;
+}
+
+export interface ArchitectConstraints {
+  data_residency: "any" | "region" | "on-premises";
+  cloud_models: "allowed" | "redacted-only" | "none";
+  external_actions_need_approval: boolean;
+  budget_usd_per_day: number | null;
+}
+
+export interface ProposedAgent {
+  id: string;
+  name: string;
+  role: string;
+  model: { provider: string; name: string; data_class: "raw" | "redacted-only" };
+  soul: { objective: string; principles: string[]; boundaries: string[] };
+  skills: string[];
+  toolsets: string[];
+  mcps: string[];
+  delegates_to: string[];
+}
+
+export interface Proposal {
+  schema: string;
+  summary: string;
+  agents: ProposedAgent[];
+  tests: { id: string; target: string; scenario: string; required_tools: string[]; forbidden_tools: string[] }[];
+  open_questions: string[];
+  estimate: { cost_per_day_usd: string | null; basis: string | null };
+  adjustments: string[];
+}
+
+export interface ProposalVersion {
+  version: number;
+  job_id: string | null;
+  job_status?: string;
+  status: "running" | "ready" | "failed";
+  requested_at: number;
+  finished_at: number | null;
+  proposal: Proposal | null;
+  error: string | null;
+  raw: string | null;
+  run: { run_id: string | null; usage: Record<string, unknown> | null } | null;
+}
+
+export type AgentDecisionValue = "accepted" | "removed";
+
+export interface ArchitectSession {
+  id: string;
+  created_by: string;
+  created_at: number;
+  updated_at: number;
+  mission: string;
+  constraints: ArchitectConstraints;
+  architect: { instance_id: string; profile: string };
+  answers: { question: string; answer: string; version: number }[];
+  versions: ProposalVersion[];
+  decisions: Record<string, AgentDecisionValue>;
+  edits: Record<string, Partial<ProposedAgent>>;
+  blueprint: { name: string; version: number } | null;
+  latest: ProposalVersion | null;
+  pending: ProposalVersion | null;
+}
+
+export interface ArchitectSessionSummary {
+  id: string;
+  mission: string;
+  created_by: string;
+  created_at: number;
+  updated_at: number;
+  versions: number;
+  status: "new" | "running" | "ready" | "failed";
+  blueprint: { name: string; version: number } | null;
+}
+
+export interface ArchitectConfigDoc {
+  config: { instance_id: string; profile: string; model: { provider: string; name: string } | null; instance_status: string } | null;
+  candidates: { instance_id: string; environment: Environment; profiles: { name: string; model: string | null }[] }[];
+}
+
+export type Classification = "internal" | "confidential" | "restricted";
+
+export interface ContentZone {
+  id: string;
+  name: string;
+  description: string;
+  read_roles: RoleName[];
+  managed: boolean;
+  source: string | null;
+  created_by: string;
+  created_at: number;
+  files: number;
+  agents: { agent: string; blueprint: string; redacted_only: boolean }[];
+  may_read: boolean;
+}
+
+export interface ContentFile {
+  id: string;
+  zone: string;
+  name: string;
+  classification: Classification;
+  size: number | null;
+  uploaded_by: string;
+  at: number;
+  text?: string | null;
+}
+
+export type OutputKind = "document" | "structured" | "graph" | "markdown" | "summary";
+
+export interface FleetOutput {
+  id: string;
+  zone: string;
+  name: string;
+  kind: OutputKind;
+  classification: Classification;
+  produced_by: string;
+  case: string | null;
+  blueprint: string | null;
+  instance_id: string | null;
+  source: { kind: string; ref?: string } | null;
+  size: number | null;
+  at: number;
+  provenance: string;
+  text?: string | null;
+}
+
+export type IntegrationKind = "mcp" | "model";
+export type IntegrationHealth = "healthy" | "unreachable" | "disabled" | "unknown";
+
+export interface Integration {
+  kind: IntegrationKind;
+  name: string;
+  instances: string[];
+  profiles: string[];
+  environments: string[];
+  tools: { name: string; description: string }[];
+  models: string[];
+  used_by: { agent: string; blueprint: string }[];
+  allow: Record<string, { blocked_for: string[]; approval_for: string[] }>;
+  health: IntegrationHealth;
+  error: string | null;
+  enabled_everywhere: boolean;
+  transport?: string | null;
+  endpoint?: string | null;
+  auth?: string | null;
+}
+
+export interface IntegrationsDoc {
+  integrations: Integration[];
+  discovery: { instance_id: string; at: number | null; can_discover: boolean }[];
+}
+
+export type Verdict = "Evidence found" | "No evidence" | "Not verifiable" | "Policy blocked";
+export type TestStatus = "running" | "passed" | "failed" | "not_verifiable" | "error";
+
+export interface BlueprintTest {
+  id: string;
+  target: string;
+  scenario: string;
+  required_tools: string[];
+  forbidden_tools: string[];
+  expected_artifact?: string | null;
+  evaluator: "schema" | "exact" | "contains" | "artifact-exists" | "none";
+  expected?: string | null;
+  limits: { max_seconds: number; max_tokens: number; max_cost_usd: number };
+}
+
+export interface TestRunSummary {
+  id: string;
+  status: TestStatus;
+  instance_id: string;
+  created_at: number;
+  finished_at: number | null;
+  failure: string | null;
+}
+
+export interface SuiteTest {
+  test: BlueprintTest;
+  target_kind: "agent" | "workflow";
+  profile: string | null;
+  last_run: TestRunSummary | null;
+}
+
+export interface Suite {
+  blueprint: string;
+  version: number;
+  status: string;
+  agents: { id: string; profile: string; role: string }[];
+  workflows: string[];
+  tests: SuiteTest[];
+  gates_production: boolean;
+  applied_on: string[];
+}
+
+export interface TestCheck {
+  id: string;
+  kind: string;
+  subject: string;
+  outcome: "pass" | "fail" | "not_verifiable";
+  detail: string;
+}
+
+export interface Claim {
+  claim: string;
+  verdict: Verdict;
+  check: string | null;
+  detail: string;
+}
+
+export interface ToolCallEvidence {
+  name: string;
+  arguments: string;
+  result: string | null;
+  answered: boolean;
+}
+
+export interface TestRun {
+  id: string;
+  blueprint: string;
+  version: number;
+  test_id: string;
+  target: string;
+  profile: string;
+  instance_id: string;
+  environment: Environment;
+  status: TestStatus;
+  created_at: number;
+  created_by: string;
+  finished_at: number | null;
+  checks: TestCheck[];
+  claims: Claim[];
+  output: string | null;
+  tool_calls: ToolCallEvidence[] | null;
+  usage: Record<string, number> | null;
+  duration_s: number | null;
+  error: string | null;
+  evidence: string | null;
+  evidence_error: string | null;
+  notes: string[];
+}
+
+export interface ClaimRow {
+  id: string;
+  run_id: string;
+  at: number;
+  instance_id: string;
+  blueprint: string;
+  version: number;
+  test_id: string;
+  agent: string;
+  claim: string;
+  verdict: Verdict;
+  detail: string;
+  check: string | null;
+}
+
+export interface AssuranceSummary {
+  hours: number;
+  total: number;
+  counts: Record<Verdict, number>;
+  instances: number;
+  most_not_verifiable: string | null;
+}
+
+export interface Preflight {
+  total: number;
+  passed: number;
+  tests: { test_id: string; status: TestStatus | "not_run"; instance_id: string | null; at: number | null }[];
+  deferred: string[];
+  required: boolean;
+  satisfied: boolean;
+}
+
+export type TestEditBody = Partial<Omit<BlueprintTest, "id">>;
 
 export interface LiveImportResult {
   name: string;
@@ -371,6 +670,11 @@ async function call<T>(method: string, path: string, body?: unknown, query?: Rec
 
 const enc = encodeURIComponent;
 
+/** Query parameters without the unset ones. */
+function params(o: Record<string, string | number | undefined>): Record<string, string | number> {
+  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== "")) as Record<string, string | number>;
+}
+
 export const api = {
   me: () => call<Me>("GET", "/api/v1/auth/me"),
   login: (email: string, password: string) => call<Me>("POST", "/api/v1/auth/login", { email, password }),
@@ -422,4 +726,59 @@ export const api = {
   applyPlan: (id: string) => call<{ jobs: string[] }>("POST", `/api/v1/plans/${enc(id)}/apply`),
   job: (id: string) => call<Job>("GET", `/api/v1/jobs/${enc(id)}`),
   audit: (limit = 200) => call<AuditEvent[]>("GET", "/api/v1/audit", undefined, { limit }),
+  settings: () => call<SettingsDoc>("GET", "/api/v1/settings"),
+  updateSettings: (patch: Partial<SettingsValues>) => call<SettingsDoc>("PATCH", "/api/v1/settings", patch),
+  tokens: (everyone = false) => call<ApiToken[]>("GET", "/api/v1/tokens", undefined, everyone ? { all_people: "true" } : undefined),
+  createToken: (body: { name: string; expires_days: number }) => call<{ token: ApiToken; secret: string }>("POST", "/api/v1/tokens", body),
+  revokeToken: (id: string) => call<ApiToken>("DELETE", `/api/v1/tokens/${enc(id)}`),
+  outputs: (q: { zone?: string; case?: string; limit?: number } = {}) => call<FleetOutput[]>("GET", "/api/v1/outputs", undefined, params(q)),
+  output: (id: string) => call<FleetOutput>("GET", `/api/v1/outputs/${enc(id)}`),
+  saveOutput: (body: { zone: string; name: string; kind?: OutputKind; classification?: Classification; text?: string; case?: string }) =>
+    call<FleetOutput>("POST", "/api/v1/outputs", body),
+  deleteOutput: (id: string) => call<{ ok: boolean }>("DELETE", `/api/v1/outputs/${enc(id)}`),
+  contentZones: () => call<ContentZone[]>("GET", "/api/v1/content/zones"),
+  createZone: (body: { id: string; name: string; description?: string; read_roles?: RoleName[] }) =>
+    call<ContentZone>("POST", "/api/v1/content/zones", body),
+  editZone: (id: string, body: { name?: string; description?: string; read_roles?: RoleName[] }) =>
+    call<ContentZone>("PATCH", `/api/v1/content/zones/${enc(id)}`, body),
+  deleteZone: (id: string) => call<{ ok: boolean }>("DELETE", `/api/v1/content/zones/${enc(id)}`),
+  contentFiles: (zone?: string) => call<ContentFile[]>("GET", "/api/v1/content/files", undefined, params({ zone })),
+  contentFile: (id: string) => call<ContentFile>("GET", `/api/v1/content/files/${enc(id)}`),
+  uploadFile: (body: { zone: string; name: string; classification: Classification; text?: string }) =>
+    call<ContentFile>("POST", "/api/v1/content/files", body),
+  deleteFile: (id: string) => call<{ ok: boolean }>("DELETE", `/api/v1/content/files/${enc(id)}`),
+  integrations: () => call<IntegrationsDoc>("GET", "/api/v1/integrations"),
+  discoverIntegrations: (instance_id: string) => call<{ job_id: string }>("POST", "/api/v1/integrations/discover", { instance_id }),
+  addMcpServer: (body: { instance_id: string; profile: string; name: string; url?: string; command?: string; args?: string[]; auth?: "none" | "oauth" }) =>
+    call<{ job_id: string }>("POST", "/api/v1/integrations/mcp", body),
+  changeMcpServer: (server: string, body: { instance_id: string; profile: string; enabled?: boolean; remove?: boolean }) =>
+    call<{ job_id: string }>("PATCH", `/api/v1/integrations/mcp/${enc(server)}`, body),
+  testSuites: () => call<Suite[]>("GET", "/api/v1/testlab/suites"),
+  testRuns: (q: { blueprint?: string; test_id?: string; instance_id?: string; limit?: number } = {}) =>
+    call<TestRun[]>("GET", "/api/v1/testlab/runs", undefined, params(q)),
+  testRun: (id: string) => call<TestRun>("GET", `/api/v1/testlab/runs/${enc(id)}`),
+  startTestRuns: (body: { blueprint: string; version: number; instance_id: string; test_ids?: string[] }) =>
+    call<{ runs: string[]; skipped: { test_id: string; reason: string }[] }>("POST", "/api/v1/testlab/runs", body),
+  saveTest: (name: string, version: number, testId: string, body: TestEditBody) =>
+    call<{ name: string; version: number; created: boolean; test: BlueprintTest }>("PUT", `/api/v1/blueprints/${enc(name)}/${version}/tests/${enc(testId)}`, body),
+  deleteTest: (name: string, version: number, testId: string) =>
+    call<{ ok: boolean }>("DELETE", `/api/v1/blueprints/${enc(name)}/${version}/tests/${enc(testId)}`),
+  assuranceClaims: (q: { verdict?: Verdict; instance_id?: string; hours?: number } = {}) =>
+    call<ClaimRow[]>("GET", "/api/v1/assurance/claims", undefined, params(q)),
+  assuranceSummary: () => call<AssuranceSummary>("GET", "/api/v1/assurance/summary"),
+  planPreflight: (id: string) => call<Preflight>("GET", `/api/v1/plans/${enc(id)}/preflight`),
+  architectConfig: () => call<ArchitectConfigDoc>("GET", "/api/v1/architect/config"),
+  setArchitectConfig: (body: { instance_id: string; profile: string }) => call<ArchitectConfigDoc>("PUT", "/api/v1/architect/config", body),
+  architectAsset: (instance_id: string) =>
+    call<{ name: string; version: number; status: string }>("POST", "/api/v1/architect/blueprint-asset", { instance_id }),
+  architectSessions: () => call<ArchitectSessionSummary[]>("GET", "/api/v1/architect/sessions"),
+  architectSession: (id: string) => call<ArchitectSession>("GET", `/api/v1/architect/sessions/${enc(id)}`),
+  startArchitect: (body: { mission: string; constraints: ArchitectConstraints }) =>
+    call<ArchitectSession>("POST", "/api/v1/architect/sessions", body),
+  askArchitect: (id: string, body: { answers: { question: string; answer: string }[] }) =>
+    call<ArchitectSession>("POST", `/api/v1/architect/sessions/${enc(id)}/ask`, body),
+  decideAgent: (id: string, agentId: string, body: { decision?: AgentDecisionValue | "proposed"; edit?: Partial<ProposedAgent> }) =>
+    call<ArchitectSession>("PATCH", `/api/v1/architect/sessions/${enc(id)}/agents/${enc(agentId)}`, body),
+  saveArchitectBlueprint: (id: string, name: string) =>
+    call<{ name: string; version: number; status: string; agents: string[] }>("POST", `/api/v1/architect/sessions/${enc(id)}/blueprint`, { name }),
 };

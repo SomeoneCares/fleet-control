@@ -266,6 +266,84 @@ export interface FleetOutput {
   text?: string | null;
 }
 
+export type RoomStatus = "open" | "decided" | "cancelled";
+export type EvidenceKind = "file" | "output" | "claim" | "note";
+
+export interface RoomOption {
+  id: string;
+  label: string;
+}
+
+export interface RoomEvidence {
+  kind: EvidenceKind;
+  label: string;
+  ref: string | null;
+  source: string | null;
+  verdict: Verdict | null;
+  added_by: string;
+  at: number;
+}
+
+export interface RoomFinding {
+  agent: string;
+  text: string;
+  verdict: Verdict | null;
+  run_id: string | null;
+  at: number;
+}
+
+export interface RoomDecision {
+  by: string;
+  option: string;
+  rationale: string;
+  at: number;
+}
+
+export interface RoomOutcome {
+  option: RoomOption | null;
+  agreed: boolean;
+  decisions: number;
+}
+
+/** What every room carries, in a list row and in the full view alike. */
+export interface RoomBase {
+  id: string;
+  question: string;
+  case: string | null;
+  zone: string;
+  status: RoomStatus;
+  second_approver: string | null;
+  opened_by: string;
+  opened_by_kind: "person" | "agent";
+  instance_id: string | null;
+  due_at: number | null;
+  created_at: number;
+  updated_at: number;
+  closed_at: number | null;
+  mine: boolean; // this person has already decided
+  may_decide: boolean;
+  reason: string | null; // why not, when may_decide is false
+  waiting_for: string[];
+  outcome: RoomOutcome | null;
+}
+
+/** GET /api/v1/rooms: evidence, findings and decisions are counts, and there are no options — a row
+ *  that needs the chosen option reads it from `outcome.option`, which carries its label. */
+export interface DecisionRoomRow extends RoomBase {
+  evidence: number;
+  findings: number;
+  decisions: number;
+}
+
+/** GET /api/v1/rooms/{id}: the same room with its contents. */
+export interface DecisionRoom extends RoomBase {
+  options: RoomOption[];
+  evidence: RoomEvidence[];
+  findings: RoomFinding[];
+  decisions: RoomDecision[];
+  counts: { evidence: number; findings: number; decisions: number };
+}
+
 export type IntegrationKind = "mcp" | "model";
 export type IntegrationHealth = "healthy" | "unreachable" | "disabled" | "unknown";
 
@@ -736,6 +814,17 @@ export const api = {
   saveOutput: (body: { zone: string; name: string; kind?: OutputKind; classification?: Classification; text?: string; case?: string }) =>
     call<FleetOutput>("POST", "/api/v1/outputs", body),
   deleteOutput: (id: string) => call<{ ok: boolean }>("DELETE", `/api/v1/outputs/${enc(id)}`),
+  rooms: (q: { status?: RoomStatus; case?: string; mine?: boolean } = {}) =>
+    call<DecisionRoomRow[]>("GET", "/api/v1/rooms", undefined,
+      params({ status: q.status, case: q.case, mine: q.mine ? "true" : undefined })),
+  room: (id: string) => call<DecisionRoom>("GET", `/api/v1/rooms/${enc(id)}`),
+  openRoom: (body: { question: string; zone: string; options: string[]; case?: string; due_at?: number; second_approver?: string }) =>
+    call<DecisionRoom>("POST", "/api/v1/rooms", body),
+  addEvidence: (id: string, body: { kind: EvidenceKind; label: string; ref?: string; source?: string; verdict?: Verdict }) =>
+    call<DecisionRoom>("POST", `/api/v1/rooms/${enc(id)}/evidence`, body),
+  decideRoom: (id: string, body: { option: string; rationale: string }) =>
+    call<DecisionRoom>("POST", `/api/v1/rooms/${enc(id)}/decide`, body),
+  cancelRoom: (id: string) => call<DecisionRoom>("POST", `/api/v1/rooms/${enc(id)}/cancel`),
   contentZones: () => call<ContentZone[]>("GET", "/api/v1/content/zones"),
   createZone: (body: { id: string; name: string; description?: string; read_roles?: RoleName[] }) =>
     call<ContentZone>("POST", "/api/v1/content/zones", body),

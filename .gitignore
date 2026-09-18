@@ -5,3 +5,4 @@ __pycache__/
 *.egg-info/
 .fleetcontrol-dev-credentials.json
 .fleetcontrol-dev.db*
+.claude/

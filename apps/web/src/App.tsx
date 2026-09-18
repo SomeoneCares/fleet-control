@@ -8,6 +8,8 @@ import { ApplyPlanScreen } from "./screens/ApplyPlan";
 import { AuditScreen } from "./screens/Audit";
 import { BlueprintsScreen } from "./screens/Blueprints";
 import { ContentScreen } from "./screens/Content";
+import { DecisionRoomScreen, DecisionRoomsScreen } from "./screens/DecisionRooms";
+import { MyDecisionsScreen } from "./screens/MyDecisions";
 import { DesignerScreen } from "./screens/Designer";
 import { FleetArchitectScreen } from "./screens/FleetArchitect";
 import { InstancesScreen } from "./screens/Instances";
@@ -57,6 +59,9 @@ export const router = createBrowserRouter([
       { path: "access", element: guarded("users.read", <AccessScreen />) },
       { path: "content", element: guarded("content.read", <ContentScreen />) },
       { path: "outputs", element: guarded("content.read", <OutputsScreen />) },
+      { path: "rooms", element: guarded("rooms.read", <DecisionRoomsScreen />) },
+      { path: "rooms/:id", element: guarded("rooms.read", <DecisionRoomScreen />) },
+      { path: "my-decisions", element: guarded("rooms.read", <MyDecisionsScreen />) },
       { path: "integrations", element: guarded("instances.read", <IntegrationsScreen />) },
       { path: "testlab", element: guarded("blueprints.read", <TestLabScreen />) },
       { path: "assurance", element: guarded("assurance.read", <AssuranceScreen />) },

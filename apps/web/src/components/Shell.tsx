@@ -24,7 +24,7 @@ export const NAV: { group: string; items: NavItem[] }[] = [
     { key: "workflows", label: "Workflows", icon: "flow", slice: 5 },
   ] },
   { group: "Operate", items: [
-    { key: "decision-rooms", label: "Decision Rooms", icon: "chat", slice: 4 },
+    { key: "decision-rooms", label: "Decision Rooms", icon: "chat", to: "/rooms", permission: "rooms.read" },
     { key: "assurance", label: "Assurance", icon: "shield", to: "/assurance", permission: "assurance.read" },
     { key: "test-lab", label: "Test Lab", icon: "flask", to: "/testlab" },
   ] },
@@ -40,6 +40,7 @@ export const NAV: { group: string; items: NavItem[] }[] = [
   { group: "Library", items: [
     { key: "blueprints", label: "Blueprints", icon: "layers", to: "/blueprints" },
     { key: "content", label: "Content", icon: "folder", to: "/content", permission: "content.read" },
+    { key: "fleet-outputs", label: "Fleet outputs", icon: "folder", to: "/outputs", permission: "content.read" },
   ] },
 ];
 
@@ -51,8 +52,8 @@ export const WORKSPACE_NAV: { group: string; items: NavItem[] }[] = [
   ] },
   { group: "Fleet", items: [
     { key: "fleet-outputs", label: "Fleet outputs", icon: "folder", to: "/outputs", permission: "content.read" },
-    { key: "my-decisions", label: "My decisions", icon: "check", slice: 4 },
-    { key: "decision-rooms", label: "Decision Rooms", icon: "chat", slice: 4 },
+    { key: "my-decisions", label: "My decisions", icon: "check", to: "/my-decisions", permission: "rooms.read" },
+    { key: "decision-rooms", label: "Decision Rooms", icon: "chat", to: "/rooms", permission: "rooms.read" },
     { key: "ask-the-fleet", label: "Ask the fleet", icon: "spark", slice: 4 },
   ] },
 ];

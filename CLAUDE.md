@@ -113,7 +113,11 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   rooms; **Admins and Approvers decide** (`rooms.decide`); nobody opens a room into a zone they could not then read.
   Agents open rooms and file findings through `/agent/v1` and never decide. Each decision is a read-change-write in
   one transaction (`store.update_room`), so two people deciding at once cannot lose one another's decision.
-  Screens (Decision Rooms, My decisions) come next.
+  Screens: `/rooms` (the list), `/rooms/:id` (evidence rail · what the fleet found · decision rail, per
+  `design/screens/DecisionRoom`) and `/my-decisions` (waiting for me · decided by me · open elsewhere). Verdicts
+  reuse `VERDICT_TONE` from `lib/testlab.ts`, so a verdict looks the same in Assurance and in a room. The second
+  approver is a free-text email validated by the API, not a dropdown: `users.read` is Admin-only and Operators
+  open rooms. The Workspace home now shows the decisions waiting for you and the fleet's recent outputs.
 - NOTE: on Basem's Windows box `python3` is the Microsoft Store stub; run the suites as
   `PYTHON=.venv/Scripts/python bash scripts/test.sh` (with `PYTHONIOENCODING=utf-8`).
 - PLAN (Basem, 2026-09-16): complete the whole portal before Docker, every screen working end to end (real backend,

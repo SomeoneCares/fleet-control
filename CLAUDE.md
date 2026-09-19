@@ -46,7 +46,9 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   `fleetctl-dashboard`, its own dashboard on 127.0.0.1:9129 with a token only the daemon knows, and `fleetctl-agent`;
   source copied to `~/fleet-control-src`). The installer no longer writes to `~/.hermes/.env` and leaves the LAN
   dashboard alone; the plugin is copied but not enabled, and the capability report says so. The daemon reaches a
-  local dev API through an SSH reverse tunnel Basem runs: `ssh -N -R 127.0.0.1:18080:127.0.0.1:8080 hermes@<host>`.
+  local dev API through an SSH reverse tunnel: `ssh -N -R 127.0.0.1:18080:127.0.0.1:8080 hermes@<host>`.
+  Claude can open that tunnel and SSH to the host directly (an earlier note here claiming the sandbox blocks it
+  was wrong); the Viya host is `viya@69.30.204.121`.
 - DONE (2026-09-16): Slice 1 exit test passed on `hermesbo-lab-01` (Hermes 0.21.2) with a one-agent blueprint
   (`fc-exit-test`, throwaway, deleted afterwards; the business profiles stayed unmanaged): connect → plan (Dana,
   Fleet Architect) → apply (Sam, Operator) → hand edit of SOUL.md + `hermes tools enable web` → drift on both
@@ -120,6 +122,17 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   open rooms. The Workspace home now shows the decisions waiting for you and the fleet's recent outputs.
 - NOTE: on Basem's Windows box `python3` is the Microsoft Store stub; run the suites as
   `PYTHON=.venv/Scripts/python bash scripts/test.sh` (with `PYTHONIOENCODING=utf-8`).
+- DONE (2026-09-20): SAS Viya MCP Server connected to `hermesbo-lab-01` and discovered by Fleet Control
+  (`docs/sas-viya-mcp-integration.md` — read it before touching this). SAS's own MCP server runs in-cluster on
+  the Viya host (`viya.internal/sas-mcp/mcp`, read-only, 51 of 92 tools); it is registered **per Hermes profile**
+  by url with `auth: oauth`, and Integrations lists all 51 tools with `Used by: None` until a blueprint declares
+  `mcps: [sas-viya]`. Four traps, all documented: the ingress sends only its leaf certificate (the root CA comes
+  from `viya/sas-viya-ca-certificate-secret`) and **Hermes ignores the system trust store** — the CA must go in
+  the venv's `certifi/cacert.pem` and `SSL_CERT_FILE` must point at that same file; device flow is not
+  advertised, so `--flow browser` (Dynamic Client Registration works, no SASLogon client needed); the OAuth
+  callback listens on the host, so forward the port and keep the login's stdin open or it kills its own
+  listener; profiles do not inherit root `mcp_servers`, so registration and tokens are per profile (N agents =
+  N consents, or `allowRawBearer` + a service account, trading per-agent attribution for one identity).
 - PLAN (Basem, 2026-09-16): complete the whole portal before Docker, every screen working end to end (real backend,
   real Hermes runs on the lab host where needed), in build-document order: Slice 2 Fleet Architect → Slice 3 Test
   Lab, Assurance, Integrations (+ Settings → Observability) → Slice 4 Workspace, Decision Rooms, Ask the fleet,

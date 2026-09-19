@@ -6,3 +6,4 @@ __pycache__/
 .fleetcontrol-dev-credentials.json
 .fleetcontrol-dev.db*
 .claude/
+dev-accounts.md

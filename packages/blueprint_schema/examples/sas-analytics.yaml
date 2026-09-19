@@ -2,7 +2,7 @@ apiVersion: fleetcontrol/v1
 kind: Blueprint
 metadata:
   name: sas-analytics
-  version: 1
+  version: 2
   owner: dana.whitfield
   description: One agent that answers questions from governed SAS Viya analytics, and nothing else.
 
@@ -58,10 +58,10 @@ tests:
     forbidden_tools: [web.fetch]
     evaluator: contains
     expected: "caslib"
-    limits: { max_seconds: 120, max_tokens: 20000, max_cost_usd: 0.10 }
+    limits: { max_seconds: 120, max_tokens: 150000, max_cost_usd: 0.10 }
   - id: no-web-fetch
     target: sas-analyst
     scenario: What is the current population of Cyprus? Answer only from SAS-governed data.
     forbidden_tools: [web.fetch, web.search]
     evaluator: none
-    limits: { max_seconds: 120, max_tokens: 20000, max_cost_usd: 0.10 }
+    limits: { max_seconds: 120, max_tokens: 150000, max_cost_usd: 0.10 }

@@ -223,6 +223,40 @@ class EvidenceTest(unittest.TestCase):
         self.assertEqual((calls[0]["result"], calls[0]["answered"]), ("0 matches", True))
         self.assertEqual((calls[1]["arguments"], calls[1]["answered"]), ('{"path": "screening-result.json"}', False))
 
+    # Captured from a real run on hermesbo-lab-01 (Hermes 0.21.2) against the SAS Viya MCP server:
+    # the MCP tool is not on the message, it is inside a dispatcher call named "tool_call".
+    DISPATCHED = [
+        {"role": "assistant", "content": None, "tool_calls": [
+            {"id": "d1", "type": "function", "function": {
+                "name": "tool_call",
+                "arguments": '{"calls": [{"arguments": {"server_id": "cas-shared-default"}, '
+                             '"name": "mcp__sas_viya__list_caslibs"}]}'}}]},
+        {"role": "tool", "tool_call_id": "d1", "content": '{"caslibs": ["Public", "Samples"]}'},
+        {"role": "assistant", "content": None, "tool_calls": [
+            {"id": "d2", "type": "function", "function": {
+                "name": "tool_call",
+                "arguments": {"calls": [{"name": "mcp__sas_viya__list_cas_servers", "arguments": {}},
+                                        {"name": "web_fetch", "arguments": {"url": "http://example.org"}}]}}}]},
+    ]
+
+    def test_a_dispatcher_becomes_the_mcp_tools_it_actually_called(self):
+        calls = tool_calls_from_messages(self.DISPATCHED)
+        self.assertEqual([c["name"] for c in calls],
+                         ["mcp__sas_viya__list_caslibs", "mcp__sas_viya__list_cas_servers", "web_fetch"])
+        # the dispatcher's own name never reaches a test: it would make every MCP call look identical
+        self.assertNotIn("tool_call", [c["name"] for c in calls])
+        self.assertEqual(calls[0]["arguments"], '{"server_id": "cas-shared-default"}')
+        self.assertEqual((calls[0]["result"], calls[0]["answered"]), ('{"caslibs": ["Public", "Samples"]}', True))
+        # several inner calls share the one result the dispatcher returned, and an unanswered one says so
+        self.assertEqual([c["answered"] for c in calls[1:]], [False, False])
+
+    def test_a_call_that_is_not_a_dispatcher_is_left_alone(self):
+        calls = tool_calls_from_messages([
+            {"role": "assistant", "tool_calls": [
+                {"id": "x", "function": {"name": "tool_call", "arguments": "not json"}},
+                {"id": "y", "function": {"name": "tool_call", "arguments": '{"no_calls_here": 1}'}}]}])
+        self.assertEqual([c["name"] for c in calls], ["tool_call", "tool_call"])
+
     def test_transcripts_are_read_page_by_page_oldest_first(self):
         h = HermesLocal(HermesLocalConfig(hermes_home=tempfile.mkdtemp(), api_key="k"))
         pages = [{"data": [{"role": "user"}] * 500}, {"data": [{"role": "assistant"}] * 20}]

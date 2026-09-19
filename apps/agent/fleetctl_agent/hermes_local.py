@@ -419,6 +419,35 @@ class HermesLocal:
         return path
 
 
+def dispatched_calls(name: str, arguments: Any) -> list[tuple[str, str]]:
+    """The real calls inside a dispatcher.
+
+    Hermes 0.21.x does not always put an MCP tool on the message itself: it calls a dispatcher named
+    ``tool_call`` whose arguments carry the real ones, ``{"calls": [{"name": "mcp__sas_viya__list_caslibs",
+    "arguments": {...}}]}``. Unwrapped they read as ``mcp__<server>__<tool>`` (the server's hyphens become
+    underscores), which is what the Test Lab matches on. Left wrapped, every MCP call reads as "tool_call"
+    and no test can assert that an agent used — or avoided — a given tool.
+
+    Returns [] for anything that is not a dispatcher, so the caller keeps the original call.
+    """
+    if str(name) != "tool_call":
+        return []
+    payload = arguments
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except json.JSONDecodeError:
+            return []
+    calls = payload.get("calls") if isinstance(payload, dict) else None
+    out: list[tuple[str, str]] = []
+    for call in calls or []:
+        if not isinstance(call, dict) or not call.get("name"):
+            continue
+        args = call.get("arguments")
+        out.append((str(call["name"]), args if isinstance(args, str) else json.dumps(args or {}, default=str)))
+    return out
+
+
 def tool_calls_from_messages(messages: list[dict]) -> list[dict]:
     """[{name, arguments, result, answered}] in call order, from a session transcript. Hermes stores tool calls
     OpenAI-style on assistant messages (``tool_calls: [{id, type, function: {name, arguments}}]``); results are
@@ -442,8 +471,10 @@ def tool_calls_from_messages(messages: list[dict]) -> list[dict]:
                 args = json.dumps(args, default=str) if args is not None else ""
             res = results.get(tc.get("id"))
             content = None if res is None else res.get("content")
-            out.append({"name": name, "arguments": args[:1000],
-                        "result": None if content is None else str(content)[:1000], "answered": res is not None})
+            # A dispatcher becomes the calls it made; several inner calls share the one result it returned.
+            for call_name, call_args in dispatched_calls(name, args) or [(name, args)]:
+                out.append({"name": call_name, "arguments": call_args[:1000],
+                            "result": None if content is None else str(content)[:1000], "answered": res is not None})
     return out
 
 

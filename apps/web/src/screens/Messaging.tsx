@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import { api, type BlueprintDeliveryRule, type Channel, type MessagingDoc } from "../api/client";
 import { useAuth } from "../lib/auth";
@@ -18,6 +18,12 @@ export function MessagingScreen() {
   const [editing, setEditing] = useState(false);
   const [msg, setMsg] = useState<{ tone: Tone; text: string } | null>(null);
   const current = doc?.channels.find((c) => c.id === selected) ?? doc?.channels[0] ?? null;
+  // "Discovering… / queued" is news for a moment, not a state: the page itself shows the outcome once the job is done
+  useEffect(() => {
+    if (msg?.tone !== "info") return;
+    const t = setTimeout(() => setMsg(null), 6000);
+    return () => clearTimeout(t);
+  }, [msg]);
 
   async function act(fn: () => Promise<unknown>, done: string) {
     setMsg(null);
@@ -70,6 +76,11 @@ function Instances({ doc, manage, act }: { doc: MessagingDoc; manage: boolean; a
             : <>
                 <span className="text-text-secondary">
                   {i.platforms.filter((p) => p.configured).map((p) => `${p.name}${p.state ? ` (${p.state})` : ""}`).join(", ") || "no messaging platform configured"}
+                  {i.platforms.some((p) => p.dashboard_state && p.dashboard_state !== p.state) && (
+                    <span className="text-warning" title="The gateway's own record is used; the instance's dashboard disagrees, which usually means it runs older code: restart fleetctl-dashboard.">
+                      {" "}· dashboard out of date
+                    </span>
+                  )}
                 </span>
                 <Chip tone={i.webhooks_enabled ? "success" : "warning"}>{i.webhooks_enabled ? "Webhooks on" : "Webhooks off"}</Chip>
                 <span className="text-text-secondary">· {timeAgo(i.discovered_at)}</span>

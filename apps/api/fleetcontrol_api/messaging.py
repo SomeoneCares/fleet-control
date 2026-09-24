@@ -55,6 +55,22 @@ def new_channel(*, name: str, platform: str, instance_id: str, by: str, at: floa
             "show_titles": bool(show_titles), "enabled": True, "created_by": by, "created_at": at, "route_job": None}
 
 
+def merge_gateway(platforms: list[dict], gateway: Optional[dict]) -> list[dict]:
+    """Each platform's state as the gateway itself records it, when its record is alive and fresh. The dashboard's
+    view is kept as ``dashboard_state``: a dashboard that outlived a Hermes update calls a live gateway stopped."""
+    if not gateway or not gateway.get("alive"):
+        return platforms
+    own = gateway.get("platforms") or {}
+    out = []
+    for p in platforms:
+        g = own.get(p.get("id")) or {}
+        if g.get("state"):
+            p = {**p, "dashboard_state": p.get("state"), "state": g["state"], "gateway_running": True,
+                 "error_message": g.get("error_message") or (None if g["state"] == "connected" else p.get("error_message"))}
+        out.append(p)
+    return out
+
+
 def channel_health(channel: dict, state: Optional[dict]) -> dict:
     """Whether a channel can deliver, from the last messaging discovery of its instance, and what to do if not."""
     if not channel.get("enabled", True):
@@ -67,7 +83,7 @@ def channel_health(channel: dict, state: Optional[dict]) -> dict:
     platform = next((p for p in state.get("platforms") or [] if p.get("id") == channel["platform"]), None)
     if not platform or not platform.get("configured"):
         return {"status": "platform_missing", "detail": f"{channel['platform']} is not configured on {channel['instance_id']}"}
-    if platform.get("state") not in ("connected", "running", None) and not platform.get("gateway_running"):
+    if platform.get("state") not in ("connected", "running", None):  # e.g. fatal, disconnected, gateway_stopped
         return {"status": "platform_down", "detail": f"{channel['platform']} is {platform.get('state') or 'not running'}"
                                                      + (f": {platform['error_message']}" if platform.get("error_message") else "")}
     route = next((r for r in hooks.get("routes") or [] if r.get("name") == channel["route"]), None)

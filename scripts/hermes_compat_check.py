@@ -184,6 +184,16 @@ def _webhook_v2(root):
     return (not missing, f"missing: {missing}" if missing else "ok")
 
 
+@check("gateway_state.json still records the gateway's pid, state, freshness and per-platform state")
+def _gateway_record(root):
+    # Messaging trusts the gateway's own record over a dashboard that may run old code (HermesLocal.gateway_runtime)
+    src = read(root, "gateway/status.py")
+    needles = ['_RUNTIME_STATUS_FILE = "gateway_state.json"', '"gateway_state"', '"platforms"', '"updated_at"', '"pid"',
+               "_RUNTIME_STATUS_STALE_TTL_S = 120"]
+    missing = [n for n in needles if n not in src]
+    return (not missing, f"missing: {missing}" if missing else "ok")
+
+
 @check("/v1 API server routes used still exist")
 def _api(root):
     src = read(root, "gateway/platforms/api_server.py") + read(root, "gateway/platforms/api_server_runs.py")

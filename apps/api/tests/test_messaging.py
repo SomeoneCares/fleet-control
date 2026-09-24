@@ -3,7 +3,7 @@
 import unittest
 
 from fleetcontrol_api.messaging import (
-    MessagingError, channel_health, channel_id, new_channel, render, rules_from, test_text,
+    MessagingError, channel_health, channel_id, merge_gateway, new_channel, render, rules_from, test_text,
 )
 
 CH = new_channel(name="Ops on-call", platform="telegram", instance_id="lab-01", by="a@x", at=1.0, chat_id="-100")
@@ -33,6 +33,21 @@ class ChannelTest(unittest.TestCase):
         for state, want in cases:
             self.assertEqual(channel_health(CH, state)["status"], want, state)
         self.assertEqual(channel_health({**CH, "enabled": False}, READY)["status"], "disabled")
+        # a failed platform is down even while the gateway process runs
+        bad = {**READY, "platforms": [{"id": "telegram", "configured": True, "state": "fatal", "gateway_running": True}]}
+        self.assertEqual(channel_health(CH, bad)["status"], "platform_down")
+
+    def test_the_gateways_own_record_beats_a_stale_dashboard(self):
+        stale = [{"id": "telegram", "configured": True, "state": "gateway_stopped", "gateway_running": False}]
+        live = {"alive": True, "platforms": {"telegram": {"state": "connected"}}}
+        merged = merge_gateway(stale, live)
+        self.assertEqual((merged[0]["state"], merged[0]["dashboard_state"]), ("connected", "gateway_stopped"))
+        self.assertEqual(channel_health(CH, {**READY, "platforms": merged})["status"], "ready")
+        # a dead or stale record proves nothing: the dashboard's view stands
+        self.assertEqual(merge_gateway(stale, {**live, "alive": False}), stale)
+        self.assertEqual(merge_gateway(stale, None), stale)
+        down = merge_gateway(stale, {"alive": True, "platforms": {"telegram": {"state": "fatal", "error_message": "bad token"}}})
+        self.assertEqual(channel_health(CH, {**READY, "platforms": down})["detail"], "telegram is fatal: bad token")
 
 
 class RuleTest(unittest.TestCase):

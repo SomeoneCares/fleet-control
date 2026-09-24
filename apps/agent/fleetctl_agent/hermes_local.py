@@ -380,7 +380,59 @@ class HermesLocal:
         if report["plugins"]["fleetcontrol"] == "enabled":
             caps_out += ["hooks", "policy.enforce"]
         report["capabilities"] = caps_out
+        # A dashboard started before a Hermes self-update keeps serving the old code (Hermes only warns about it),
+        # and its messaging page then calls a healthy gateway stopped. Say so where people look: the Instances page.
+        installed = self.installed_version()
+        report["versions"] = {"dashboard": report["hermes_version"], "installed": installed}
+        if installed and report["hermes_version"] and installed != report["hermes_version"]:
+            report["dashboard_stale"] = True
+            report["notes"].append(f"Fleet Control's dashboard runs Hermes {report['hermes_version']} but {installed} is installed: "
+                                   "restart it (systemctl --user restart fleetctl-dashboard); until then its answers may be out of date")
         return report
+
+    def installed_version(self) -> Optional[str]:
+        """The Hermes version on disk (what a restart would run), from the checkout's hermes_cli/__init__.py."""
+        import re as _re
+
+        try:
+            with open(os.path.join(self.cfg.hermes_home, "hermes-agent", "hermes_cli", "__init__.py"), encoding="utf-8") as f:
+                m = _re.search(r'__version__\s*=\s*"([^"]+)"', f.read())
+            return m.group(1) if m else None
+        except OSError:
+            return None
+
+    def gateway_runtime(self) -> Optional[dict]:
+        """The gateway's own record of itself (``gateway_state.json``, written by the gateway every minute): whether
+        it is alive and how each messaging platform is connected. It is the source the dashboard reads too, so it is
+        right even when the dashboard runs old code. None when there is no record."""
+        from datetime import datetime, timezone
+
+        try:
+            with open(os.path.join(self.cfg.hermes_home, "gateway_state.json"), encoding="utf-8") as f:
+                rec = json.load(f)
+        except (OSError, ValueError):
+            return None
+        if not isinstance(rec, dict):
+            return None
+        pid, alive = rec.get("pid"), False
+        if isinstance(pid, int) and pid > 0:
+            try:
+                os.kill(pid, 0)
+                alive = True
+            except PermissionError:
+                alive = True  # exists, owned by someone else
+            except (OSError, ValueError, SystemError):
+                alive = False
+        age = None
+        try:
+            age = int((datetime.now(timezone.utc) - datetime.fromisoformat(str(rec.get("updated_at")).replace("Z", "+00:00"))).total_seconds())
+        except (TypeError, ValueError):
+            pass
+        fresh = age is not None and age <= 120  # Hermes' own staleness bound (_RUNTIME_STATUS_STALE_TTL_S)
+        platforms = {k: {"state": v.get("state"), "error_message": v.get("error_message")}
+                     for k, v in (rec.get("platforms") or {}).items() if isinstance(v, dict)}
+        return {"state": rec.get("gateway_state"), "alive": alive and fresh, "pid_alive": alive, "age_s": age,
+                "version": rec.get("code_version"), "platforms": platforms}
 
     def _enabled_plugins(self) -> list[str]:
         try:

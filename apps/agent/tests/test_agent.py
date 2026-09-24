@@ -426,6 +426,7 @@ class MessagingTest(unittest.TestCase):
         h = FakeHermes()
         state = {"routes": list(routes or [])}
         h.created, h.deleted, h.posted = [], [], []
+        h.gateway_runtime = lambda: None
         h.messaging_state = lambda: {"platforms": [{"id": "telegram", "state": "connected"}],
                                      "webhooks": {"enabled": enabled, "base_url": "http://localhost:8644", "routes": list(state["routes"])}}
 
@@ -503,6 +504,44 @@ class MessagingTest(unittest.TestCase):
             f"http://127.0.0.1:{srv.server_address[1]}/webhooks/fc-ops", {"text": "hi"}, "route-secret", "dlv_9")
         self.assertEqual((status, body, seen["ok"], seen["fresh"], seen["rid"], seen["body"]["text"]),
                          (200, {"status": "delivered"}, True, True, "dlv_9", "hi"))
+
+
+class GatewayRecordTest(unittest.TestCase):
+    """The gateway's own gateway_state.json, and a dashboard left behind by a Hermes update."""
+
+    def _home(self, record=None, version=None):
+        home = tempfile.mkdtemp()
+        if record is not None:
+            with open(os.path.join(home, "gateway_state.json"), "w", encoding="utf-8") as f:
+                json.dump(record, f)
+        if version:
+            os.makedirs(os.path.join(home, "hermes-agent", "hermes_cli"))
+            with open(os.path.join(home, "hermes-agent", "hermes_cli", "__init__.py"), "w", encoding="utf-8") as f:
+                f.write(f'__version__ = "{version}"\n')
+        return HermesLocal(HermesLocalConfig(hermes_home=home))
+
+    def test_a_live_fresh_record_is_believed_and_a_stale_one_is_not(self):
+        from datetime import datetime, timedelta, timezone
+        now = datetime.now(timezone.utc)
+        rec = {"pid": os.getpid(), "gateway_state": "running", "code_version": "0.21.4", "updated_at": now.isoformat(),
+               "platforms": {"telegram": {"state": "connected"}, "webhook": {"state": "fatal", "error_message": "port busy"}}}
+        g = self._home(rec).gateway_runtime()
+        self.assertTrue(g["alive"])
+        self.assertEqual((g["platforms"]["telegram"]["state"], g["platforms"]["webhook"]["error_message"]), ("connected", "port busy"))
+        old = self._home({**rec, "updated_at": (now - timedelta(minutes=10)).isoformat()}).gateway_runtime()
+        self.assertEqual((old["alive"], old["pid_alive"]), (False, True))  # the process lives, its record is stale
+        self.assertIsNone(self._home().gateway_runtime())
+
+    def test_a_dashboard_older_than_the_installed_hermes_is_reported(self):
+        h = self._home(version="0.21.4")
+        h.dashboard = lambda route, *a, **k: {"version": "0.21.2", "config_version": 7, "auth_required": False}
+        h.api = lambda route, *a, **k: {"version": "0.21.4"} if route == "health" else {"features": {}}
+        report = h.capability_report()
+        self.assertTrue(report["dashboard_stale"])
+        self.assertEqual(report["versions"], {"dashboard": "0.21.2", "installed": "0.21.4"})
+        self.assertTrue(any("restart" in n and "fleetctl-dashboard" in n for n in report["notes"]))
+        h.dashboard = lambda route, *a, **k: {"version": "0.21.4"}
+        self.assertNotIn("dashboard_stale", h.capability_report())
 
 class ConfigTest(unittest.TestCase):
     def test_environment_overrides(self):

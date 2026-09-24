@@ -28,7 +28,7 @@ from pydantic import BaseModel, Field, ValidationError
 from fleetcontrol_blueprint import Blueprint, dump_blueprint, json_schema, load_blueprint
 
 from .messaging import (
-    EVENTS, TEMPLATES, MessagingError, channel_health, new_channel, new_delivery, render, rules_from, test_text,
+    EVENTS, TEMPLATES, MessagingError, channel_health, merge_gateway, new_channel, new_delivery, render, rules_from, test_text,
 )
 from .ask import (
     ORCHESTRATOR_BLUEPRINT, AskError, orchestrator_blueprint, check_question, classification_of, granted_zones, grounding, instructions as ask_instructions, parse_answer,
@@ -1035,7 +1035,8 @@ def _delivery_result(job: dict) -> None:
 def _messaging_result(job: dict, instance_id: str) -> None:
     if job["kind"] == "messaging_discover" and job["status"] == "done":
         result = job.get("result") or {}
-        store.save_messaging_state(instance_id, {"platforms": result.get("platforms") or [], "webhooks": result.get("webhooks") or {}},
+        store.save_messaging_state(instance_id, {"platforms": merge_gateway(result.get("platforms") or [], result.get("gateway")),
+                                                 "webhooks": result.get("webhooks") or {}, "gateway": result.get("gateway")},
                                    time.time())
     channel_id = job["meta"].get("channel")
     if job["kind"] == "channel_route" and channel_id:
@@ -1070,8 +1071,10 @@ def get_messaging(user: dict = Depends(require("messaging.read"))) -> dict:
                           "can_discover": i["mode"] == "agent" and bool(i.get("agent_version")),
                           "discovered_at": st["at"] if st else None,
                           "webhooks_enabled": bool((st or {}).get("webhooks", {}).get("enabled")) if st else None,
+                          "gateway": (st or {}).get("gateway"),
                           "platforms": [{k: p.get(k) for k in ("id", "name", "enabled", "configured", "gateway_running", "state",
-                                                               "error_message", "home_channel")} for p in (st or {}).get("platforms") or []]})
+                                                               "dashboard_state", "error_message", "home_channel")}
+                                        for p in (st or {}).get("platforms") or []]})
     return {"channels": channels, "rules": rules_from(applied, channels), "events": EVENTS, "templates": list(TEMPLATES),
             "drafts": [{"name": d["metadata"]["name"], "version": d["metadata"]["version"]} for d in drafts],
             "instances": instances, "deliveries": store.list_deliveries(limit=30), "portal_url": _settings()["portal_url"]}

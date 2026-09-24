@@ -360,6 +360,7 @@ class Jobs:
         """The messaging platforms and the webhook platform's state; which Fleet Control routes this agent can
         sign for (it holds their secrets)."""
         state = self.hermes.messaging_state()
+        state["gateway"] = self.hermes.gateway_runtime()
         held = set(self._route_secrets())
         for r in state["webhooks"]["routes"]:
             r["signable"] = r.get("name") in held

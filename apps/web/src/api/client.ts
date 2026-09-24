@@ -440,6 +440,7 @@ export interface MessagingPlatform {
   configured: boolean;
   gateway_running: boolean;
   state: string | null;
+  dashboard_state?: string | null;  // what the instance's dashboard said, when the gateway's own record overrode it
   error_message: string | null;
   home_channel: { platform?: string; chat_id?: string; name?: string } | null;
 }

@@ -5,7 +5,7 @@ import { VERDICT_TONE, lastRunSummary, newTest, statusChip, suiteGroups, testIdF
 const t = (id: string, target: string, run: SuiteTest["last_run"] = null): SuiteTest => ({
   test: newTest(target, id), target_kind: target === "wf" ? "workflow" : "agent", profile: target, last_run: run,
 });
-const run = (status: "passed" | "failed" | "running", at: number, instance = "lab-01") => ({ id: `r${at}`, status, instance_id: instance, created_at: at, finished_at: at + 5, failure: null });
+const run = (status: "passed" | "failed" | "running" | "cancelled", at: number, instance = "lab-01") => ({ id: `r${at}`, status, instance_id: instance, created_at: at, finished_at: at + 5, failure: null });
 
 const suite: Suite = {
   blueprint: "aml", version: 3, status: "applied", workflows: ["wf"], gates_production: true, applied_on: [],
@@ -23,6 +23,12 @@ describe("test lab view logic", () => {
   it("summarises the last finished runs", () => {
     expect(lastRunSummary([suite])).toEqual({ passed: 1, ran: 2, instance: "staging-01", at: 35 });
     expect(lastRunSummary([])).toEqual({ passed: 0, ran: 0, instance: null, at: null });
+  });
+
+  it("never counts a cancelled run as a result", () => {
+    const stopped: Suite = { ...suite, tests: [...suite.tests, t("e", "idle", run("cancelled", 99, "gone-01"))] };
+    expect(lastRunSummary([stopped])).toEqual({ passed: 1, ran: 2, instance: "staging-01", at: 35 });
+    expect(statusChip("cancelled")).toEqual({ label: "Cancelled", tone: "neutral" });
   });
 
   it("labels statuses and verdicts with the four verdicts only", () => {

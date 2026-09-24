@@ -208,7 +208,7 @@ TEST_RUNS = Table(  # Test Lab: one row per test run, with its checks and claims
     Column("version", Integer, nullable=False),
     Column("test_id", String(64), nullable=False, index=True),
     Column("instance_id", String(64), nullable=False, index=True),
-    Column("status", String(16), nullable=False, index=True),  # running | passed | failed | not_verifiable | error
+    Column("status", String(16), nullable=False, index=True),  # running | passed | failed | not_verifiable | error | cancelled
     Column("created_at", Float, nullable=False, index=True),
     Column("doc", Doc, nullable=False),
 )
@@ -919,6 +919,11 @@ class Store:
             change(doc)
             c.execute(update(TEST_RUNS).where(TEST_RUNS.c.id == run_id).values(status=doc["status"], doc=doc))
             return doc
+
+    def delete_test_run(self, run_id: str) -> bool:
+        """Remove one test run. Its assurance claims live inside the run, so they go with it."""
+        with self._tx() as c:
+            return c.execute(delete(TEST_RUNS).where(TEST_RUNS.c.id == run_id)).rowcount == 1
 
     def list_test_runs(self, *, blueprint: Optional[str] = None, version: Optional[int] = None, test_id: Optional[str] = None,
                        instance_id: Optional[str] = None, since: Optional[float] = None, limit: int = 200) -> list[dict]:

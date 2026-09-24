@@ -371,7 +371,8 @@ export interface IntegrationsDoc {
 }
 
 export type Verdict = "Evidence found" | "No evidence" | "Not verifiable" | "Policy blocked";
-export type TestStatus = "running" | "passed" | "failed" | "not_verifiable" | "error";
+// "cancelled" is someone stopping a run — it says nothing about the test, so it is never a failure.
+export type TestStatus = "running" | "passed" | "failed" | "not_verifiable" | "error" | "cancelled";
 
 export interface BlueprintTest {
   id: string;
@@ -851,6 +852,8 @@ export const api = {
   testRuns: (q: { blueprint?: string; test_id?: string; instance_id?: string; limit?: number } = {}) =>
     call<TestRun[]>("GET", "/api/v1/testlab/runs", undefined, params(q)),
   testRun: (id: string) => call<TestRun>("GET", `/api/v1/testlab/runs/${enc(id)}`),
+  cancelTestRun: (id: string) => call<TestRun>("POST", `/api/v1/testlab/runs/${enc(id)}/cancel`),
+  deleteTestRun: (id: string) => call<{ ok: boolean; id: string }>("DELETE", `/api/v1/testlab/runs/${enc(id)}`),
   startTestRuns: (body: { blueprint: string; version: number; instance_id: string; test_ids?: string[] }) =>
     call<{ runs: string[]; skipped: { test_id: string; reason: string }[] }>("POST", "/api/v1/testlab/runs", body),
   saveTest: (name: string, version: number, testId: string, body: TestEditBody) =>

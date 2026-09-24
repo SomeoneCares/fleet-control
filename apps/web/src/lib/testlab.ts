@@ -23,6 +23,7 @@ export function statusChip(status: TestStatus | "not_run"): { label: string; ton
     case "failed": return { label: "Failed", tone: "error" };
     case "not_verifiable": return { label: "Not verifiable", tone: "neutral" };
     case "error": return { label: "Error", tone: "error" };
+    case "cancelled": return { label: "Cancelled", tone: "neutral" };
     default: return { label: "Not run", tone: "neutral" };
   }
 }
@@ -50,7 +51,9 @@ export function suiteGroups(suite: Suite): SuiteGroup[] {
 
 /** Across every suite: how many finished last runs passed, and where and when the newest one ran. */
 export function lastRunSummary(suites: Suite[]): { passed: number; ran: number; instance: string | null; at: number | null } {
-  const runs = suites.flatMap((s) => s.tests.map((t) => t.last_run)).filter((r): r is TestRunSummary => r !== null && r.status !== "running");
+  // a run still going has no result yet, and a cancelled one never will: neither counts as passed or failed
+  const runs = suites.flatMap((s) => s.tests.map((t) => t.last_run))
+    .filter((r): r is TestRunSummary => r !== null && r.status !== "running" && r.status !== "cancelled");
   const newest = runs.reduce<TestRunSummary | null>((a, r) => (!a || r.created_at > a.created_at ? r : a), null);
   return { passed: runs.filter((r) => r.status === "passed").length, ran: runs.length, instance: newest?.instance_id ?? null, at: newest?.finished_at ?? newest?.created_at ?? null };
 }

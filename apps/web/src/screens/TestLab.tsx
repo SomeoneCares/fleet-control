@@ -117,7 +117,7 @@ export function TestLabScreen() {
         <NewTestModal suite={suite} onClose={() => setNaming(false)}
           onCreate={(test) => { setNaming(false); setCreating(test); setSearch({ blueprint: suite.blueprint }); }} />
       )}
-      {openRun && <RunModal runId={openRun} onClose={() => setOpenRun(null)} />}
+      {openRun && <RunModal runId={openRun} onClose={() => setOpenRun(null)} onChanged={() => { setRunsKey((k) => k + 1); void reload(); }} />}
     </>
   );
 }
@@ -342,13 +342,36 @@ function RecentRuns({ blueprint, testId, now, onOpen }: { blueprint: string; tes
   );
 }
 
-function RunModal({ runId, onClose }: { runId: string; onClose: () => void }) {
-  const { data: r, error } = useLoad(() => api.testRun(runId), [runId], 3000);
+// Stop a run that is still going (it may never come back: the instance is gone or the agent died), or,
+// for an Admin, delete a finished one. The row in Recent runs is itself a button, so the controls live here.
+function RunModal({ runId, onClose, onChanged }: { runId: string; onClose: () => void; onChanged: () => void }) {
+  const { can } = useAuth();
+  const { data: r, error, reload } = useLoad(() => api.testRun(runId), [runId], 3000);
+  const [busy, setBusy] = useState<"stop" | "delete" | null>(null);
+  const [actError, setActError] = useState<string | null>(null);
+  const going = r?.status === "running";
+  async function act(kind: "stop" | "delete") {
+    if (!r) return;
+    const question = kind === "stop"
+      ? `Stop this run of ${r.test_id} on ${r.instance_id}? It will be marked Cancelled and will not count as a result.`
+      : `Delete this run of ${r.test_id}? Its checks and assurance claims go with it. This cannot be undone.`;
+    if (!window.confirm(question)) return;
+    setBusy(kind); setActError(null);
+    try {
+      if (kind === "stop") { await api.cancelTestRun(r.id); await reload(); onChanged(); }
+      else { await api.deleteTestRun(r.id); onChanged(); onClose(); }
+    } catch (e) { setActError(errorText(e)); } finally { setBusy(null); }
+  }
   return (
     <Modal width={760} title={r ? `${r.test_id} on ${r.instance_id}` : "Test run"} onClose={onClose}
       subtitle={r ? `${r.blueprint} v${r.version} · ${formatDateTime(r.created_at)} · by ${r.created_by}` : undefined}
-      footer={<Button variant="primary" onClick={onClose}>Close</Button>}>
+      footer={<>
+        {r && going && can("tests.run") && <Button variant="danger" disabled={busy !== null} onClick={() => void act("stop")}>{busy === "stop" ? "Stopping…" : "Stop run"}</Button>}
+        {r && !going && can("tests.manage") && <Button variant="danger" disabled={busy !== null} onClick={() => void act("delete")}>{busy === "delete" ? "Deleting…" : "Delete run"}</Button>}
+        <Button variant="primary" onClick={onClose}>Close</Button>
+      </>}>
       {error && <Banner tone="error">{error}</Banner>}
+      {actError && <Banner tone="error">{actError}</Banner>}
       {!r && !error && <div className="flex gap-2 items-center text-text-secondary"><Spinner /> Loading…</div>}
       {r && <RunDetail run={r} />}
     </Modal>
@@ -367,6 +390,7 @@ export function RunDetail({ run: r }: { run: TestRun }) {
         <span className="text-text-secondary">· evidence: {r.evidence === "transcript" ? "Hermes session transcript" : "none"}</span>
       </div>
       {r.status === "running" && <Banner tone="info"><span className="flex items-center gap-2"><Spinner />Running on {r.profile} ({r.instance_id}); this updates by itself.</span></Banner>}
+      {r.status === "cancelled" && <Banner tone="info">Stopped before it finished{r.error ? ` (${r.error})` : ""}. A cancelled run says nothing about the test and does not count as its result.</Banner>}
       {r.evidence_error && <Banner tone="warning">No transcript: {r.evidence_error}</Banner>}
       {r.notes.map((n) => <Banner key={n} tone="info">{n}</Banner>)}
 

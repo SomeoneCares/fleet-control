@@ -68,6 +68,71 @@ class TestLabApiTest(unittest.TestCase):
             self.c.post(f"/agent/v1/jobs/{job['id']}/result", json=answer(job["params"]), headers=agent)
         return r.json()
 
+    def _start(self, test_id="sanctions-evidence"):
+        """Start one run and leave it unanswered, as a hung or slow agent would."""
+        r = self.c.post("/api/v1/testlab/runs", json={"blueprint": self.bp, "version": 3, "instance_id": self.staging,
+                                                      "test_ids": [test_id]})
+        self.assertEqual(r.status_code, 201, r.text)
+        return r.json()["runs"][0]
+
+    def test_runs_started_within_one_clock_tick_still_have_an_order(self):
+        from unittest import mock
+        with mock.patch("fleetcontrol_api.main.time.time", return_value=1_000.0):  # a frozen clock: the worst tick
+            first, second = self._start(), self._start()
+        runs = {r["id"]: r for r in store.list_test_runs(blueprint=self.bp, test_id="sanctions-evidence")}
+        self.assertLess(runs[first]["created_at"], runs[second]["created_at"])
+        self.assertEqual(store.list_test_runs(blueprint=self.bp, test_id="sanctions-evidence", limit=1)[0]["id"], second)
+
+    def test_a_running_run_is_stopped_and_a_late_answer_cannot_revive_it(self):
+        run_id = self._start()
+        job = self.c.get(f"/agent/v1/instances/{self.staging}/jobs/next", headers=self.agent).json()  # the agent claims it
+        r = self.c.post(f"/api/v1/testlab/runs/{run_id}/cancel")
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["status"], "cancelled")
+        self.assertIn("cancelled by", r.json()["error"])
+        # the agent finishes anyway and reports a passing result: the run must stay cancelled
+        self.c.post(f"/agent/v1/jobs/{job['id']}/result", json=evidence_for(job["params"]), headers=self.agent)
+        after = self.c.get(f"/api/v1/testlab/runs/{run_id}").json()
+        self.assertEqual(after["status"], "cancelled")
+        self.assertEqual(after["claims"], [])  # no assurance claims from a run nobody wanted
+        audit = self.c.get("/api/v1/audit", params={"limit": 2000}).json()
+        self.assertTrue(any(e["action"] == "test.cancelled" and run_id in (e.get("detail") or "") for e in audit))
+
+    def test_a_queued_run_is_stopped_before_any_agent_picks_it_up(self):
+        run_id = self._start()
+        self.assertEqual(self.c.post(f"/api/v1/testlab/runs/{run_id}/cancel").status_code, 200)
+        nxt = self.c.get(f"/agent/v1/instances/{self.staging}/jobs/next", headers=self.agent).json()
+        self.assertFalse(nxt and nxt.get("meta", {}).get("test_run") == run_id)  # its job was closed
+
+    def test_a_cancelled_run_does_not_become_the_tests_result(self):
+        self._run(["sanctions-evidence"])  # a real pass first
+        self.c.post(f"/api/v1/testlab/runs/{self._start()}/cancel")
+        suites = self.c.get("/api/v1/testlab/suites").json()
+        mine = next(s for s in suites if s["blueprint"] == self.bp)
+        last = next(t["last_run"] for t in mine["tests"] if t["test"]["id"] == "sanctions-evidence")
+        self.assertEqual(last["status"], "passed")  # stopping a run says nothing about the test
+
+    def test_what_cancel_refuses(self):
+        done = self._run(["sanctions-evidence"])["runs"][0]
+        r = self.c.post(f"/api/v1/testlab/runs/{done}/cancel")
+        self.assertEqual(r.status_code, 409)
+        self.assertIn("already finished", r.json()["detail"])
+        self.assertEqual(self.c.post("/api/v1/testlab/runs/tr_nope/cancel").status_code, 404)
+        self.assertEqual(signed_in("viewer").post(f"/api/v1/testlab/runs/{self._start()}/cancel").status_code, 403)
+
+    def test_only_an_admin_deletes_a_run_and_never_one_still_going(self):
+        done = self._run(["sanctions-evidence"])["runs"][0]
+        for role in ("fleet_architect", "operator", "approver", "viewer"):
+            self.assertEqual(signed_in(role).delete(f"/api/v1/testlab/runs/{done}").status_code, 403, role)
+        self.assertEqual(self.c.delete(f"/api/v1/testlab/runs/{done}").status_code, 200)
+        self.assertEqual(self.c.get(f"/api/v1/testlab/runs/{done}").status_code, 404)
+        going = self._start()
+        r = self.c.delete(f"/api/v1/testlab/runs/{going}")
+        self.assertEqual(r.status_code, 409)
+        self.assertIn("cancel it first", r.json()["detail"])
+        self.c.post(f"/api/v1/testlab/runs/{going}/cancel")
+        self.assertEqual(self.c.delete(f"/api/v1/testlab/runs/{going}").status_code, 200)
+
     def test_a_suite_runs_on_staging_and_is_judged_from_the_evidence(self):
         out = self._run()
         self.assertEqual(len(out["runs"]), 4)  # the screener's three tests and the challenger's one

@@ -762,9 +762,14 @@ def _test_rows(bp: Blueprint) -> list[dict]:
 
 
 def _latest_runs(name: str, version: int) -> dict[str, dict]:
-    """The newest finished-or-running run of each test of one blueprint version."""
+    """The newest finished-or-running run of each test of one blueprint version.
+
+    A cancelled run is skipped: someone stopping a run says nothing about the test, so the test keeps
+    showing the last result it actually produced rather than a failure it never had."""
     latest: dict[str, dict] = {}
     for r in store.list_test_runs(blueprint=name, version=version, limit=2000):
+        if r.get("status") == "cancelled":
+            continue
         latest.setdefault(r["test_id"], r)
     return latest
 
@@ -825,9 +830,13 @@ def start_test_runs(body: TestRunStart, user: dict = Depends(require("tests.run"
         if row["profile"] not in live:
             skipped.append({"test_id": t["id"], "reason": f"profile {row['profile']} is not on {inst['id']}: apply the blueprint there, then import"})
             continue
+        # Strictly after this test's previous run: Windows' clock ticks every ~16 ms, and two runs with the same
+        # created_at would make "the newest run" (the test's result, and the production gate) a coin toss.
+        prev = store.list_test_runs(blueprint=bp.metadata.name, version=bp.metadata.version, test_id=t["id"], limit=1)
+        created_at = max(time.time(), prev[0]["created_at"] + 1e-6) if prev else time.time()
         doc = {"id": "tr_" + uuid.uuid4().hex[:10], "blueprint": bp.metadata.name, "version": bp.metadata.version, "test_id": t["id"],
                "target": t["target"], "profile": row["profile"], "instance_id": inst["id"], "environment": inst["environment"],
-               "status": "running", "created_at": time.time(), "created_by": user["email"], "finished_at": None, "job_id": None,
+               "status": "running", "created_at": created_at, "created_by": user["email"], "finished_at": None, "job_id": None,
                "checks": [], "claims": [], "output": None, "tool_calls": None, "usage": None, "duration_s": None, "error": None,
                "evidence": None, "evidence_error": None, "session_id": None, "run_id": None, "notes": []}
         store.save_test_run(doc)
@@ -858,12 +867,54 @@ def get_test_run(run_id: str, user: dict = Depends(require("blueprints.read"))) 
     return run
 
 
+@app.post("/api/v1/testlab/runs/{run_id}/cancel")
+def cancel_test_run(run_id: str, user: dict = Depends(require("tests.run"))) -> dict:
+    """Stop a run that is still going. It becomes ``cancelled`` — not ``error`` — because someone
+    stopping a run says nothing about whether the agent would have passed. Its job is closed so the
+    agent does not deliver it later, and a result that arrives anyway is ignored (``_test_result``)."""
+    doc = store.get_test_run(run_id)
+    if not doc:
+        raise HTTPException(404, "no such test run")
+    if doc.get("status") not in ("running", "queued"):
+        raise HTTPException(409, f"this run already finished ({doc.get('status')})")
+    now = time.time()
+    reason = "cancelled by " + user["email"]
+
+    def change(d: dict) -> None:
+        d.update(status="cancelled", error=reason, finished_at=now, checks=[], claims=[])
+
+    updated = store.update_test_run(run_id, change)
+    job = store.get_job(doc["job_id"]) if doc.get("job_id") else None
+    if job and job.get("status") in ("queued", "running"):
+        store.complete_job(job["id"], {"ok": False, "error": reason}, instance_id=job["instance_id"])
+    store.record(user["email"], "test.cancelled", f"{doc['blueprint']} v{doc['version']} {doc['test_id']}",
+                 f"{run_id} on {doc['instance_id']}")
+    return updated
+
+
+@app.delete("/api/v1/testlab/runs/{run_id}")
+def delete_test_run(run_id: str, user: dict = Depends(require("tests.manage"))) -> dict:
+    """Remove a finished run and the assurance claims it carried. Admin only, and never a run that is
+    still going — cancel it first, so a result cannot arrive for a run that no longer exists."""
+    doc = store.get_test_run(run_id)
+    if not doc:
+        raise HTTPException(404, "no such test run")
+    if doc.get("status") in ("running", "queued"):
+        raise HTTPException(409, "this run is still going: cancel it first")
+    store.delete_test_run(run_id)
+    store.record(user["email"], "test.run_deleted", f"{doc['blueprint']} v{doc['version']} {doc['test_id']}",
+                 f"{run_id} on {doc['instance_id']}, was {doc.get('status')}")
+    return {"ok": True, "id": run_id}
+
+
 def _test_result(job: dict) -> None:
     """A run_test job came back: judge it against the test and file the checks and claims."""
     run_id = job["meta"]["test_run"]
     doc = store.get_test_run(run_id)
     if not doc:
         return
+    if doc.get("status") == "cancelled":
+        return  # someone stopped this run; a result arriving afterwards must not bring it back to life
     result = job.get("result") or {}
     if job["status"] != "done":
         verdict = {"status": "error", "claims": [], "checks": [{"id": "run", "kind": "run", "subject": "the run", "outcome": "fail",

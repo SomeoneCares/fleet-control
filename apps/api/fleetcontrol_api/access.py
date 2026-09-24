@@ -45,6 +45,7 @@ PERMISSION_LABEL: dict[str, tuple[str, str]] = {
     "messaging.read": ("Estate", "See messaging channels, rules and what was sent"),
     "messaging.manage": ("Estate", "Add channels, send test messages, switch webhooks on"),
     "ask.use": ("Workspace", "Ask the fleet"),
+    "workflows.run": ("Operate", "Start and stop workflow runs"),
 }
 
 

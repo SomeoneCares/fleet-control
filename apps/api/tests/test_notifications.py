@@ -13,9 +13,14 @@ class OfferTest(unittest.TestCase):
         self.assertIn("plan.approval", offered("approver"))
         self.assertNotIn("drift.detected", offered("approver"))  # Approvers do not read drift
         self.assertNotIn("room.waiting", offered("operator"))   # Operators do not decide
-        self.assertEqual(offered("viewer"), [])
+        self.assertEqual(offered("viewer"), ["gate.waiting", "gate.escalated"])  # a workflow gate may name any role
         self.assertEqual(defaults("approver")["events"]["room.waiting"], True)
         self.assertEqual(defaults("admin")["events"]["drift.detected"], False)
+
+    def test_every_personal_event_has_a_message_head(self):
+        from fleetcontrol_api.main import _PERSONAL_HEAD
+        from fleetcontrol_api.notifications import PERSONAL_EVENTS
+        self.assertEqual(set(_PERSONAL_HEAD), set(PERSONAL_EVENTS))  # a new event needs its words, or sending it fails
 
     def test_a_role_change_drops_what_is_no_longer_offered(self):
         prefs = update(defaults("admin"), "admin", events={"drift.detected": True})

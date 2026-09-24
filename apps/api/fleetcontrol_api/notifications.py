@@ -23,6 +23,9 @@ PERSONAL_EVENTS: dict[str, tuple[str, Optional[str], bool]] = {
     "apply.failed": ("An apply failed", "plans.apply.nonprod", False),
     "drift.detected": ("Drift was detected on an instance", "drift.read", False),
     "assurance.no_evidence": ("An assurance check found No evidence", "assurance.read", False),
+    # a gate names any role (or escalates to one person), so these are offered to everyone
+    "gate.waiting": ("A workflow waits for your approval", None, True),
+    "gate.escalated": ("An overdue workflow approval was escalated to you", None, True),
 }
 _TELEGRAM = re.compile(r"^-?\d{3,20}$")
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")

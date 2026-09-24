@@ -239,6 +239,14 @@ NOTIFY_PREFS = Table(  # Notifications: one person's own choices and addresses (
     Column("updated_at", Float, nullable=False),
     Column("doc", Doc, nullable=False),
 )
+WORKFLOW_RUNS = Table(  # Workflows: one run of a blueprint's workflow, step by step (workflows.py)
+    "workflow_runs", META,
+    Column("id", String(32), primary_key=True),
+    Column("blueprint", String(64), nullable=False, index=True),
+    Column("status", String(16), nullable=False, index=True),
+    Column("started_at", Float, nullable=False, index=True),
+    Column("doc", Doc, nullable=False),
+)
 ASK_THREADS = Table(  # Ask the fleet: one person's conversation with the orchestrator (ask.py)
     "ask_threads", META,
     Column("id", String(32), primary_key=True),
@@ -1107,6 +1115,39 @@ class Store:
         with self._tx() as c:
             _upsert(c, NOTIFY_PREFS, {"email": email}, {"updated_at": time.time(), "doc": doc})
         return doc
+
+    # ---- Workflow runs ---------------------------------------------------------------
+    def save_workflow_run(self, doc: dict) -> dict:
+        with self._tx() as c:
+            _upsert(c, WORKFLOW_RUNS, {"id": doc["id"]},
+                    {"blueprint": doc["blueprint"], "status": doc["status"], "started_at": doc["started_at"], "doc": doc})
+        return doc
+
+    def get_workflow_run(self, run_id: str) -> Optional[dict]:
+        with self._tx() as c:
+            row = _one(c, select(WORKFLOW_RUNS.c.doc).where(WORKFLOW_RUNS.c.id == run_id))
+        return row["doc"] if row else None
+
+    def list_workflow_runs(self, *, status: Optional[str] = None, active: bool = False, limit: int = 100) -> list[dict]:
+        """Newest first; ``active`` keeps the runs that are still going (running or waiting at a gate)."""
+        q = select(WORKFLOW_RUNS.c.doc).order_by(WORKFLOW_RUNS.c.started_at.desc()).limit(limit)
+        if status:
+            q = q.where(WORKFLOW_RUNS.c.status == status)
+        if active:
+            q = q.where(WORKFLOW_RUNS.c.status.in_(("running", "waiting")))
+        with self._tx() as c:
+            return [r["doc"] for r in _all(c, q)]
+
+    def update_workflow_run(self, run_id: str, change: Callable[[dict], Any]) -> Optional[dict]:
+        """Load, change and save one run in a transaction: parallel agents' results arrive at the same moment."""
+        with self._tx() as c:
+            row = _one(c, select(WORKFLOW_RUNS.c.doc).where(WORKFLOW_RUNS.c.id == run_id))
+            if not row:
+                return None
+            doc = row["doc"]
+            change(doc)
+            c.execute(update(WORKFLOW_RUNS).where(WORKFLOW_RUNS.c.id == run_id).values(status=doc["status"], doc=doc))
+            return doc
 
     # ---- Ask the fleet ---------------------------------------------------------------
     def save_ask_thread(self, doc: dict) -> dict:

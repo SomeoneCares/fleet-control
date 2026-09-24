@@ -48,7 +48,8 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     "content.manage": frozenset({"admin", "fleet_architect"}),
     "messaging.read": ADMIN_PORTAL,  # channels, delivery rules and what was sent
     "messaging.manage": frozenset({"admin"}),  # build document §2.2: Admins own messaging
-    "ask.use": ADMIN_PORTAL | {"approver"},  # Ask the fleet: each question is an agent run, so not Viewers
+    "ask.use": ADMIN_PORTAL | {"approver"},
+    "workflows.run": ADMIN_PORTAL,  # start and stop workflow runs; a run's human gates are decided by the role each names  # Ask the fleet: each question is an agent run, so not Viewers
     "tests.run": ADMIN_PORTAL,  # Test Lab: run tests on lab and staging instances, and stop a run
     "tests.manage": frozenset({"admin"}),  # delete a test run: it erases history, so Admin only
     "assurance.read": ADMIN_PORTAL,

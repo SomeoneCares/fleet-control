@@ -27,6 +27,11 @@ from pydantic import BaseModel, Field, ValidationError
 
 from fleetcontrol_blueprint import Blueprint, dump_blueprint, json_schema, load_blueprint
 
+from .workflows import (
+    WorkflowError, agents_used, compose_input, current_step, decide_gate, escalate_due, finish_room_step,
+    instructions as wf_instructions, may_decide_gate, missing_requirements, new_run, normalize_steps, pending_members,
+    question_for, record_result, run_row as wf_run_row, settle, start_step,
+)
 from .access import (
     agent_grants, combined_zones, person_permissions, person_zones, summary as access_summary, tool_verdict, why_apply, why_room,
 )
@@ -1343,7 +1348,9 @@ _PERSONAL_HEAD = {"room.waiting": ("Decision waiting for you", "decision-request
                   "plan.approval": ("A production plan needs your approval", "alert"),
                   "ask.answered": ("The fleet answered your question", "alert"),
                   "apply.failed": ("Apply failed", "alert"), "drift.detected": ("Drift detected", "alert"),
-                  "assurance.no_evidence": ("Assurance: No evidence", "alert")}
+                  "assurance.no_evidence": ("Assurance: No evidence", "alert"),
+                  "gate.waiting": ("A workflow waits for your approval", "decision-request"),
+                  "gate.escalated": ("An overdue workflow approval was escalated to you", "decision-request")}
 
 
 def _direct_channels() -> dict[str, dict]:
@@ -1436,6 +1443,294 @@ def test_my_notifications(user: dict = Depends(current_user)) -> dict:
     text = f"Fleet Control · Test notification\nFor {user['email']}.\nOpen: {_settings()['portal_url'].rstrip('/')}/settings"
     doc = _deliver(ch, event="test", key=f"test:{uuid.uuid4().hex}", text=text, chat_id=address, to=user["email"], by=user["email"])
     return {k: doc[k] for k in ("id", "status", "channel", "at")}
+
+
+# ----------------------------------------------------------------------------- Workflows (Slice 5)
+
+WF_STEP_TIMEOUT = 900  # seconds one agent step may take on the instance
+WF_ROOM_OPTIONS = ["Approve the outcome", "Send it back for more work", "Reject"]
+
+
+def _wf_agents(parsed: dict) -> dict[str, dict]:
+    return {a["id"]: {"profile": a.get("hermes_profile") or a["id"], "mcps": list(a.get("mcps") or []),
+                      "content_zones": list(a.get("content_zones") or [])} for a in parsed.get("agents") or []}
+
+
+def _wf_readiness(parsed: dict, steps: list[dict]) -> list[dict]:
+    """Per instance with a paired agent: can this workflow run there, and if not, why (a missing profile or MCP server)."""
+    agents = _wf_agents(parsed)
+    out = []
+    for inst in store.list_instances():
+        if inst["mode"] != "agent" or not inst.get("agent_version"):
+            continue
+        live = store.live_state_for(inst["id"]) or {}
+        mcps = {m for state in live.values() for m in (state.get("mcps") or [])}
+        problems = [f"{a} runs as profile {agents[a]['profile']}, which {inst['id']} does not have"
+                    for a in agents_used(steps) if a in agents and agents[a]["profile"] not in live]
+        problems += missing_requirements(steps, agents, mcps)
+        out.append({"instance_id": inst["id"], "environment": inst["environment"], "ready": not problems, "problems": problems})
+    return out
+
+
+@app.get("/api/v1/workflows")
+def list_workflows(user: dict = Depends(require("blueprints.read"))) -> list[dict]:
+    """Every workflow of the applied blueprints: its steps as a run executes them, and where it can run."""
+    applied, _ = _blueprint_versions()
+    out = []
+    for parsed in applied:
+        for wf in parsed.get("workflows") or []:
+            steps = normalize_steps(wf["steps"])
+            out.append({"blueprint": parsed["metadata"]["name"], "version": parsed["metadata"].get("version"), "id": wf["id"],
+                        "steps": steps, "gates": sum(1 for s in steps if s["kind"] == "human_gate"),
+                        "agents": {a: v for a, v in _wf_agents(parsed).items() if a in agents_used(steps)},
+                        "readiness": _wf_readiness(parsed, steps)})
+    return out
+
+
+class WorkflowStart(BaseModel):
+    blueprint: str
+    workflow_id: str
+    instance_id: str
+    input: str = Field(..., min_length=3, max_length=4000)
+    case: Optional[str] = Field(None, max_length=64)
+    zone: Optional[str] = None  # where artifacts and the Decision Room live
+
+
+def _wf_escalate() -> None:
+    """Escalate every overdue gate once, and tell whom it escalated to. Called from heartbeats and reads."""
+    for run in store.list_workflow_runs(active=True):
+        fresh: list[dict] = []
+        store.update_workflow_run(run["id"], lambda d: fresh.extend(escalate_due(d)))
+        for step in fresh:
+            target = step.get("escalate_to")
+            people = [u for u in store.list_users() if target in (u["role"], u["email"])] if target else []
+            store.record("fleetcontrol", "workflow.gate_escalated", run["id"],
+                         f"step {step['index'] + 1}: {step['timeout']} passed; " + (f"escalated to {target}" if people
+                                                                                     else f"no role or account {target!r} to escalate to"))
+            _notify_people("gate.escalated", key=f"wf:{run['id']}:gate{step['index']}:escalated", people=people,
+                           ctx={"case": run.get("case"), "link": f"/workflows?run={run['id']}",
+                                "detail": f"{run['workflow_id']}: the {step['role']} approval is overdue ({step['timeout']})."})
+
+
+def _wf_advance(run_id: str) -> Optional[dict]:
+    """Move a run forward as far as it can go: start the next step, queue its agents, open its room."""
+    for _ in range(len((store.get_workflow_run(run_id) or {}).get("steps") or []) + 1):
+        todo: dict[str, Any] = {}
+
+        def step_forward(d: dict) -> None:
+            if d["status"] not in ("running", "waiting"):
+                return
+            cur = current_step(d)
+            if cur is None:
+                settle(d)
+                return
+            if cur["status"] == "pending":
+                start_step(cur, time.time())
+                todo["started"] = cur["index"]
+            d["status"] = "waiting" if cur["kind"] == "human_gate" else "running"
+            if cur["kind"] in ("agent", "parallel"):
+                members = [m for m in pending_members(cur) if m["agent"] not in cur["jobs"]]
+                for m in members:
+                    cur["jobs"][m["agent"]] = "queued"  # claimed here, so a concurrent advance cannot queue it twice
+                todo["agents"] = [(cur["index"], m) for m in members]
+            elif cur["kind"] == "decision_room" and not cur.get("room_id"):
+                cur["room_id"] = "pending"
+                todo["room"] = cur["index"]
+            d["updated_at"] = time.time()
+
+        run = store.update_workflow_run(run_id, step_forward)
+        if not run or not todo:
+            return run
+        parsed = (store.get_blueprint(run["blueprint"], run["version"]) or {}).get("parsed") or {}
+        agents = _wf_agents(parsed)
+        for index, member in todo.get("agents", []):
+            step = run["steps"][index]
+            job = store.enqueue_job(run["instance_id"], "hermes_run",
+                                    {"profile": agents.get(member["agent"], {}).get("profile", member["agent"]),
+                                     "input": compose_input(run, member, step), "instructions": wf_instructions(run, member, step),
+                                     "timeout": WF_STEP_TIMEOUT, "transcript": True},
+                                    {"workflow_run": run_id, "step": index, "agent": member["agent"]})
+            store.update_workflow_run(run_id, lambda d, i=index, a=member["agent"], j=job["id"]: d["steps"][i]["jobs"].__setitem__(a, j))
+        if "started" in todo and run["steps"][todo["started"]]["kind"] == "human_gate":
+            gate = run["steps"][todo["started"]]
+            store.record("fleetcontrol", "workflow.gate_waiting", run_id, f"step {gate['index'] + 1}: {gate['role']} to approve")
+            _notify_people("gate.waiting", key=f"wf:{run_id}:gate{gate['index']}:{gate['started_at']}",
+                           people=[u for u in store.list_users() if u["role"] == gate["role"]],
+                           ctx={"case": run.get("case"), "link": f"/workflows?run={run_id}",
+                                "detail": f"{run['workflow_id']} step {gate['index'] + 1}; decide within {gate['timeout']}."})
+            return run
+        if "room" in todo:
+            _wf_open_room(run, todo["room"])
+            continue  # the room step is done: carry on
+        if not todo.get("agents"):
+            continue
+        return run
+    return store.get_workflow_run(run_id)
+
+
+def _wf_open_room(run: dict, index: int) -> None:
+    """The run's last word goes to people: a Decision Room with every artifact as evidence."""
+    step = run["steps"][index]
+    zone = run.get("zone")
+    if not zone or not store.get_zone(zone):
+        def fail(d: dict) -> None:
+            s = d["steps"][index]
+            s.update(status="failed", error="no content zone for the room: start the run with a zone", finished_at=time.time())
+            d.update(status="failed", error=s["error"], finished_at=time.time())
+        store.update_workflow_run(run["id"], fail)
+        return
+    question = question_for(run, step.get("question_template"), {"case": run.get("case") or "this case", "workflow": run["workflow_id"],
+                                                                     "input": (run.get("input") or "")[:120]})
+    question = question[:300]
+    body = RoomCreate(question=question if len(question) >= 10 else f"Approve the outcome of {run['workflow_id']}?", zone=zone,
+                      options=WF_ROOM_OPTIONS, case=run.get("case"))
+    room = _open_room(body, opened_by=f"workflow:{run['workflow_id']}", kind="agent", actor="fleetcontrol", instance_id=run["instance_id"])
+    for name, art in run["artifacts"].items():
+        if art.get("artifact_id"):
+            item = new_evidence(kind="output", label=f"{name} (by {art['agent']})", ref=art["artifact_id"], source=f"workflow run {run['id']}",
+                                added_by="fleetcontrol", at=time.time(), basis="interpretation")
+            store.update_room(room["id"], lambda r, it=item: r["evidence"].append(it))
+    store.update_workflow_run(run["id"], lambda d: (finish_room_step(d, index, room["id"]), settle(d)))
+    store.record("fleetcontrol", "workflow.room_opened", run["id"], room["id"])
+
+
+def _wf_result(job: dict) -> None:
+    """An agent step came back: keep its artifact as a fleet output, record it, and move on."""
+    meta, result = job["meta"], job.get("result") or {}
+    run = store.get_workflow_run(meta["workflow_run"])
+    if not run or run["status"] not in ("running", "waiting"):
+        return  # cancelled or finished meanwhile
+    index, agent = meta["step"], meta["agent"]
+    step = run["steps"][index]
+    if step["jobs"].get(agent) != job["id"]:
+        return  # an answer for an earlier attempt (the step was sent back and asked again)
+    ok = job["status"] == "done" and bool(result.get("output"))
+    output = result.get("output") if ok else None
+    artifact_id = None
+    member = next((m for m in step["members"] if m["agent"] == agent), {})
+    if ok and run.get("zone") and store.get_zone(run["zone"]):
+        out = new_output(output_id="out_" + uuid.uuid4().hex[:10], zone=run["zone"], name=member.get("artifact") or f"{agent} result",
+                         kind="markdown", classification="confidential", produced_by=agent, at=time.time(), text=output[:200_000],
+                         case=run.get("case"), instance_id=run["instance_id"], blueprint=run["blueprint"],
+                         source={"kind": "agent", "workflow_run": run["id"], "step": index + 1, "run_id": result.get("run_id")})
+        store.save_output(out)
+        artifact_id = out["id"]
+    tools = [c.get("name") for c in (result.get("tool_calls") or [])] if "tool_calls" in result else None
+
+    def file(d: dict) -> None:
+        record_result(d, index, agent, ok=ok, output=output, artifact_id=artifact_id, run_ref=result.get("run_id"),
+                      error=None if ok else (result.get("error") or "no answer"))
+        d["steps"][index]["results"][agent].update(tools=tools, session_id=result.get("session_id"))
+
+    store.update_workflow_run(run["id"], file)
+    store.record("fleetcontrol", "workflow.step_done" if ok else "workflow.step_failed", run["id"],
+                 f"step {index + 1} {agent}" + ("" if ok else f": {(result.get('error') or 'no answer')[:160]}"))
+    _wf_advance(run["id"])
+
+
+@app.post("/api/v1/workflows/runs", status_code=201)
+def start_workflow(body: WorkflowStart, user: dict = Depends(require("workflows.run"))) -> dict:
+    applied, _ = _blueprint_versions()
+    parsed = next((p for p in applied if p["metadata"]["name"] == body.blueprint), None)
+    if not parsed:
+        raise HTTPException(404, f"no applied blueprint {body.blueprint}: workflows run from what is applied")
+    wf = next((w for w in parsed.get("workflows") or [] if w["id"] == body.workflow_id), None)
+    if not wf:
+        raise HTTPException(404, f"no workflow {body.workflow_id} in {body.blueprint}")
+    inst = _require_instance(body.instance_id)
+    if inst["mode"] != "agent" or not inst.get("agent_version"):
+        raise HTTPException(409, f"{inst['id']} has no paired Fleet Control Agent")
+    try:
+        steps = normalize_steps(wf["steps"])
+    except WorkflowError as exc:
+        raise HTTPException(422, str(exc))
+    ready = next((r for r in _wf_readiness(parsed, steps) if r["instance_id"] == inst["id"]), None)
+    if not ready or not ready["ready"]:
+        raise HTTPException(409, "cannot run here: " + "; ".join((ready or {}).get("problems") or ["no paired agent"]))
+    needs_room = any(s["kind"] == "decision_room" for s in steps)
+    zone = body.zone
+    if zone and (not store.get_zone(zone) or zone not in _my_zones(user)):
+        raise HTTPException(404, "no such content zone")
+    if needs_room and not zone:
+        raise HTTPException(422, "this workflow opens a Decision Room: choose the content zone it lives in")
+    run = new_run(run_id="wfr_" + uuid.uuid4().hex[:10], blueprint=body.blueprint, version=parsed["metadata"]["version"],
+                  workflow_id=wf["id"], instance_id=inst["id"], steps=wf["steps"], started_by=user["email"], at=time.time(),
+                  zone=zone, case=body.case, input_text=body.input)
+    store.save_workflow_run(run)
+    store.record(user["email"], "workflow.started", run["id"], f"{body.blueprint} {wf['id']} on {inst['id']}")
+    return _wf_advance(run["id"])
+
+
+@app.get("/api/v1/workflows/runs")
+def list_workflow_runs(active: bool = False, user: dict = Depends(require("blueprints.read"))) -> list[dict]:
+    _wf_escalate()
+    return [wf_run_row(r) for r in store.list_workflow_runs(active=active)]
+
+
+def _wf_run_out(run: dict, user: dict) -> dict:
+    gates = {s["index"]: may_decide_gate(s, email=user["email"], role=user["role"]) for s in run["steps"] if s["kind"] == "human_gate"}
+    return {**run, "row": wf_run_row(run), "may_decide": {i: {"allowed": ok, "why": why} for i, (ok, why) in gates.items()}}
+
+
+@app.get("/api/v1/workflows/runs/{run_id}")
+def get_workflow_run(run_id: str, user: dict = Depends(current_user)) -> dict:
+    """A run with its steps and results. Anyone signed in may read a run whose gate they are asked to decide."""
+    run = store.get_workflow_run(run_id)
+    if not run:
+        raise HTTPException(404, "no such run")
+    if not allowed(user["role"], "blueprints.read") and not any(
+            s["kind"] == "human_gate" and may_decide_gate(s, email=user["email"], role=user["role"])[0] for s in run["steps"]):
+        raise HTTPException(403, "only people who read blueprints, or who decide one of its gates, see a run")
+    _wf_escalate()
+    return _wf_run_out(store.get_workflow_run(run_id), user)
+
+
+class GateDecision(BaseModel):
+    approve: bool
+    note: str = Field("", max_length=2000)
+
+
+@app.post("/api/v1/workflows/runs/{run_id}/gates/{index}")
+def decide_workflow_gate(run_id: str, index: int, body: GateDecision, user: dict = Depends(current_user)) -> dict:
+    """Approve a gate, or send the work back (with a note) to the agent the gate names."""
+    if not body.approve and not body.note.strip():
+        raise HTTPException(422, "say what should change when you send work back")
+    errors: list[str] = []
+
+    def change(d: dict) -> None:
+        try:
+            decide_gate(d, index, by=user["email"], role=user["role"], approve=body.approve, note=body.note)
+            if d["status"] == "waiting":
+                d["status"] = "running"
+        except (WorkflowError, IndexError) as exc:
+            errors.append(str(exc) or "no such step")
+
+    run = store.update_workflow_run(run_id, change)
+    if not run:
+        raise HTTPException(404, "no such run")
+    if errors:
+        raise HTTPException(409, errors[0])
+    store.record(user["email"], "workflow.gate_approved" if body.approve else "workflow.gate_sent_back", run_id,
+                 f"step {index + 1}" + (f": {body.note.strip()[:160]}" if body.note.strip() else ""))
+    return _wf_run_out(_wf_advance(run_id) or run, user)
+
+
+@app.post("/api/v1/workflows/runs/{run_id}/cancel")
+def cancel_workflow_run(run_id: str, user: dict = Depends(require("workflows.run"))) -> dict:
+    run = store.get_workflow_run(run_id)
+    if not run:
+        raise HTTPException(404, "no such run")
+    if run["status"] not in ("running", "waiting"):
+        raise HTTPException(409, f"this run is {run['status']}")
+    for s in run["steps"]:
+        for job_id in (s.get("jobs") or {}).values():
+            job = store.get_job(job_id) if job_id and job_id != "queued" else None
+            if job and job["status"] in ("queued", "running"):
+                store.complete_job(job["id"], {"ok": False, "error": f"run cancelled by {user['email']}"}, instance_id=job["instance_id"])
+    run = store.update_workflow_run(run_id, lambda d: d.update(status="cancelled", finished_at=time.time(), updated_at=time.time(),
+                                                                error=f"cancelled by {user['email']}"))
+    store.record(user["email"], "workflow.cancelled", run_id)
+    return _wf_run_out(run, user)
 
 
 # ----------------------------------------------------------------------------- Integrations (Slice 3)
@@ -2659,6 +2954,7 @@ def heartbeat(instance_id: str, body: HeartbeatBody, inst: str = Depends(agent_i
     if inst != instance_id:
         raise HTTPException(403)
     store.heartbeat(instance_id, body.agent_version, body.report)
+    _wf_escalate()  # heartbeats are Fleet Control's clock: an overdue workflow gate escalates within a beat
     return {"ok": True}
 
 
@@ -2740,6 +3036,8 @@ def job_result(job_id: str, result: dict[str, Any], inst: str = Depends(agent_in
         _architect_result(job)
     if job["kind"] == "hermes_run" and job["meta"].get("ask_thread"):
         _ask_result(job)
+    if job["kind"] == "hermes_run" and job["meta"].get("workflow_run"):
+        _wf_result(job)
     if job["kind"] == "run_test" and job["meta"].get("test_run"):
         _test_result(job)
     if job["kind"] in ("mcp_discover", "mcp_write") and job["meta"].get("discovery"):

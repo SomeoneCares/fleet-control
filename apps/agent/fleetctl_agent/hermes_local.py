@@ -411,7 +411,9 @@ class HermesLocal:
         env = dict(os.environ, HERMES_HOME=self.cfg.hermes_home)
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
         if proc.returncode != 0:
-            raise HermesLocalError(f"hermes {' '.join(args)} failed ({proc.returncode}): {proc.stderr.strip()[:500]}")
+            # Hermes prints some refusals ("a profile named … already exists") to stdout: never report a blank reason
+            reason = (proc.stderr.strip() or proc.stdout.strip() or "no output")[-500:]
+            raise HermesLocalError(f"hermes {' '.join(args)} failed ({proc.returncode}): {reason}")
         return proc.stdout
 
     # ------------------------------------------------------------------ discovery

@@ -272,7 +272,9 @@ class Jobs:
             op = ch.get("op")
             try:
                 if op == "ensure_profile":
+                    self._clear_policy_stub(ch["profile"])  # a folder left by an earlier agent would block the create
                     self.hermes.ensure_profile(ch["profile"], ch.get("description", ""), ch["provider"], ch["model"], ch.get("clone_from"))
+                    self._install_pending_policy(ch["profile"])
                 elif op == "write_soul":
                     self.hermes.write_soul(ch["profile"], ch["content"])
                 elif op == "set_skill":
@@ -299,18 +301,60 @@ class Jobs:
         return {"snapshot": snap, "results": results}
 
     def push_policy(self, p: dict) -> dict:
-        """params: {"profiles": {profile_name: policy_json}} — written where the plugin reads them."""
-        written = []
+        """params: {"profiles": {profile_name: policy_json}} — written where the plugin reads them.
+
+        A profile the apply has not created yet gets its policy held here and installed right after the profile
+        exists: writing into ~/.hermes/profiles/<name>/ first would make that folder, and Hermes then refuses to
+        create a profile whose folder already exists."""
+        written, held = [], []
+        real = {pr.get("name") for pr in self.hermes.profiles()}
         for name, policy in (p.get("profiles") or {}).items():
-            home = self.hermes.cfg.hermes_home if name == "default" else os.path.join(self.hermes.cfg.hermes_home, "profiles", name)
-            d = os.path.join(home, "fleetcontrol")
-            os.makedirs(d, exist_ok=True)
-            tmp = os.path.join(d, "policy.json.tmp")
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(policy, f, indent=2)
-            os.replace(tmp, os.path.join(d, "policy.json"))
+            if name != "default" and name not in real:
+                self._clear_policy_stub(name)
+                self._write_policy(self._pending_policy_path(name), policy)
+                held.append(name)
+                continue
+            self._write_policy(os.path.join(self._profile_home(name), "fleetcontrol", "policy.json"), policy)
             written.append(name)
-        return {"written": written}
+        return {"written": written, "held_until_created": held}
+
+    def _profile_home(self, name: str) -> str:
+        return self.hermes.cfg.hermes_home if name == "default" else os.path.join(self.hermes.cfg.hermes_home, "profiles", name)
+
+    def _pending_policy_path(self, name: str) -> str:
+        return os.path.join(self.cfg.state_dir, "pending-policy", f"{name}.json")
+
+    @staticmethod
+    def _write_policy(path: str, policy: dict) -> None:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(policy, f, indent=2)
+        os.replace(tmp, path)
+
+    def _clear_policy_stub(self, name: str) -> bool:
+        """Remove a folder earlier agents left behind for a profile that was never created: it holds nothing but
+        fleetcontrol/policy.json. Anything else in it, and it is left alone (it is not ours to delete)."""
+        home = self._profile_home(name)
+        if name == "default" or not os.path.isdir(home):
+            return False
+        entries = os.listdir(home)
+        fc = os.path.join(home, "fleetcontrol")
+        if entries != ["fleetcontrol"] or not os.path.isdir(fc) or set(os.listdir(fc)) - {"policy.json", "policy.json.tmp"}:
+            return False
+        for f in os.listdir(fc):
+            os.remove(os.path.join(fc, f))
+        os.rmdir(fc)
+        os.rmdir(home)
+        logger.info("removed the policy-only folder left for profile %s, so Hermes can create it", name)
+        return True
+
+    def _install_pending_policy(self, name: str) -> None:
+        pending = self._pending_policy_path(name)
+        if os.path.exists(pending):
+            target = os.path.join(self._profile_home(name), "fleetcontrol", "policy.json")
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            os.replace(pending, target)
 
     def snapshot(self, p: dict) -> dict:
         return {"snapshot": self.hermes.snapshot(os.path.join(self.cfg.state_dir, "snapshots"))}

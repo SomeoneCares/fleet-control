@@ -29,6 +29,7 @@ class FakeHermes:
         if a[1] == "boom": raise RuntimeError("skill install failed")
         self.calls.append(("set_skill", a))
     def set_toolset(self, *a, **k): self.calls.append(("set_toolset", a))
+    def profiles(self): return [{"name": n} for n in getattr(self, "real", ["screener"])]
 
 
 class DriftTest(unittest.TestCase):
@@ -88,6 +89,39 @@ class PolicyPushTest(unittest.TestCase):
             self.assertEqual(json.load(f)["deny_tools"], ["web.fetch"])
         self.assertTrue(os.path.exists(os.path.join(h.cfg.hermes_home, "profiles", "screener", "fleetcontrol", "policy.json")))
 
+
+    def test_a_profile_not_created_yet_gets_its_policy_after_the_create(self):
+        # Writing into profiles/<name>/ before the profile exists makes the folder, and Hermes then refuses to
+        # create it ("already exists") -- what broke sas-reviewer on hermesbo-lab-01.
+        h = FakeHermes()
+        h.real = ["screener"]
+        h.ensure_profile = lambda name, *a, **k: (h.real.append(name), os.makedirs(os.path.join(h.cfg.hermes_home, "profiles", name, "memories")))
+        jobs = Jobs(AgentConfig(state_dir=tempfile.mkdtemp()), h)
+        out = jobs.dispatch({"kind": "push_policy", "params": {"profiles": {"reviewer": {"deny_tools": ["web.fetch"]}}}})
+        self.assertEqual((out["written"], out["held_until_created"]), ([], ["reviewer"]))
+        home = os.path.join(h.cfg.hermes_home, "profiles", "reviewer")
+        self.assertFalse(os.path.exists(home))  # nothing in the way of the create
+        jobs.dispatch({"kind": "apply", "params": {"snapshot": False, "changes": [
+            {"op": "ensure_profile", "profile": "reviewer", "provider": "p", "model": "m"}]}})
+        with open(os.path.join(home, "fleetcontrol", "policy.json")) as f:
+            self.assertEqual(json.load(f)["deny_tools"], ["web.fetch"])
+
+    def test_a_stub_left_by_an_earlier_agent_is_cleared_but_nothing_else(self):
+        h = FakeHermes()
+        h.real = []
+        jobs = Jobs(AgentConfig(state_dir=tempfile.mkdtemp()), h)
+        stub = os.path.join(h.cfg.hermes_home, "profiles", "sar-drafter", "fleetcontrol")
+        os.makedirs(stub)
+        open(os.path.join(stub, "policy.json"), "w").write("{}")
+        self.assertTrue(jobs._clear_policy_stub("sar-drafter"))
+        self.assertFalse(os.path.exists(os.path.dirname(stub)))
+        real = os.path.join(h.cfg.hermes_home, "profiles", "mine", "fleetcontrol")
+        os.makedirs(real)
+        open(os.path.join(real, "policy.json"), "w").write("{}")
+        open(os.path.join(h.cfg.hermes_home, "profiles", "mine", "SOUL.md"), "w").write("me")
+        self.assertFalse(jobs._clear_policy_stub("mine"))  # anything else in it: not ours to delete
+        self.assertTrue(os.path.exists(os.path.join(h.cfg.hermes_home, "profiles", "mine", "SOUL.md")))
+        self.assertFalse(jobs._clear_policy_stub("default"))
 
 class SocketTest(unittest.TestCase):
     def test_plugin_events_land_in_queue(self):

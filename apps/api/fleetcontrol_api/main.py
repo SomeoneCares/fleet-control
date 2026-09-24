@@ -2266,4 +2266,7 @@ def job_result(job_id: str, result: dict[str, Any], inst: str = Depends(agent_in
         bp = _blueprint(applied["name"], applied["version"])
         scan = store.enqueue_job(inst, "drift_scan", {"managed": bp.managed_fields()}, {"blueprint": applied["name"], "version": applied["version"]})
         store.record("fleetcontrol", "drift.scan_requested", inst, f"{applied['name']} v{applied['version']} after apply ({scan['id']})")
+        # and a fresh import, so a profile the apply created shows up wherever profiles are chosen
+        imp = store.enqueue_job(inst, "import_profiles", {}, {"after_apply": job["id"]})
+        store.record("fleetcontrol", "instance.import_requested", inst, f"after apply ({imp['id']})")
     return {"ok": True}

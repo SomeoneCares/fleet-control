@@ -45,6 +45,9 @@ class WebEndpointsTest(unittest.TestCase):
         scan = self._agent_does({"ok": True, "drift": {}, "scanned": []})
         self.assertEqual(scan["kind"], "drift_scan")        # drift detection starts right after an apply
         self.assertEqual(scan["params"]["managed"]["challenger"]["skills"], ["citation-check", "counter-argument", "redaction-check"])
+        imp = self._agent_does({"ok": True, "profiles": {"challenger": {}}})
+        self.assertEqual(imp["kind"], "import_profiles")  # and a fresh import, so created profiles can be chosen
+        self.assertEqual(self._row()["live_profile_count"], 1)
         row = self._row()
         self.assertEqual(row["open_drift"], 0)
         self.assertEqual(row["applied"]["version"], 3)

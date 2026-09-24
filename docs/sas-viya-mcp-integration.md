@@ -28,12 +28,21 @@ curl -X POST "http://127.0.0.1:9129/api/mcp/servers?profile=<profile>" \
   -d '{"name":"sas-viya","url":"https://viya.internal/sas-mcp/mcp","auth":"oauth"}'
 ```
 
-Then authorize, then test:
+Then authorize, **restart the gateway**, then test:
 
 ```bash
-HERMES_PROFILE=<profile> hermes mcp login sas-viya --flow browser
+hermes -p <profile> mcp login sas-viya --flow browser   # -p, before the subcommand
+hermes gateway restart                                   # or the agent keeps the old credential
 curl -X POST "http://127.0.0.1:9129/api/mcp/servers/sas-viya/test?profile=<profile>" -H "X-Hermes-Session-Token: $TOKEN"
 ```
+
+Both of those lines were wrong in the first version of this file, and each cost an hour:
+
+* **`HERMES_PROFILE=… hermes mcp login` does not work.** The env var is ignored; the login writes to
+  whichever profile is current (`◆` in `hermes profile list`), so it silently re-authorises `default`
+  while the profile you meant still reports no cached tokens. The documented selector is a global
+  flag **before** the subcommand: `hermes -p <profile> mcp login …` (flag → env var → sticky default).
+* **The restart is not optional.** See Trap 5.
 
 ## Trap 1 — TLS: the server sends only its leaf certificate
 
@@ -110,6 +119,93 @@ expiring independently. The alternative is `allowRawBearer: true` on the SAS cha
 shares one identity in SAS's audit trail. Per-profile OAuth is more work and better evidence.
 
 Token refresh across a restart is **not yet verified**.
+
+## Trap 5 — a running gateway keeps serving the credential it started with
+
+`hermes mcp login` writes the token to disk. **The running gateway does not pick it up.** It keeps
+using the credential it had, fails OAuth, and parks the server:
+
+```
+MCP server 'sas-viya' hit a permanent error, parking without retries;
+will self-probe every 300s (state: connected → parked): OAuthNonInteractiveError
+```
+
+There is no `reload` — `hermes gateway --help` offers only `restart`. So after any login:
+
+```bash
+hermes gateway restart
+```
+
+This is easy to miss because `/api/mcp/servers/sas-viya/test` **passes anyway**: the dashboard opens
+its own connection with the fresh token, while the gateway — the thing that actually runs agents —
+is still parked. A green `/test` next to a hanging agent run is this trap.
+
+The first version of this file missed it entirely: the original session happened to restart the
+gateway for an unrelated reason, so the recipe appeared to work.
+
+> **Cost for a fleet:** the restart drains in-flight turns and interrupts **every profile on the
+> host**, not only the SAS-using ones. It waits up to `agent.restart_after_turn_timeout` (1815s by
+> default) for in-flight work; a hung run blocks it until you kill the old process.
+
+## Recovering after a SAS outage
+
+Credentials do **not** survive the MCP server going away. After Viya returned from an outage, every
+profile reported `no cached tokens found`, and each `hermes mcp login` produced a **new `client_id`**
+rather than reusing the stored registration — so the server appears to discard dynamic client
+registrations when its pod restarts.
+
+Recovery is therefore, per SAS-using profile:
+
+1. `hermes -p <profile> mcp login sas-viya --flow browser` — a human approves in a browser
+2. `hermes gateway restart` — once, after the last login
+3. `/test` each profile to confirm
+
+**For a fleet that means N browser consents plus a gateway restart after any SAS maintenance.** If
+that is unacceptable, the alternatives are to persist the MCP server's OAuth store, or to set
+`allowRawBearer: true` and use `auth: "header"` with a service account — which trades away per-agent
+attribution in SAS's audit trail, since every agent then presents one identity.
+
+## When it breaks: telling the failures apart
+
+The portal says `Unreachable` for every cause, and `/test` has returned an **empty** `error` string
+for a dead upstream. These distinguish them from the Hermes host:
+
+| Symptom | Meaning |
+| --- | --- |
+| TCP connects, TLS completes, HTTP `000` | The ingress is up, the workload behind it is dead. Not a credential problem. |
+| HTTP `401` | The server is healthy and asking for authorization — this is the good case. |
+| `CERTIFICATE_VERIFY_FAILED` | Trap 1: the CA is missing from the bundle Hermes actually uses. |
+| `no cached tokens found` | That profile has never been authorised, or its token lapsed. |
+| `OAuthNonInteractiveError` on a *connected* server | Trap 5: the gateway is serving a stale credential. Restart it. |
+| `/test` passes but agent runs hang | Trap 5 again — dashboard fresh, gateway parked. |
+
+```bash
+curl -s -o /dev/null -w "%{http_code} connect=%{time_connect}s tls=%{time_appconnect}s\n" \
+  https://viya.internal/sas-mcp/mcp
+```
+
+Integrations reports the **worst** result across all profiles, so one unauthorised profile shows the
+whole server as `Unreachable` even while discovery lists its tools through a working one. Deregister
+the server from profiles no blueprint grants it to — it keeps the estate honest and the badge green:
+
+```bash
+curl -X DELETE "http://127.0.0.1:9129/api/mcp/servers/sas-viya?profile=<profile>" -H "X-Hermes-Session-Token: $TOKEN"
+```
+
+## The host needs disk, and fails quietly without it
+
+A full root filesystem breaks Hermes in ways that look like anything but a disk problem: OAuth flows
+die mid-handshake with `OSError: [Errno 28] No space left on device` thrown from inside Hermes's own
+logging, agent runs hang with no error, and **session transcripts stop being written — which is what
+Assurance reads as evidence**. Check the disk before diagnosing anything subtle:
+
+```bash
+df -h /
+```
+
+On the lab host the culprit was not Hermes (~4 GB) but a nightly backup of `/srv/bid-office` that
+included its own `backups/` directory: 193 MB → 294 MB → 1.2 GB → 2.3 GB → 8 GB → 13 GB → 24 GB →
+58 GB on consecutive nights. Any backup on a Hermes host must exclude its own output directory.
 
 ## What Fleet Control shows
 

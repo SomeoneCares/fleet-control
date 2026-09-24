@@ -2,7 +2,7 @@
 
 import unittest
 
-from fleetcontrol_api.integrations import aggregate, mcp_config
+from fleetcontrol_api.integrations import aggregate, mcp_config, merge_discovery
 
 INSTANCES = [{"id": "prod-01", "environment": "production"}, {"id": "lab-01", "environment": "lab"}]
 LIVE = {
@@ -16,7 +16,7 @@ DISCOVERED = {
     "lab-01": {"screener": [{"name": "opensanctions", "enabled": False}]},
 }
 BLUEPRINT = {
-    "metadata": {"name": "aml"},
+    "metadata": {"name": "aml", "version": 2},
     "agents": [{"id": "screener", "mcps": ["opensanctions"], "model": {"provider": "local", "name": "llama-4"}},
                {"id": "drafter", "mcps": [], "model": {"provider": "anthropic", "name": "claude-sonnet"}}],
     "policies": [{"id": "no-export", "kind": "tool-denylist", "applies_to": ["drafter"], "enforcement": "block",
@@ -34,7 +34,7 @@ class AggregateTest(unittest.TestCase):
         os_row = self.rows[("mcp", "opensanctions")]
         self.assertEqual((os_row["instances"], os_row["environments"]), (["lab-01", "prod-01"], ["lab", "production"]))
         self.assertEqual([t["name"] for t in os_row["tools"]], ["search"])
-        self.assertEqual(os_row["used_by"], [{"agent": "screener", "blueprint": "aml"}])
+        self.assertEqual(os_row["used_by"], [{"agent": "screener", "blueprint": "aml", "version": 2}])
         self.assertEqual((os_row["health"], os_row["enabled_everywhere"], os_row["endpoint"]), ("healthy", False, "https://os.example/mcp"))
         self.assertEqual(os_row["allow"]["opensanctions.submit"]["approval_for"], ["screener", "drafter"])
 
@@ -52,6 +52,50 @@ class AggregateTest(unittest.TestCase):
     def test_ordering_puts_mcp_servers_first(self):
         kinds = [r["kind"] for r in aggregate(instances=INSTANCES, live=LIVE, discovered=DISCOVERED, blueprints=[BLUEPRINT])]
         self.assertEqual(kinds, sorted(kinds, key=lambda k: k != "mcp"))
+
+    def test_one_bad_profile_makes_a_server_degraded_not_unreachable(self):
+        live = {"lab-01": {p: {"mcps": ["sas-viya"]} for p in ("analyst", "reviewer", "writer")}}
+        found = {"lab-01": {"analyst": [{"name": "sas-viya", "ok": True, "tools": []}],
+                            "reviewer": [{"name": "sas-viya", "ok": False, "error": "token expired"}],
+                            "writer": [{"name": "sas-viya", "enabled": False}]}}
+        row = aggregate(instances=INSTANCES, live=live, discovered=found, blueprints=[])[0]
+        self.assertEqual(row["health"], "degraded")
+        self.assertIn("1 of 2 profiles cannot reach it (reviewer): token expired", row["error"])
+        self.assertEqual([(e["profile"], e["health"]) for e in row["profile_health"]],
+                         [("analyst", "healthy"), ("reviewer", "unreachable"), ("writer", "disabled")])
+
+    def test_a_blank_error_is_not_left_blank(self):
+        found = {"lab-01": {"analyst": [{"name": "sas-viya", "ok": False, "error": ""}]}}
+        row = aggregate(instances=INSTANCES, live={}, discovered=found, blueprints=[])[0]
+        self.assertEqual(row["health"], "unreachable")
+        self.assertIn("did not answer", row["error"])
+
+    def test_users_come_from_the_applied_version_and_drafts_only_plan(self):
+        applied = {"metadata": {"name": "aml", "version": 2}, "agents": [{"id": "screener", "mcps": ["opensanctions"]}]}
+        draft = {"metadata": {"name": "aml", "version": 3}, "agents": [{"id": "screener", "mcps": ["opensanctions"]},
+                                                                      {"id": "analyst", "mcps": ["opensanctions"]}]}
+        row = next(r for r in aggregate(instances=INSTANCES, live=LIVE, discovered={}, blueprints=[applied], drafts=[draft])
+                   if r["name"] == "opensanctions")
+        self.assertEqual(row["used_by"], [{"agent": "screener", "blueprint": "aml", "version": 2}])
+        self.assertEqual(row["planned_by"], [{"agent": "analyst", "blueprint": "aml", "version": 3}])  # screener is not news
+
+    def test_the_newer_of_import_and_discovery_says_which_profiles_have_a_server(self):
+        live = {"lab-01": {"analyst": {"mcps": ["sas-viya"]}, "writer": {"mcps": ["sas-viya"]}}}
+        found = {"lab-01": {"analyst": [{"name": "sas-viya", "ok": True}], "writer": []}}  # deregistered from writer
+        rows = aggregate(instances=INSTANCES, live=live, discovered=found, blueprints=[],
+                         live_at={"lab-01": 10.0}, discovered_at={"lab-01": {"analyst": 20.0, "writer": 20.0}})
+        self.assertEqual(rows[0]["profiles"], ["lab-01/analyst"])
+        # an import newer than the discovery wins the other way: re-registered on writer, not yet probed there
+        rows = aggregate(instances=INSTANCES, live=live, discovered=found, blueprints=[],
+                         live_at={"lab-01": 30.0}, discovered_at={"lab-01": {"analyst": 20.0, "writer": 20.0}})
+        self.assertEqual(rows[0]["profiles"], ["lab-01/analyst", "lab-01/writer"])
+        self.assertEqual([e["health"] for e in rows[0]["profile_health"]], ["healthy", "unknown"])
+
+    def test_a_partial_discovery_merges(self):
+        before = {"analyst": {"at": 1.0, "servers": [{"name": "a"}]}, "writer": {"at": 1.0, "servers": [{"name": "a"}]},
+                  "gone": {"at": 1.0, "servers": []}}
+        after = merge_discovery(before, {}, 2.0, covered=["writer"], keep={"analyst", "writer"})
+        self.assertEqual(after, {"analyst": {"at": 1.0, "servers": [{"name": "a"}]}, "writer": {"at": 2.0, "servers": []}})
 
     def test_nothing_known_yet(self):
         self.assertEqual(aggregate(instances=[], live={}, discovered={}, blueprints=[]), [])

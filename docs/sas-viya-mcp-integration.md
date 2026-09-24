@@ -167,8 +167,9 @@ attribution in SAS's audit trail, since every agent then presents one identity.
 
 ## When it breaks: telling the failures apart
 
-The portal says `Unreachable` for every cause, and `/test` has returned an **empty** `error` string
-for a dead upstream. These distinguish them from the Hermes host:
+Hermes' `/test` returns an **empty** `error` string for a dead upstream. When it does, the Fleet
+Control Agent checks the url itself (name → TCP → TLS → HTTP, no credentials) and reports which layer
+failed, so a blank no longer reads like a credential problem. To check by hand from the Hermes host:
 
 | Symptom | Meaning |
 | --- | --- |
@@ -184,9 +185,9 @@ curl -s -o /dev/null -w "%{http_code} connect=%{time_connect}s tls=%{time_appcon
   https://viya.internal/sas-mcp/mcp
 ```
 
-Integrations reports the **worst** result across all profiles, so one unauthorised profile shows the
-whole server as `Unreachable` even while discovery lists its tools through a working one. Deregister
-the server from profiles no blueprint grants it to — it keeps the estate honest and the badge green:
+Registration and tokens are per profile, so Integrations shows health per profile: a server that some
+profiles reach and others do not is `Degraded`, and the detail lists which profile fails and why.
+Deregister the server from profiles no blueprint grants it to; the next discovery drops them from the list:
 
 ```bash
 curl -X DELETE "http://127.0.0.1:9129/api/mcp/servers/sas-viya?profile=<profile>" -H "X-Hermes-Session-Token: $TOKEN"
@@ -212,7 +213,8 @@ included its own `backups/` directory: 193 MB → 294 MB → 1.2 GB → 2.3 GB �
 After `Discover now` on Integrations, `sas-viya` appears on `hermesbo-lab-01` with all six
 profiles, all 51 tools enumerated, `AUTH: oauth`, and:
 
-- **Health: Unreachable** — with the real reason printed (5 of 6 profiles hold no token)
-- **Used by: None**, every tool marked *"No one"* — no blueprint declares `mcps: [sas-viya]` yet
+- **Health** per profile — `Degraded` while some profiles hold no token, with the reason for each
+- **Used by** — the agents whose blueprint's *applied* version declares `mcps: [sas-viya]`; a newer
+  draft that adds one shows as "once … is applied (draft)", not as a user
 
 Both are correct: the instance owns the connection, the blueprint owns the permission.

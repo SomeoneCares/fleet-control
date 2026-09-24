@@ -5,7 +5,8 @@ import { HEALTH_LABEL, allowedAgents, discoveryState, distinctAgents, matchesQue
 const row: Integration = {
   kind: "mcp", name: "opensanctions", instances: ["prod-01"], profiles: ["prod-01/screener"], environments: ["production"],
   tools: [{ name: "search", description: "Search the lists" }, { name: "submit", description: "" }], models: [],
-  used_by: [{ agent: "screener", blueprint: "aml" }, { agent: "drafter", blueprint: "aml" }],
+  used_by: [{ agent: "screener", blueprint: "aml", version: 2 }, { agent: "drafter", blueprint: "aml", version: 2 }],
+  planned_by: [], profile_health: [{ instance: "prod-01", profile: "screener", health: "healthy", error: null }],
   allow: { "opensanctions.submit": { blocked_for: ["drafter"], approval_for: ["screener"] } },
   health: "healthy", error: null, enabled_everywhere: true, endpoint: "https://os.example/mcp", transport: "http", auth: "oauth",
 };
@@ -19,9 +20,13 @@ describe("integrations view logic", () => {
   });
 
   it("counts an agent once even when several blueprints define it", () => {
-    const twice: Integration = { ...row, used_by: [{ agent: "screener", blueprint: "aml" }, { agent: "screener", blueprint: "kyc" }] };
+    const twice: Integration = { ...row, used_by: [{ agent: "screener", blueprint: "aml", version: 2 }, { agent: "screener", blueprint: "kyc", version: 1 }] };
     expect(distinctAgents(twice)).toEqual([{ agent: "screener", blueprints: ["aml", "kyc"] }]);
     expect(allowedAgents(twice, "opensanctions.search")).toEqual(["screener"]);
+  });
+
+  it("labels a server some profiles cannot reach as degraded", () => {
+    expect(HEALTH_LABEL.degraded).toBe("Degraded");
   });
 
   it("summarises discovery", () => {

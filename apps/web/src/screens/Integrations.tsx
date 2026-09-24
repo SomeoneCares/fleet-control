@@ -98,6 +98,7 @@ export function IntegrationsScreen() {
               <span className="text-[13px] truncate" title={r.instances.join(", ")}>{r.environments.join(", ") || r.instances.join(", ")}</span>
               <span className="text-[13px]" title={distinctAgents(r).map((u) => `${u.agent} (${u.blueprints.join(", ")})`).join("\n")}>
                 {distinctAgents(r).length ? `${distinctAgents(r).length} agent${distinctAgents(r).length === 1 ? "" : "s"}` : <span className="text-outline">None</span>}
+                {r.planned_by.length > 0 && <span className="block text-small text-text-secondary">+{r.planned_by.length} in a draft</span>}
               </span>
               <span className="flex flex-col gap-1 items-start">
                 <Chip tone={HEALTH_TONE[r.health]}>{HEALTH_LABEL[r.health]}</Chip>
@@ -145,7 +146,21 @@ function DetailRail({ row, busy, onChange }: {
           <Detail label="Models">{row.models.join(", ") || "none seen"}</Detail>
         )}
         <Detail label="Instances">{row.instances.join(", ") || "none"}</Detail>
-        <Detail label="Profiles">{row.profiles.map((p) => <div key={p}><Mono className="text-[12px]">{p}</Mono></div>)}</Detail>
+        <Detail label="Profiles">
+          {row.kind === "mcp" && row.profile_health.length > 0 ? row.profile_health.map((e) => (
+            <div key={`${e.instance}/${e.profile}`} className="flex items-center justify-between gap-2 py-0.5" title={e.error ?? undefined}>
+              <Mono className="text-[12px] truncate">{e.instance}/{e.profile}</Mono>
+              <Chip tone={HEALTH_TONE[e.health]}>{HEALTH_LABEL[e.health]}</Chip>
+            </div>
+          )) : row.profiles.map((p) => <div key={p}><Mono className="text-[12px]">{p}</Mono></div>)}
+        </Detail>
+        <Detail label="Used by">
+          {distinctAgents(row).length ? distinctAgents(row).map((u) => <div key={u.agent}>{u.agent} <span className="text-text-secondary">({u.blueprints.join(", ")})</span></div>)
+            : <span className="text-text-secondary">No applied blueprint</span>}
+          {row.planned_by.map((u) => (
+            <div key={`${u.blueprint}:${u.agent}`} className="text-text-secondary">{u.agent} once {u.blueprint} v{u.version} is applied (draft)</div>
+          ))}
+        </Detail>
       </div>
 
       {row.kind === "mcp" && (

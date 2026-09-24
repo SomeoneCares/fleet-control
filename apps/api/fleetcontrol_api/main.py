@@ -665,8 +665,19 @@ def list_integrations(user: dict = Depends(require("instances.read"))) -> dict:
     instances = store.list_instances()
     live = {i["id"]: store.live_state_for(i["id"]) or {} for i in instances}
     probes = store.integrations()
-    blueprints = [versions[max(versions)]["parsed"] for versions in store.all_blueprints().values()]
-    rows = aggregate(instances=instances, live=live, discovered={k: v["servers"] for k, v in probes.items()}, blueprints=blueprints)
+    # who uses a server is what is applied, not the newest draft; a newer draft only shows as "planned"
+    applied, drafts = [], []
+    for versions in store.all_blueprints().values():
+        done = [v for v, rec in versions.items() if rec.get("status") == "applied"]
+        newest_applied = max(done) if done else None
+        if newest_applied is not None:
+            applied.append(versions[newest_applied]["parsed"])
+        newest = max(versions)
+        if newest_applied is None or newest > newest_applied:
+            drafts.append(versions[newest]["parsed"])
+    rows = aggregate(instances=instances, live=live, discovered={k: v["servers"] for k, v in probes.items()},
+                     blueprints=applied, drafts=drafts, live_at=store.live_state_at(),
+                     discovered_at={k: v["profile_at"] for k, v in probes.items()})
     return {"integrations": rows,
             "discovery": [{"instance_id": i["id"], "at": probes.get(i["id"], {}).get("at"),
                            "can_discover": i["mode"] == "agent" and bool(i.get("agent_version")) and bool(live[i["id"]])}
@@ -745,7 +756,10 @@ def _discovery_result(job: dict, instance_id: str) -> None:
     """An mcp_discover result is the instance's new picture; an mcp_write is followed by a fresh discovery."""
     result = job.get("result") or {}
     if job["kind"] == "mcp_discover" and job["status"] == "done":
-        store.save_integrations(instance_id, result.get("servers") or {}, result.get("at") or time.time())
+        # a discovery after an mcp_write covers one profile: merge it, never let it replace the others
+        live = store.live_state_for(instance_id)
+        store.save_integrations(instance_id, result.get("servers") or {}, result.get("at") or time.time(),
+                                covered=(job.get("params") or {}).get("profiles"), keep=set(live) if live else None)
     elif job["kind"] == "mcp_write" and job["status"] == "done":
         profiles = job["meta"].get("profiles") or sorted(store.live_state_for(instance_id) or {})
         store.enqueue_job(instance_id, "mcp_discover", {"profiles": profiles, "probe": True}, {"discovery": instance_id})

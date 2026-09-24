@@ -6,10 +6,12 @@ import unittest
 try:
     from fastapi.testclient import TestClient
 
+    from fleetcontrol_api.main import store
     from tests.helpers import signed_in
 except ImportError:  # pragma: no cover
     TestClient = None
 
+EXAMPLE = os.path.join(os.path.dirname(__file__), "..", "..", "..", "packages", "blueprint_schema", "examples", "aml-investigation.yaml")
 LIVE = {"screener": {"description": "", "model": {"provider": "local", "name": "llama-4"}, "soul_sha256": "sha256:0",
                      "soul_text": "", "skills": [], "toolsets": [], "mcps": ["opensanctions"]}}
 FOUND = {"screener": [{"name": "opensanctions", "enabled": True, "transport": "http", "url": "https://os.example/mcp", "ok": True,
@@ -84,6 +86,36 @@ class IntegrationsApiTest(unittest.TestCase):
         self._agent_answers("mcp_write", {"ok": True, "action": "remove", "server": "opensanctions", "result": {"ok": True}})
         audit = self.c.get("/api/v1/audit").json()
         self.assertTrue(any(e["action"] == "integrations.mcp_removed" for e in audit))
+
+    def test_rediscovering_one_profile_keeps_the_others_and_a_removal_prunes(self):
+        both = {"screener": LIVE["screener"], "writer": LIVE["screener"]}
+        self.c.post(f"/api/v1/instances/{self.inst}/import")
+        self._agent_answers("import_profiles", {"ok": True, "profiles": both})
+        self.c.post("/api/v1/integrations/discover", json={"instance_id": self.inst})
+        self._agent_answers("mcp_discover", {"ok": True, "servers": {"screener": FOUND["screener"], "writer": FOUND["screener"]}, "at": 5.0})
+        mine = lambda r: [p for p in r["profiles"] if p.startswith(f"{self.inst}/")]
+        self.assertEqual(mine(self._mine()[0][("mcp", "opensanctions")]), [f"{self.inst}/screener", f"{self.inst}/writer"])
+
+        self.c.patch("/api/v1/integrations/mcp/opensanctions", json={"instance_id": self.inst, "profile": "writer", "remove": True})
+        self._agent_answers("mcp_write", {"ok": True, "action": "remove", "server": "opensanctions", "result": {"ok": True}})
+        job = self._agent_answers("mcp_discover", {"ok": True, "servers": {"writer": []}, "at": 6.0})
+        self.assertEqual(job["params"]["profiles"], ["writer"])
+        row = self._mine()[0][("mcp", "opensanctions")]
+        self.assertEqual(mine(row), [f"{self.inst}/screener"])  # writer pruned, screener still there
+        health = {e["profile"]: e["health"] for e in row["profile_health"] if e["instance"] == self.inst}
+        self.assertEqual(health, {"screener": "healthy"})
+
+    def test_used_by_is_the_applied_version_and_a_newer_draft_is_only_planned(self):
+        name = "int-bp-" + os.urandom(3).hex()
+        with open(EXAMPLE, encoding="utf-8") as f:
+            text = f.read().replace("name: aml-investigation", f"name: {name}")
+        self.assertEqual(self.c.post("/api/v1/blueprints", json={"yaml": text}).status_code, 201)
+        store.set_blueprint_status(name, 3, "applied")
+        draft = text.replace("version: 3", "version: 4", 1).replace("mcps: [corporate-registry]", "mcps: [corporate-registry, opensanctions]")
+        self.assertEqual(self.c.post("/api/v1/blueprints", json={"yaml": draft}).status_code, 201)
+        row = self._mine()[0][("mcp", "opensanctions")]
+        self.assertEqual([u for u in row["used_by"] if u["blueprint"] == name], [{"agent": "sanctions-screener", "blueprint": name, "version": 3}])
+        self.assertEqual([u for u in row["planned_by"] if u["blueprint"] == name], [{"agent": "ownership-tracer", "blueprint": name, "version": 4}])
 
     def test_who_may_look_and_change(self):
         self.assertEqual(signed_in("viewer").get("/api/v1/integrations").status_code, 403)

@@ -456,6 +456,11 @@ class Store:
         inst["status"] = "healthy" if report.get("surfaces", {}).get("api") == "ok" else "degraded"
         c.execute(update(INSTANCES).where(INSTANCES.c.id == instance_id).values(doc=inst))
 
+    def live_state_at(self) -> dict[str, float]:
+        """{instance_id: when its last successful import landed}."""
+        with self._tx() as c:
+            return {r["instance_id"]: r["at"] for r in _all(c, select(LIVE_STATE.c.instance_id, LIVE_STATE.c.at))}
+
     def live_state_for(self, instance_id: str) -> Optional[dict[str, dict]]:
         """{profile: state} from the instance's last successful import, or None before the first one."""
         with self._tx() as c:
@@ -887,15 +892,41 @@ class Store:
             return c.execute(delete(OUTPUTS).where(OUTPUTS.c.id == output_id)).rowcount > 0
 
     # ---- Integrations (MCP discovery) ---------------------------------------------
-    def save_integrations(self, instance_id: str, servers: dict, at: float) -> None:
+    @staticmethod
+    def _by_profile(row: dict) -> dict[str, dict]:
+        """The stored discovery as {profile: {"at", "servers"}}. Rows written before discoveries were kept per
+        profile hold {profile: [server]}: every profile then dates from the row's time."""
+        doc = row["servers"] or {}
+        if "by_profile" in doc:
+            return doc["by_profile"]
+        return {p: {"at": row["at"], "servers": servers} for p, servers in doc.items()}
+
+    def save_integrations(self, instance_id: str, servers: dict, at: float, *, covered: Optional[list[str]] = None,
+                          keep: Optional[set[str]] = None) -> None:
+        """Merge one discovery into the instance's picture: the profiles it covered are replaced (a covered
+        profile with no servers now has none), the others keep their last discovery, and profiles no longer in
+        ``keep`` (the last import) are dropped. Read and write in one transaction.
+
+        ``at`` is the agent's clock and is only shown; each profile is stamped with this server's clock, the
+        same one that stamps imports, so "which is newer" never depends on the host's clock being right."""
+        from .integrations import merge_discovery
         with self._tx() as c:
-            _upsert(c, INTEGRATIONS, {"instance_id": instance_id}, {"at": at, "servers": servers})
+            row = _one(c, select(INTEGRATIONS).where(INTEGRATIONS.c.instance_id == instance_id))
+            previous = self._by_profile(row) if row else {}
+            merged = merge_discovery(previous, servers, time.time(), covered=covered or list(servers), keep=keep)
+            _upsert(c, INTEGRATIONS, {"instance_id": instance_id}, {"at": at, "servers": {"by_profile": merged}})
 
     def integrations(self) -> dict[str, dict]:
-        """{instance_id: {"at": …, "servers": {profile: [...]}}} from the last discovery of each instance."""
+        """{instance_id: {"at": …, "servers": {profile: [...]}, "profile_at": {profile: at}}} from the last
+        discovery of each profile."""
         with self._tx() as c:
             rows = _all(c, select(INTEGRATIONS))
-        return {r["instance_id"]: {"at": r["at"], "servers": r["servers"]} for r in rows}
+        out = {}
+        for r in rows:
+            by_profile = self._by_profile(r)
+            out[r["instance_id"]] = {"at": r["at"], "servers": {p: v["servers"] for p, v in by_profile.items()},
+                                     "profile_at": {p: v["at"] for p, v in by_profile.items()}}
+        return out
 
     # ---- Test Lab runs ------------------------------------------------------------
     def save_test_run(self, doc: dict) -> dict:

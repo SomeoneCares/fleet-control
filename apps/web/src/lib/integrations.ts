@@ -3,6 +3,7 @@ import type { Tone } from "./view";
 
 export const HEALTH_TONE: Record<IntegrationHealth, Tone> = {
   healthy: "success",
+  degraded: "warning",
   unreachable: "error",
   disabled: "neutral",
   unknown: "neutral",
@@ -10,6 +11,7 @@ export const HEALTH_TONE: Record<IntegrationHealth, Tone> = {
 
 export const HEALTH_LABEL: Record<IntegrationHealth, string> = {
   healthy: "Healthy",
+  degraded: "Degraded",
   unreachable: "Unreachable",
   disabled: "Disabled",
   unknown: "Not probed",

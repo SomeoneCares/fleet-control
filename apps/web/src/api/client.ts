@@ -345,7 +345,9 @@ export interface DecisionRoom extends RoomBase {
 }
 
 export type IntegrationKind = "mcp" | "model";
-export type IntegrationHealth = "healthy" | "unreachable" | "disabled" | "unknown";
+// degraded: some profiles reach the server and some do not (each profile has its own registration and tokens)
+export type IntegrationHealth = "healthy" | "degraded" | "unreachable" | "disabled" | "unknown";
+export interface IntegrationUser { agent: string; blueprint: string; version: number | null }
 
 export interface Integration {
   kind: IntegrationKind;
@@ -355,7 +357,9 @@ export interface Integration {
   environments: string[];
   tools: { name: string; description: string }[];
   models: string[];
-  used_by: { agent: string; blueprint: string }[];
+  used_by: IntegrationUser[];  // from each blueprint's newest applied version
+  planned_by: IntegrationUser[];  // agents a newer, unapplied draft adds
+  profile_health: { instance: string; profile: string; health: IntegrationHealth; error: string | null }[];
   allow: Record<string, { blocked_for: string[]; approval_for: string[] }>;
   health: IntegrationHealth;
   error: string | null;

@@ -27,6 +27,9 @@ from pydantic import BaseModel, Field, ValidationError
 
 from fleetcontrol_blueprint import Blueprint, dump_blueprint, json_schema, load_blueprint
 
+from .access import (
+    agent_grants, combined_zones, person_permissions, person_zones, summary as access_summary, tool_verdict, why_apply, why_room,
+)
 from .messaging import (
     EVENTS, TEMPLATES, MessagingError, channel_health, merge_gateway, new_channel, new_delivery, render, rules_from, test_text,
 )
@@ -1215,6 +1218,92 @@ def save_delivery_rules(name: str, version: int, body: DeliveryRules, user: dict
     store.update_blueprint(name, version, dump_blueprint(new), new.model_dump(mode="json"), user["email"])
     store.record(user["email"], "blueprint.delivery_saved", f"{name} v{version}", f"{len(new.delivery)} rules")
     return {"name": name, "version": version, "delivery": [r.model_dump(mode="json") for r in new.delivery]}
+
+
+# ----------------------------------------------------------------------------- Access inspector (Slice 4)
+
+
+def _mcp_servers(user: dict) -> dict[str, dict]:
+    rows = list_integrations(user)["integrations"]
+    return {r["name"]: {"auth": r.get("auth"), "health": r.get("health"), "tools": [t["name"] for t in r.get("tools") or []]}
+            for r in rows if r["kind"] == "mcp"}
+
+
+@app.get("/api/v1/access/subjects")
+def access_subjects(user: dict = Depends(require("users.read"))) -> dict:
+    """What the inspector can be asked about: people, the agents of applied blueprints, tools, open rooms."""
+    applied, _ = _blueprint_versions()
+    agents = [{"blueprint": p["metadata"]["name"], "version": p["metadata"].get("version"), "agent": a["id"],
+               "profile": a.get("hermes_profile") or a["id"]} for p in applied for a in p.get("agents") or []]
+    servers = _mcp_servers(user)
+    tools: set[str] = set(servers)
+    for name, s in servers.items():
+        tools |= {f"{name}.{t}" for t in s["tools"]}
+    for p in applied:
+        for pol in p.get("policies") or []:
+            tools |= set((pol.get("params") or {}).get("tools") or [])
+        for a in p.get("agents") or []:
+            tools |= set(a.get("toolsets") or [])
+    return {"people": [{"email": u["email"], "name": u["name"], "role": u["role"], "role_label": role_label(u["role"]),
+                        "disabled": u.get("disabled", False)} for u in store.list_users()],
+            "agents": agents, "tools": sorted(tools),
+            "rooms": [{"id": r["id"], "question": r["question"], "zone": r["zone"], "case": r.get("case")}
+                      for r in store.list_rooms(None, status="open")]}
+
+
+@app.get("/api/v1/access/inspect")
+def access_inspect(email: Optional[str] = None, blueprint: Optional[str] = None, agent: Optional[str] = None,
+                   tool: Optional[str] = None, room: Optional[str] = None, environment: Optional[str] = None,
+                   user: dict = Depends(require("users.read"))) -> dict:
+    """Effective access: the person, the agent, and what both reach together; with a tool, room or environment, the
+    one answer to "may they?" and the rule behind it. Reads only."""
+    zones = store.list_zones()
+    out: dict[str, Any] = {"person": None, "agent": None, "together": None, "checks": []}
+    person = None
+    if email:
+        person = store.get_user(email.strip().lower())
+        if not person:
+            raise HTTPException(404, f"no account {email}")
+        perms, pz = person_permissions(person["role"]), person_zones(person["role"], zones)
+        out["person"] = {"email": person["email"], "name": person["name"], "role": person["role"],
+                         "role_label": role_label(person["role"]), "disabled": person.get("disabled", False),
+                         "permissions": perms, "zones": pz, "summary": access_summary(perms, pz)}
+        if person.get("disabled"):
+            out["checks"].append({"question": f"May {person['email']} sign in?", "allowed": False, "why": "the account is disabled"})
+    grants = None
+    if agent:
+        applied, _ = _blueprint_versions()
+        parsed = next((p for p in applied if p["metadata"]["name"] == blueprint), None) if blueprint else \
+            next((p for p in applied if any(a["id"] == agent for a in p.get("agents") or [])), None)
+        grants = agent_grants(parsed, agent) if parsed else None
+        if not grants:
+            raise HTTPException(404, f"no agent {agent} in an applied blueprint" + (f" {blueprint}" if blueprint else ""))
+        out["agent"] = {**grants, "zones": [{"zone": z["id"], "name": z.get("name") or z["id"], "allowed": z["id"] in grants["content_zones"],
+                                              "why": "granted by content_zones" if z["id"] in grants["content_zones"] else "not in its content_zones"}
+                                             for z in zones]}
+    if out["person"] and grants:
+        out["together"] = {"zones": combined_zones(out["person"]["zones"], grants),
+                           "note": "Through this agent (Ask the fleet, rooms it files into), a person sees only what both may read."}
+    if tool:
+        if not grants:
+            raise HTTPException(422, "choose an agent to check a tool: tools are called by agents, never by people directly")
+        v = tool_verdict(grants, tool, servers=_mcp_servers(user))
+        out["checks"].append({"question": f"May {grants['agent']} call {tool}?", **v})
+    if room:
+        if not person:
+            raise HTTPException(422, "choose a person to check a room")
+        r = store.get_room(room)
+        if not r:
+            raise HTTPException(404, "no such room")
+        out["checks"].append({"question": f"May {person['email']} decide in “{r['question'][:80]}”?",
+                              **why_room(r, email=person["email"], role=person["role"], zones=zones)})
+    if environment:
+        if not person:
+            raise HTTPException(422, "choose a person to check applying a plan")
+        if environment not in ("lab", "staging", "production"):
+            raise HTTPException(422, "environment is lab, staging or production")
+        out["checks"].append({"question": f"May {person['email']} apply a plan to {environment}?", **why_apply(environment, person["role"])})
+    return out
 
 
 # ----------------------------------------------------------------------------- Integrations (Slice 3)

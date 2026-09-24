@@ -385,6 +385,30 @@ export interface IntegrationsDoc {
   discovery: { instance_id: string; at: number | null; can_discover: boolean }[];
 }
 
+// Access inspector (access.py): effective access, each line with the rule behind it.
+export interface AccessPermission { permission: string; area: string; label: string; allowed: boolean; why: string }
+export interface AccessZone { zone: string; name: string; classification?: string | null; allowed: boolean; why: string }
+export interface AccessLine { key: string; label: string; allowed: boolean; why: string }
+export interface AccessCheck {
+  question: string; allowed: boolean; why: string; layer?: "policy" | "agent" | "system";
+  needs_approval?: boolean; system?: string; system_health?: string | null;
+}
+export interface AccessInspection {
+  person: null | { email: string; name: string; role: RoleName; role_label: string; disabled: boolean; permissions: AccessPermission[];
+                   zones: AccessZone[]; summary: { permissions: number; of_permissions: number; zones: number; of_zones: number } };
+  agent: null | { blueprint: string; version: number | null; agent: string; profile: string; model: { provider?: string; name?: string } | null;
+                  content_zones: string[]; mcps: string[]; toolsets: string[]; skills: string[];
+                  blocked: { tool: string; policy: string }[]; approval: { tool: string; policy: string }[]; zones: AccessZone[] };
+  together: null | { zones: AccessZone[]; note: string };
+  checks: AccessCheck[];
+}
+export interface AccessSubjects {
+  people: { email: string; name: string; role: RoleName; role_label: string; disabled: boolean }[];
+  agents: { blueprint: string; version: number | null; agent: string; profile: string }[];
+  tools: string[];
+  rooms: { id: string; question: string; zone: string; case: string | null }[];
+}
+
 // Messaging (messaging.py): channels on instances, delivery rules from applied blueprints, what was sent.
 export type ChannelStatus = "ready" | "unknown" | "disabled" | "webhooks_off" | "platform_missing" | "platform_down" | "route_missing" | "route_off";
 
@@ -1003,6 +1027,10 @@ export const api = {
   testRuns: (q: { blueprint?: string; test_id?: string; instance_id?: string; limit?: number } = {}) =>
     call<TestRun[]>("GET", "/api/v1/testlab/runs", undefined, params(q)),
   testRun: (id: string) => call<TestRun>("GET", `/api/v1/testlab/runs/${enc(id)}`),
+  accessSubjects: () => call<AccessSubjects>("GET", "/api/v1/access/subjects"),
+  accessInspect: (q: { email?: string; blueprint?: string; agent?: string; tool?: string; room?: string; environment?: string }) =>
+    call<AccessInspection>("GET", "/api/v1/access/inspect?" + new URLSearchParams(
+      Object.entries(q).filter(([, v]) => v) as [string, string][]).toString()),
   messaging: () => call<MessagingDoc>("GET", "/api/v1/messaging"),
   discoverMessaging: (instance_id: string) => call<{ job_id: string }>("POST", "/api/v1/messaging/discover", { instance_id }),
   enableWebhooks: (instance_id: string) => call<{ job_id: string }>("POST", "/api/v1/messaging/enable-webhooks", { instance_id }),

@@ -167,6 +167,12 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   defaults to port 9129, which `fleetctl-dashboard` now holds: run it as `CAPTURE_PORT=9139 bash run_capture.sh`.
   After a Hermes self-update, restart `fleetctl-dashboard` too: until then it serves the old code and reports every
   messaging platform as `gateway_stopped` while the gateway is fine.
+- DONE (2026-09-25): Slice 4 Access inspector (`access.py`, `GET /api/v1/access/subjects|inspect`, top of Govern →
+  Access; `users.read` = Admin). Person ∩ agent ∩ system, every line with its rule, read from what the API enforces
+  (auth.PERMISSIONS, content.may_read, the agent's applied blueprint grants and policies, rooms.may_decide). One-question
+  checks: may <agent> call <tool> (policy → agent → system; a system's own permissions are named, never guessed), may
+  <person> decide in <room>, may <person> apply to <environment>. `PERMISSION_LABEL` must cover every permission (a
+  test fails otherwise).
 - PLAN (Basem, 2026-09-16): complete the whole portal before Docker, every screen working end to end (real backend,
   real Hermes runs on the lab host where needed), in build-document order: Slice 2 Fleet Architect → Slice 3 Test
   Lab, Assurance, Integrations (+ Settings → Observability) → Slice 4 Workspace, Decision Rooms, Ask the fleet,

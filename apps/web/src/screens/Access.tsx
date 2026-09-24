@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { AccessInspector } from "./AccessInspector";
 import { api, type AgentDoc, type BlueprintDoc, type Person, type RoleName } from "../api/client";
 import { useMe } from "../lib/auth";
 import { errorText, useLoad } from "../lib/hooks";
@@ -47,13 +48,7 @@ export function AccessScreen() {
         actions={<Button variant="primary" icon="plus" onClick={() => setInviting(true)}>Invite person</Button>} />
       {failure && <Banner tone="error" className="mb-4">{failure}</Banner>}
 
-      <Card className="p-5 mb-5">
-        <h2 className="text-section m-0">Check effective access</h2>
-        <p className="text-small text-text-secondary mt-1 mb-0">
-          The person ∩ agent ∩ system inspector arrives with the Workspace (Slice 4). Today people carry one of five roles, and
-          agents carry their own permissions in the blueprint (below); connected systems keep their own authentication.
-        </p>
-      </Card>
+      <AccessInspector />
 
       <div className="grid grid-cols-2 gap-5 mb-5 items-start">
         <Card className="overflow-hidden">

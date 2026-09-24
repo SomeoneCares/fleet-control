@@ -68,6 +68,8 @@ ROUTES = {
     # Webhook routes are not profile-scoped: they act on the dashboard process's own home.
     "webhooks.list": ("GET", "/api/webhooks"),  # {enabled, base_url, subscriptions}
     "webhooks.create": ("POST", "/api/webhooks"),  # WebhookCreate{name, events, deliver, deliver_only, ...}
+    "webhooks.delete": ("DELETE", "/api/webhooks/{route}"),
+    "webhooks.enable": ("POST", "/api/webhooks/enable"),  # turns the webhook platform on AND restarts the gateway
     "cron.list": ("GET", "/api/cron/jobs?profile=all"),
 }
 
@@ -136,6 +138,58 @@ class HermesLocal:
         key = key or self.cfg.api_key
         headers = {"Authorization": f"Bearer {key}"} if key else {}
         return self._request(self.cfg.api_url, method, prefix + path.format(**params), body, headers)
+
+    # ------------------------------------------------------------------ messaging (channels and delivery routes)
+
+    def messaging_state(self) -> dict:
+        """The messaging platforms of the default profile (Telegram, Slack, email, …) and the webhook platform:
+        whether it is on, where it listens, and the routes it has."""
+        platforms = self.dashboard("messaging.platforms", name="default") or {}
+        hooks = self.dashboard("webhooks.list") or {}
+        return {"platforms": [p for p in platforms.get("platforms") or [] if isinstance(p, dict)],
+                "webhooks": {"enabled": bool(hooks.get("enabled")), "base_url": hooks.get("base_url"),
+                             "routes": [{k: s.get(k) for k in ("name", "deliver", "deliver_only", "enabled", "url", "secret_set")}
+                                        for s in hooks.get("subscriptions") or [] if isinstance(s, dict)]}}
+
+    def webhook_create(self, route: str, platform: str, chat_id: Optional[str], secret: str, description: str) -> dict:
+        """A deliver_only route: whatever {text} Fleet Control's agent posts is delivered as-is through ``platform``
+        (its home channel, or ``chat_id``). No agent run, no model, nothing else read from the payload."""
+        body = {"name": route, "description": description, "deliver": platform, "deliver_only": True,
+                "prompt": "{text}", "secret": secret}
+        if chat_id:
+            body["deliver_chat_id"] = chat_id
+        return self.dashboard("webhooks.create", body) or {}
+
+    def webhook_delete(self, route: str) -> None:
+        self.dashboard("webhooks.delete", route=route)
+
+    def webhook_enable(self) -> dict:
+        return self.dashboard("webhooks.enable") or {}
+
+    def webhook_post(self, url: str, payload: dict, secret: str, request_id: str) -> tuple[int, Any]:
+        """POST to a route signed the way Hermes' generic V2 check wants it (hex HMAC-SHA256 of
+        "<timestamp>.<body>", timestamp within ±300 s); X-Request-ID makes a retry a duplicate, not a second message."""
+        import hashlib
+        import hmac
+
+        body = json.dumps(payload).encode("utf-8")
+        ts = str(int(time.time()))
+        sig = hmac.new(secret.encode(), ts.encode() + b"." + body, hashlib.sha256).hexdigest()
+        req = urllib.request.Request(url, data=body, method="POST", headers={
+            "Content-Type": "application/json", "X-Webhook-Timestamp": ts, "X-Webhook-Signature-V2": sig,
+            "X-Request-ID": request_id})
+        try:
+            with urllib.request.urlopen(req, timeout=self.cfg.timeout) as resp:
+                raw = resp.read()
+                return resp.status, (json.loads(raw) if raw else None)
+        except urllib.error.HTTPError as e:
+            raw = e.read().decode("utf-8", "replace")[:500]
+            try:
+                return e.code, json.loads(raw)
+            except ValueError:
+                return e.code, raw
+        except urllib.error.URLError as e:
+            raise HermesLocalError(f"POST {url} unreachable: {e.reason} (is the webhook platform on and the gateway running?)") from e
 
     # ------------------------------------------------------------------ MCP servers (Integrations)
 

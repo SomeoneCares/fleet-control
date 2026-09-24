@@ -212,6 +212,27 @@ TEST_RUNS = Table(  # Test Lab: one row per test run, with its checks and claims
     Column("created_at", Float, nullable=False, index=True),
     Column("doc", Doc, nullable=False),
 )
+CHANNELS = Table(  # Messaging: platforms on instances that fleet events are delivered to (messaging.py)
+    "channels", META,
+    Column("id", String(64), primary_key=True),
+    Column("created_at", Float, nullable=False),
+    Column("doc", Doc, nullable=False),
+)
+DELIVERIES = Table(  # Messaging: every message Fleet Control sent or tried to send, and how it went
+    "deliveries", META,
+    Column("id", String(32), primary_key=True),
+    Column("channel", String(64), nullable=False, index=True),
+    Column("key", String(200), nullable=False, index=True),  # the event it was for: one message per event per channel
+    Column("at", Float, nullable=False, index=True),
+    Column("status", String(16), nullable=False),
+    Column("doc", Doc, nullable=False),
+)
+MESSAGING_STATE = Table(  # Messaging: the last discovery of an instance's platforms and webhook routes
+    "messaging_state", META,
+    Column("instance_id", String(64), primary_key=True),
+    Column("at", Float, nullable=False),
+    Column("doc", Doc, nullable=False),
+)
 ASK_THREADS = Table(  # Ask the fleet: one person's conversation with the orchestrator (ask.py)
     "ask_threads", META,
     Column("id", String(32), primary_key=True),
@@ -416,6 +437,7 @@ class Store:
                 return None
             for name, table, column in (("tokens", TOKENS, TOKENS.c.instance_id),
                                         ("live_state", LIVE_STATE, LIVE_STATE.c.instance_id),
+                                        ("messaging_state", MESSAGING_STATE, MESSAGING_STATE.c.instance_id),
                                         ("jobs", JOBS, JOBS.c.instance_id),
                                         ("drift", DRIFT, DRIFT.c.instance_id),
                                         ("drift_exceptions", DRIFT_EXCEPTIONS, DRIFT_EXCEPTIONS.c.instance_id),
@@ -1013,6 +1035,61 @@ class Store:
             c.execute(update(ARCHITECT_SESSIONS).where(ARCHITECT_SESSIONS.c.id == session_id)
                       .values(updated_at=doc["updated_at"], doc=doc))
             return doc
+
+    # ---- Messaging -------------------------------------------------------------------
+    def save_channel(self, doc: dict) -> dict:
+        with self._tx() as c:
+            _upsert(c, CHANNELS, {"id": doc["id"]}, {"created_at": doc["created_at"], "doc": doc})
+        return doc
+
+    def get_channel(self, channel_id: str) -> Optional[dict]:
+        with self._tx() as c:
+            row = _one(c, select(CHANNELS.c.doc).where(CHANNELS.c.id == channel_id))
+        return row["doc"] if row else None
+
+    def list_channels(self) -> list[dict]:
+        with self._tx() as c:
+            return [r["doc"] for r in _all(c, select(CHANNELS.c.doc).order_by(CHANNELS.c.created_at))]
+
+    def delete_channel(self, channel_id: str) -> bool:
+        with self._tx() as c:
+            return c.execute(delete(CHANNELS).where(CHANNELS.c.id == channel_id)).rowcount == 1
+
+    def add_delivery(self, doc: dict) -> Optional[dict]:
+        """File a delivery unless this event already went to this channel (None then): one message per event."""
+        with self._tx() as c:
+            seen = _one(c, select(DELIVERIES.c.id).where(DELIVERIES.c.key == doc["key"], DELIVERIES.c.channel == doc["channel"]))
+            if seen:
+                return None
+            c.execute(insert(DELIVERIES).values(id=doc["id"], channel=doc["channel"], key=doc["key"], at=doc["at"],
+                                                status=doc["status"], doc=doc))
+        return doc
+
+    def update_delivery(self, delivery_id: str, **fields: Any) -> Optional[dict]:
+        with self._tx() as c:
+            row = _one(c, select(DELIVERIES.c.doc).where(DELIVERIES.c.id == delivery_id))
+            if not row:
+                return None
+            doc = {**row["doc"], **fields}
+            c.execute(update(DELIVERIES).where(DELIVERIES.c.id == delivery_id).values(status=doc["status"], doc=doc))
+            return doc
+
+    def list_deliveries(self, *, channel: Optional[str] = None, limit: int = 50) -> list[dict]:
+        """Newest first."""
+        q = select(DELIVERIES.c.doc).order_by(DELIVERIES.c.at.desc()).limit(limit)
+        if channel:
+            q = q.where(DELIVERIES.c.channel == channel)
+        with self._tx() as c:
+            return [r["doc"] for r in _all(c, q)]
+
+    def save_messaging_state(self, instance_id: str, doc: dict, at: float) -> None:
+        with self._tx() as c:
+            _upsert(c, MESSAGING_STATE, {"instance_id": instance_id}, {"at": at, "doc": doc})
+
+    def messaging_states(self) -> dict[str, dict]:
+        """{instance_id: {"at", **state}} from the last messaging discovery of each instance."""
+        with self._tx() as c:
+            return {r["instance_id"]: {"at": r["at"], **r["doc"]} for r in _all(c, select(MESSAGING_STATE))}
 
     # ---- Ask the fleet ---------------------------------------------------------------
     def save_ask_thread(self, doc: dict) -> dict:

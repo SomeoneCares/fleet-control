@@ -206,6 +206,10 @@ class Jobs:
             "hermes_run": self.hermes_run,
             "mcp_discover": self.mcp_discover,
             "mcp_write": self.mcp_write,
+            "messaging_discover": self.messaging_discover,
+            "channel_route": self.channel_route,
+            "deliver_message": self.deliver_message,
+            "webhooks_enable": self.webhooks_enable,
         }
 
     def dispatch(self, job: dict) -> dict:
@@ -330,6 +334,84 @@ class Jobs:
                 servers.append(row)
             out[profile] = servers
         return {"servers": out, "at": time.time()}
+
+    # ---- messaging: Fleet Control's routes are deliver_only webhooks whose secrets never leave this host
+
+    def _route_secrets_path(self) -> str:
+        return os.path.join(self.cfg.state_dir, "route-secrets.json")
+
+    def _route_secrets(self) -> dict:
+        try:
+            with open(self._route_secrets_path(), encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return {}
+
+    def _save_route_secrets(self, secrets_: dict) -> None:
+        os.makedirs(self.cfg.state_dir, exist_ok=True)
+        path = self._route_secrets_path()
+        tmp = path + ".tmp"
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(secrets_, f)
+        os.replace(tmp, path)
+
+    def messaging_discover(self, p: dict) -> dict:
+        """The messaging platforms and the webhook platform's state; which Fleet Control routes this agent can
+        sign for (it holds their secrets)."""
+        state = self.hermes.messaging_state()
+        held = set(self._route_secrets())
+        for r in state["webhooks"]["routes"]:
+            r["signable"] = r.get("name") in held
+        return state
+
+    def channel_route(self, p: dict) -> dict:
+        """params: {action: create|remove, route, platform?, chat_id?}. Create replaces a route of the same name,
+        since only the secret made here can sign for it."""
+        import secrets as _secrets
+
+        route, action = p["route"], p["action"]
+        if not route.startswith("fc-"):
+            raise ValueError("Fleet Control only manages its own routes (fc-…)")
+        held = self._route_secrets()
+        existing = {r.get("name") for r in self.hermes.messaging_state()["webhooks"]["routes"]}
+        if route in existing:
+            self.hermes.webhook_delete(route)
+        held.pop(route, None)
+        if action == "remove":
+            self._save_route_secrets(held)
+            return {"route": route, "removed": route in existing}
+        secret = _secrets.token_urlsafe(32)
+        summary = self.hermes.webhook_create(route, p["platform"], p.get("chat_id"), secret,
+                                             f"Fleet Control channel {p.get('channel') or route} (deliver only)")
+        held[route] = secret
+        self._save_route_secrets(held)
+        return {"route": route, "url": summary.get("url"), "created": True}
+
+    def deliver_message(self, p: dict) -> dict:
+        """params: {route, text, delivery_id}: post the text to this host's own route, signed. Hermes delivers it
+        through the platform; the answer says whether the platform took it."""
+        route = p["route"]
+        secret = self._route_secrets().get(route)
+        if not secret:
+            return {"ok": False, "error": f"this agent holds no secret for {route}: recreate the channel's route"}
+        hooks = self.hermes.messaging_state()["webhooks"]
+        if not hooks["enabled"]:
+            return {"ok": False, "error": "the webhook platform is off on this instance (Messaging → Enable webhooks)"}
+        url = next((r.get("url") for r in hooks["routes"] if r.get("name") == route), None)
+        if not url:
+            return {"ok": False, "error": f"route {route} is not on this instance: recreate the channel's route"}
+        status, body = self.hermes.webhook_post(url, {"text": p["text"], "event_type": "fleetcontrol"}, secret, p["delivery_id"])
+        state = body.get("status") if isinstance(body, dict) else None
+        ok = status == 200 and state in ("delivered", "duplicate")
+        out = {"ok": ok, "http_status": status, "status": state}
+        if not ok:
+            out["error"] = f"HTTP {status}: {body if isinstance(body, str) else json.dumps(body)[:300]}"
+        return out
+
+    def webhooks_enable(self, p: dict) -> dict:
+        """Turn the webhook platform on. Hermes restarts the gateway to start it."""
+        return self.hermes.webhook_enable()
 
     def mcp_write(self, p: dict) -> dict:
         """params: {profile, action: add|remove|enable|disable, server?, config?}. Credentials are never sent

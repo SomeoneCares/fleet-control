@@ -165,6 +165,10 @@ function GeneralPanel() {
         <NumberField label="Sign-in hours" value={v.session_hours} min={1} max={24} unit="hours (1–24)" disabled={locked}
           onChange={(n) => form.set("session_hours", n)} />
       </Row>
+      <Row label="Portal address" hint="Where links in messages point (Messaging): the address people open Fleet Control at.">
+        <input className={INPUT} aria-label="Portal address" maxLength={200} value={v.portal_url} disabled={locked}
+          placeholder="https://fleetcontrol.example.com" onChange={(e) => form.set("portal_url", e.target.value)} />
+      </Row>
       <Row label="Longest API token" hint="The most days a new API token may stay valid.">
         <NumberField label="Longest API token in days" value={v.token_max_days} min={1} max={365} unit="days (1–365)" disabled={locked}
           onChange={(n) => form.set("token_max_days", n)} />

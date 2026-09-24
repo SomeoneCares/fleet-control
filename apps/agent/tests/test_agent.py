@@ -418,6 +418,92 @@ class McpCopyTest(unittest.TestCase):
         self.assertEqual(out["results"][0]["from"], "analyst")
         self.assertEqual(removed, [("writer", "old")])
 
+
+class MessagingTest(unittest.TestCase):
+    """Fleet Control's channels are deliver_only webhook routes; their secrets stay in the agent's state dir."""
+
+    def _jobs(self, routes=None, enabled=True):
+        h = FakeHermes()
+        state = {"routes": list(routes or [])}
+        h.created, h.deleted, h.posted = [], [], []
+        h.messaging_state = lambda: {"platforms": [{"id": "telegram", "state": "connected"}],
+                                     "webhooks": {"enabled": enabled, "base_url": "http://localhost:8644", "routes": list(state["routes"])}}
+
+        def create(route, platform, chat_id, secret, description):
+            h.created.append((route, platform, chat_id, secret))
+            state["routes"].append({"name": route, "url": f"http://localhost:8644/webhooks/{route}"})
+            return {"url": f"http://localhost:8644/webhooks/{route}"}
+
+        h.webhook_create = create
+        h.webhook_delete = lambda route: (h.deleted.append(route), state["routes"].__setitem__(
+            slice(None), [r for r in state["routes"] if r["name"] != route]))
+        h.webhook_post = lambda url, payload, secret, rid: (h.posted.append((url, payload, secret, rid)) or (200, {"status": "delivered"}))
+        return Jobs(AgentConfig(state_dir=tempfile.mkdtemp()), h), h
+
+    def test_a_route_is_created_with_a_secret_only_this_host_keeps(self):
+        jobs, h = self._jobs()
+        out = jobs.dispatch({"kind": "channel_route", "params": {"action": "create", "route": "fc-ops", "platform": "telegram", "chat_id": "-100"}})
+        self.assertTrue(out["ok"], out)
+        self.assertNotIn("secret", json.dumps(out))  # the secret never goes back to Fleet Control
+        path = os.path.join(jobs.cfg.state_dir, "route-secrets.json")
+        self.assertEqual(json.load(open(path))["fc-ops"], h.created[0][3])
+        if os.name != "nt":
+            self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+        found = jobs.dispatch({"kind": "messaging_discover", "params": {}})
+        self.assertTrue(next(r for r in found["webhooks"]["routes"] if r["name"] == "fc-ops")["signable"])
+        # creating again replaces the route and its secret; removing forgets both
+        jobs.dispatch({"kind": "channel_route", "params": {"action": "create", "route": "fc-ops", "platform": "telegram"}})
+        self.assertEqual(h.deleted, ["fc-ops"])
+        jobs.dispatch({"kind": "channel_route", "params": {"action": "remove", "route": "fc-ops"}})
+        self.assertNotIn("fc-ops", json.load(open(path)))
+        self.assertFalse(jobs.dispatch({"kind": "channel_route", "params": {"action": "remove", "route": "someone-elses"}})["ok"])
+
+    def test_a_message_is_posted_to_the_route_and_its_outcome_reported(self):
+        jobs, h = self._jobs()
+        jobs.dispatch({"kind": "channel_route", "params": {"action": "create", "route": "fc-ops", "platform": "telegram"}})
+        out = jobs.dispatch({"kind": "deliver_message", "params": {"route": "fc-ops", "text": "Decision needed", "delivery_id": "dlv_1"}})
+        self.assertEqual((out["ok"], out["status"]), (True, "delivered"))
+        url, payload, secret, rid = h.posted[0]
+        self.assertEqual((url, payload["text"], rid), ("http://localhost:8644/webhooks/fc-ops", "Decision needed", "dlv_1"))
+        h.webhook_post = lambda *a: (502, "Delivery failed")
+        out = jobs.dispatch({"kind": "deliver_message", "params": {"route": "fc-ops", "text": "x", "delivery_id": "dlv_2"}})
+        self.assertEqual((out["ok"], out["http_status"]), (False, 502))
+        self.assertFalse(jobs.dispatch({"kind": "deliver_message", "params": {"route": "fc-none", "text": "x", "delivery_id": "d"}})["ok"])
+
+    def test_nothing_is_posted_while_the_webhook_platform_is_off(self):
+        jobs, h = self._jobs(enabled=False)
+        jobs._save_route_secrets({"fc-ops": "s"})
+        out = jobs.dispatch({"kind": "deliver_message", "params": {"route": "fc-ops", "text": "x", "delivery_id": "d"}})
+        self.assertFalse(out["ok"])
+        self.assertIn("webhook platform is off", out["error"])
+        self.assertEqual(h.posted, [])
+
+    def test_the_signature_is_the_one_hermes_checks(self):
+        import hashlib, hmac, http.server
+        seen = {}
+
+        class Hermes(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):  # gateway/platforms/webhook.py generic V2, reimplemented as the test's oracle
+                body = self.rfile.read(int(self.headers["Content-Length"]))
+                ts, sig = self.headers["X-Webhook-Timestamp"], self.headers["X-Webhook-Signature-V2"]
+                want = hmac.new(b"route-secret", ts.encode() + b"." + body, hashlib.sha256).hexdigest()
+                seen.update(ok=hmac.compare_digest(sig, want), fresh=abs(time.time() - int(ts)) <= 300,
+                            rid=self.headers["X-Request-ID"], body=json.loads(body))
+                out = json.dumps({"status": "delivered"}).encode()
+                self.send_response(200 if seen["ok"] else 401); self.send_header("Content-Length", str(len(out))); self.end_headers()
+                self.wfile.write(out)
+
+            def log_message(self, *a):
+                pass
+
+        srv = http.server.HTTPServer(("127.0.0.1", 0), Hermes)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.shutdown)
+        status, body = HermesLocal(HermesLocalConfig()).webhook_post(
+            f"http://127.0.0.1:{srv.server_address[1]}/webhooks/fc-ops", {"text": "hi"}, "route-secret", "dlv_9")
+        self.assertEqual((status, body, seen["ok"], seen["fresh"], seen["rid"], seen["body"]["text"]),
+                         (200, {"status": "delivered"}, True, True, "dlv_9", "hi"))
+
 class ConfigTest(unittest.TestCase):
     def test_environment_overrides(self):
         env = {"HERMES_BIN": "/opt/hermes/bin/hermes", "HERMES_DASHBOARD_URL": "http://127.0.0.1:9129",

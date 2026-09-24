@@ -32,7 +32,7 @@ export const NAV: { group: string; items: NavItem[] }[] = [
   { group: "Estate", items: [
     { key: "instances", label: "Instances", icon: "server", to: "/instances" },
     { key: "integrations", label: "Integrations", icon: "plug", to: "/integrations", permission: "instances.read" },
-    { key: "messaging", label: "Messaging", icon: "message", slice: 4 },
+    { key: "messaging", label: "Messaging", icon: "message", to: "/messaging", permission: "messaging.read" },
   ] },
   { group: "Govern", items: [
     { key: "access", label: "Access", icon: "lock", to: "/access", permission: "users.read" },

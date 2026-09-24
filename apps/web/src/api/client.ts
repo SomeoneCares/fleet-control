@@ -125,6 +125,7 @@ export interface SettingsValues {
   approvals_lab: number;
   require_tests_for_production: boolean;
   token_max_days: number;
+  portal_url: string;  // where links in messages point
 }
 
 export interface SettingsDoc {
@@ -381,6 +382,79 @@ export interface IntegrationsDoc {
   integrations: Integration[];
   discovery: { instance_id: string; at: number | null; can_discover: boolean }[];
 }
+
+// Messaging (messaging.py): channels on instances, delivery rules from applied blueprints, what was sent.
+export type ChannelStatus = "ready" | "unknown" | "disabled" | "webhooks_off" | "platform_missing" | "platform_down" | "route_missing" | "route_off";
+
+export interface Channel {
+  id: string;
+  name: string;
+  platform: string;
+  ref: string;  // what a blueprint's delivery rule names: "<platform>:<id>"
+  route: string;
+  instance_id: string;
+  chat_id: string | null;
+  audience: string;
+  show_titles: boolean;
+  enabled: boolean;
+  created_by: string;
+  created_at: number;
+  route_job: { id: string; status: string; error: string | null; at: number } | null;
+  status: ChannelStatus;
+  detail: string | null;
+}
+
+export interface DeliveryRuleRow {
+  blueprint: string;
+  version: number | null;
+  n: number;
+  when: string;
+  event: string;
+  to: string;
+  template: string;
+  enabled: boolean;
+  channel: string | null;
+}
+
+export interface Delivery {
+  id: string;
+  channel: string;
+  instance_id: string;
+  event: string;
+  key: string;
+  text: string;
+  status: "queued" | "sent" | "delivered" | "failed";
+  error: string | null;
+  at: number;
+  finished_at: number | null;
+  rule: { blueprint: string; version: number; n: number } | null;
+  by: string | null;
+}
+
+export interface MessagingPlatform {
+  id: string;
+  name: string;
+  enabled: boolean;
+  configured: boolean;
+  gateway_running: boolean;
+  state: string | null;
+  error_message: string | null;
+  home_channel: { platform?: string; chat_id?: string; name?: string } | null;
+}
+
+export interface MessagingDoc {
+  channels: Channel[];
+  rules: DeliveryRuleRow[];
+  events: Record<string, string>;
+  templates: string[];
+  drafts: { name: string; version: number }[];
+  instances: { instance_id: string; environment: Environment; can_discover: boolean; discovered_at: number | null;
+               webhooks_enabled: boolean | null; platforms: MessagingPlatform[] }[];
+  deliveries: Delivery[];
+  portal_url: string;
+}
+
+export interface BlueprintDeliveryRule { when: string; to: string; template: string; enabled: boolean }
 
 // Ask the fleet (ask.py): a person's conversation with the orchestrator, bounded by what they may read.
 export interface AskSource {
@@ -926,6 +1000,18 @@ export const api = {
   testRuns: (q: { blueprint?: string; test_id?: string; instance_id?: string; limit?: number } = {}) =>
     call<TestRun[]>("GET", "/api/v1/testlab/runs", undefined, params(q)),
   testRun: (id: string) => call<TestRun>("GET", `/api/v1/testlab/runs/${enc(id)}`),
+  messaging: () => call<MessagingDoc>("GET", "/api/v1/messaging"),
+  discoverMessaging: (instance_id: string) => call<{ job_id: string }>("POST", "/api/v1/messaging/discover", { instance_id }),
+  enableWebhooks: (instance_id: string) => call<{ job_id: string }>("POST", "/api/v1/messaging/enable-webhooks", { instance_id }),
+  createChannel: (body: { name: string; instance_id: string; platform: string; chat_id?: string; audience?: string; show_titles?: boolean }) =>
+    call<Channel>("POST", "/api/v1/messaging/channels", body),
+  changeChannel: (id: string, body: { audience?: string; show_titles?: boolean; enabled?: boolean }) =>
+    call<Channel>("PATCH", `/api/v1/messaging/channels/${enc(id)}`, body),
+  recreateRoute: (id: string) => call<Channel>("POST", `/api/v1/messaging/channels/${enc(id)}/route`),
+  removeChannel: (id: string) => call<{ ok: boolean }>("DELETE", `/api/v1/messaging/channels/${enc(id)}`),
+  testChannel: (id: string) => call<Delivery>("POST", `/api/v1/messaging/channels/${enc(id)}/test`),
+  saveDeliveryRules: (name: string, version: number, rules: BlueprintDeliveryRule[]) =>
+    call<{ delivery: BlueprintDeliveryRule[] }>("PUT", `/api/v1/blueprints/${enc(name)}/${version}/delivery`, { rules }),
   askConfig: () => call<AskConfigDoc>("GET", "/api/v1/ask/config"),
   setAskConfig: (body: { instance_id: string; profile: string }) => call<AskConfigDoc>("PUT", "/api/v1/ask/config", body),
   createAskAsset: (body: { instance_id: string; zones: string[] }) =>

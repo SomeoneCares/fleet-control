@@ -149,6 +149,18 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   saving to Fleet outputs is allowed only into zones whose readers could read every cited source, with the strictest
   classification. The orchestrator is a settings choice (`ask`), or the `fleet-control-orchestrator` blueprint
   (one tool-less `fc-orchestrator` granted chosen zones), planned and applied like any blueprint.
+- DONE (2026-09-24): Slice 4 Messaging (`messaging.py`, `/api/v1/messaging*`, screen at `/messaging`; read =
+  admin portal roles, manage = Admin). A channel is a messaging platform an instance's Hermes gateway has connected
+  (`<platform>:<id>` is what blueprint `delivery` rules name). The agent keeps one `deliver_only` webhook route per
+  channel (`fc-<id>`, prompt `{text}`) whose secret stays in `~/.fleetctl-agent/route-secrets.json`, and posts each
+  message to it on loopback, signed `X-Webhook-Signature-V2` (hex HMAC of `<ts>.<body>`) with `X-Request-ID` =
+  the delivery id. So no inbound port and no secret in Fleet Control (the build document's "Fleet Control posts"
+  became "the agent posts": same route, no exposed port). Rules come from each blueprint's newest applied version and
+  are edited on drafts (`PUT /api/v1/blueprints/{name}/{version}/delivery`). Events: room opened, second approval
+  needed, output shared, assurance No evidence / Policy blocked, drift detected, apply completed/failed; one message
+  per event per channel. Messages carry the event, case id and a link (`portal_url` in Settings → General); a room's
+  question or an output's name only on channels with `show_titles`. Enabling the webhook platform restarts the
+  gateway (Hermes does it), so it is an explicit Admin action with a warning.
 - PLAN (Basem, 2026-09-16): complete the whole portal before Docker, every screen working end to end (real backend,
   real Hermes runs on the lab host where needed), in build-document order: Slice 2 Fleet Architect → Slice 3 Test
   Lab, Assurance, Integrations (+ Settings → Observability) → Slice 4 Workspace, Decision Rooms, Ask the fleet,

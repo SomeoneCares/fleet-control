@@ -11,6 +11,7 @@ import { BlueprintsScreen } from "./screens/Blueprints";
 import { ContentScreen } from "./screens/Content";
 import { DecisionRoomScreen, DecisionRoomsScreen } from "./screens/DecisionRooms";
 import { MyDecisionsScreen } from "./screens/MyDecisions";
+import { MessagingScreen } from "./screens/Messaging";
 import { DesignerScreen } from "./screens/Designer";
 import { FleetArchitectScreen } from "./screens/FleetArchitect";
 import { InstancesScreen } from "./screens/Instances";
@@ -65,6 +66,7 @@ export const router = createBrowserRouter([
       { path: "my-decisions", element: guarded("rooms.read", <MyDecisionsScreen />) },
       { path: "ask", element: guarded("ask.use", <AskFleetScreen />) },
       { path: "integrations", element: guarded("instances.read", <IntegrationsScreen />) },
+      { path: "messaging", element: guarded("messaging.read", <MessagingScreen />) },
       { path: "testlab", element: guarded("blueprints.read", <TestLabScreen />) },
       { path: "assurance", element: guarded("assurance.read", <AssuranceScreen />) },
       { path: "settings", element: <SettingsScreen /> },  // every role: tabs follow permissions (API tokens for all)

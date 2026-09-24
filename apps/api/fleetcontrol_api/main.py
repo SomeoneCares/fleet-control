@@ -23,10 +23,13 @@ from typing import Any, Literal, Optional
 
 from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from fleetcontrol_blueprint import Blueprint, dump_blueprint, json_schema, load_blueprint
 
+from .messaging import (
+    EVENTS, TEMPLATES, MessagingError, channel_health, new_channel, new_delivery, render, rules_from, test_text,
+)
 from .ask import (
     ORCHESTRATOR_BLUEPRINT, AskError, orchestrator_blueprint, check_question, classification_of, granted_zones, grounding, instructions as ask_instructions, parse_answer,
     request_text as ask_request_text, room_text, save_targets, select_sources, thread_row,
@@ -501,7 +504,14 @@ def _save_output(body: OutputCreate, *, produced_by: str, source: dict, instance
         raise HTTPException(422, str(exc))
     store.save_output(doc)
     store.record(actor, action, f"{zone['id']}/{doc['name']}", f"{doc['classification']}, by {produced_by}")
+    _output_event(doc)
     return _output_out(doc)
+
+
+def _output_event(doc: dict) -> None:
+    _notify("output.shared", key=f"output:{doc['id']}",
+            ctx={"title": doc["name"], "case": doc.get("case"), "instance": doc.get("instance_id"),
+                 "detail": f"{doc['classification']}, in zone {doc['zone']}, by {doc['produced_by']}.", "link": f"/outputs?id={doc['id']}"})
 
 
 @app.post("/api/v1/outputs", status_code=201)
@@ -560,6 +570,8 @@ def _open_room(body: RoomCreate, *, opened_by: str, kind: str, actor: str, insta
         raise HTTPException(422, str(exc))
     store.save_room(room)
     store.record(actor, "room.opened", room["id"], f"{room['question'][:80]} ({zone['id']})")
+    _notify("decision_room.opened", key=f"room:{room['id']}:opened",
+            ctx={"title": room["question"], "case": room.get("case"), "instance": instance_id, "link": f"/rooms/{room['id']}"})
     return room
 
 
@@ -636,6 +648,10 @@ def decide_room(room_id: str, body: DecisionBody, user: dict = Depends(require("
     store.record(user["email"], "room.decided", updated["id"], f"{label} — {body.rationale[:120]}")
     if updated["status"] == "decided":
         store.record("fleetcontrol", "room.closed", updated["id"], f"{len(updated['decisions'])} decision(s)")
+    elif updated.get("second_approver") and all(d["by"] != updated["second_approver"] for d in updated["decisions"]):
+        _notify("approval.second_needed", key=f"room:{updated['id']}:second",
+                ctx={"title": updated["question"], "case": updated.get("case"), "link": f"/rooms/{updated['id']}",
+                     "detail": f"Waiting for {updated['second_approver']}."})
     return room_view(updated, email=user["email"], role=user["role"])
 
 
@@ -957,6 +973,7 @@ def save_ask_answer(thread_id: str, turn_no: int, body: AskSave, user: dict = De
     except OutputError as exc:
         raise HTTPException(422, str(exc))
     store.save_output(out)
+    _output_event(out)
 
     def mark(d: dict) -> None:
         for t in d["turns"]:
@@ -966,6 +983,218 @@ def save_ask_answer(thread_id: str, turn_no: int, body: AskSave, user: dict = De
     store.update_ask_thread(thread_id, mark)
     store.record(user["email"], "output.saved_from_ask", out["id"], f"{thread_id} #{turn_no} → {body.zone}")
     return output_row(out)
+
+
+# ----------------------------------------------------------------------------- Messaging (Slice 4)
+
+
+def _channel_out(ch: dict, states: dict) -> dict:
+    return {**ch, **channel_health(ch, states.get(ch["instance_id"]))}
+
+
+def _notify(event: str, *, key: str, ctx: dict) -> None:
+    """A fleet event happened: send it to every channel an applied blueprint's delivery rule names for it, once."""
+    applied, _ = _blueprint_versions()
+    channels = {c["ref"]: c for c in store.list_channels()}
+    portal = _settings()["portal_url"]
+    for rule in rules_from(applied, channels.values()):
+        if rule["when"] != event or not rule["enabled"]:
+            continue
+        ch = channels.get(rule["to"])
+        if not ch or not ch.get("enabled", True):
+            continue  # the Messaging screen shows a rule whose channel is missing; nothing to send to
+        text = render(event, rule["template"], ctx, show_titles=ch["show_titles"], portal_url=portal)
+        _deliver(ch, event=event, key=key, text=text, rule=rule)
+
+
+def _deliver(ch: dict, *, event: str, key: str, text: str, rule: Optional[dict] = None, by: Optional[str] = None) -> Optional[dict]:
+    doc = store.add_delivery(new_delivery(delivery_id="dlv_" + uuid.uuid4().hex[:10], channel=ch, event=event, key=key,
+                                          text=text, at=time.time(), rule=rule, by=by))
+    if not doc:
+        return None  # this event already went to this channel
+    job = store.enqueue_job(ch["instance_id"], "deliver_message", {"route": ch["route"], "text": text, "delivery_id": doc["id"]},
+                            {"delivery": doc["id"]})
+    return store.update_delivery(doc["id"], job_id=job["id"], status="sent")
+
+
+def _delivery_result(job: dict) -> None:
+    result = job.get("result") or {}
+    ok = job["status"] == "done" and result.get("ok", True)
+    store.update_delivery(job["meta"]["delivery"], status="delivered" if ok else "failed", finished_at=time.time(),
+                          error=None if ok else (result.get("error") or "the agent could not deliver it"))
+
+
+def _messaging_result(job: dict, instance_id: str) -> None:
+    if job["kind"] == "messaging_discover" and job["status"] == "done":
+        result = job.get("result") or {}
+        store.save_messaging_state(instance_id, {"platforms": result.get("platforms") or [], "webhooks": result.get("webhooks") or {}},
+                                   time.time())
+    channel_id = job["meta"].get("channel")
+    if job["kind"] == "channel_route" and channel_id:
+        ch = store.get_channel(channel_id)
+        if ch:
+            result = job.get("result") or {}
+            store.save_channel({**ch, "route_job": {"id": job["id"], "status": job["status"], "error": result.get("error"),
+                                                    "at": time.time()}})
+    if job["kind"] in ("channel_route", "webhooks_enable"):  # see what changed
+        store.enqueue_job(instance_id, "messaging_discover", {}, {"messaging": instance_id})
+
+
+def _agent_instance_or_409(instance_id: str) -> dict:
+    inst = _require_instance(instance_id)
+    if inst["mode"] != "agent" or not inst.get("agent_version"):
+        raise HTTPException(409, f"{instance_id} has no paired Fleet Control Agent; messaging goes through it")
+    return inst
+
+
+@app.get("/api/v1/messaging")
+def get_messaging(user: dict = Depends(require("messaging.read"))) -> dict:
+    """Channels with their health, the delivery rules of the applied blueprints, the platforms each instance has, and
+    the latest deliveries."""
+    states = store.messaging_states()
+    channels = [_channel_out(c, states) for c in store.list_channels()]
+    applied, drafts = _blueprint_versions()
+    instances = []
+    for i in store.list_instances():
+        st = states.get(i["id"])
+        instances.append({"instance_id": i["id"], "environment": i["environment"],
+                          "can_discover": i["mode"] == "agent" and bool(i.get("agent_version")),
+                          "discovered_at": st["at"] if st else None,
+                          "webhooks_enabled": bool((st or {}).get("webhooks", {}).get("enabled")) if st else None,
+                          "platforms": [{k: p.get(k) for k in ("id", "name", "enabled", "configured", "gateway_running", "state",
+                                                               "error_message", "home_channel")} for p in (st or {}).get("platforms") or []]})
+    return {"channels": channels, "rules": rules_from(applied, channels), "events": EVENTS, "templates": list(TEMPLATES),
+            "drafts": [{"name": d["metadata"]["name"], "version": d["metadata"]["version"]} for d in drafts],
+            "instances": instances, "deliveries": store.list_deliveries(limit=30), "portal_url": _settings()["portal_url"]}
+
+
+class MessagingInstance(BaseModel):
+    instance_id: str
+
+
+@app.post("/api/v1/messaging/discover")
+def discover_messaging(body: MessagingInstance, user: dict = Depends(require("messaging.read"))) -> dict:
+    _agent_instance_or_409(body.instance_id)
+    job = store.enqueue_job(body.instance_id, "messaging_discover", {}, {"messaging": body.instance_id})
+    return {"job_id": job["id"]}
+
+
+@app.post("/api/v1/messaging/enable-webhooks")
+def enable_webhooks(body: MessagingInstance, user: dict = Depends(require("messaging.manage"))) -> dict:
+    """Turn on the webhook platform on an instance. Hermes restarts its gateway to start it."""
+    _agent_instance_or_409(body.instance_id)
+    job = store.enqueue_job(body.instance_id, "webhooks_enable", {}, {"messaging": body.instance_id})
+    store.record(user["email"], "messaging.webhooks_enabled", body.instance_id, "the gateway restarts")
+    return {"job_id": job["id"]}
+
+
+class ChannelCreate(BaseModel):
+    name: str = Field(..., min_length=2, max_length=60)
+    instance_id: str
+    platform: str = Field(..., min_length=2, max_length=32)
+    chat_id: Optional[str] = Field(None, max_length=120)
+    audience: str = Field("", max_length=120)
+    show_titles: bool = False
+
+
+def _route_job(ch: dict, action: str) -> dict:
+    return store.enqueue_job(ch["instance_id"], "channel_route",
+                             {"action": action, "route": ch["route"], "platform": ch["platform"], "chat_id": ch.get("chat_id"),
+                              "channel": ch["ref"]}, {"channel": ch["id"]})
+
+
+@app.post("/api/v1/messaging/channels", status_code=201)
+def create_channel(body: ChannelCreate, user: dict = Depends(require("messaging.manage"))) -> dict:
+    _agent_instance_or_409(body.instance_id)
+    try:
+        ch = new_channel(name=body.name, platform=body.platform, instance_id=body.instance_id, by=user["email"], at=time.time(),
+                         chat_id=body.chat_id, audience=body.audience, show_titles=body.show_titles)
+    except MessagingError as exc:
+        raise HTTPException(422, str(exc))
+    if store.get_channel(ch["id"]):
+        raise HTTPException(409, f"there is already a channel {ch['id']}")
+    store.save_channel(ch)
+    job = _route_job(ch, "create")
+    store.record(user["email"], "messaging.channel_created", ch["ref"], f"on {ch['instance_id']}, route {ch['route']}")
+    return _channel_out(store.save_channel({**ch, "route_job": {"id": job["id"], "status": "queued", "error": None, "at": time.time()}}),
+                        store.messaging_states())
+
+
+class ChannelChange(BaseModel):
+    audience: Optional[str] = Field(None, max_length=120)
+    show_titles: Optional[bool] = None
+    enabled: Optional[bool] = None
+
+
+def _channel(channel_id: str) -> dict:
+    ch = store.get_channel(channel_id)
+    if not ch:
+        raise HTTPException(404, "no such channel")
+    return ch
+
+
+@app.patch("/api/v1/messaging/channels/{channel_id}")
+def change_channel(channel_id: str, body: ChannelChange, user: dict = Depends(require("messaging.manage"))) -> dict:
+    ch = _channel(channel_id)
+    changes = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    ch = store.save_channel({**ch, **changes})
+    store.record(user["email"], "messaging.channel_changed", ch["ref"], ", ".join(f"{k}={v}" for k, v in changes.items()))
+    return _channel_out(ch, store.messaging_states())
+
+
+@app.post("/api/v1/messaging/channels/{channel_id}/route")
+def recreate_route(channel_id: str, user: dict = Depends(require("messaging.manage"))) -> dict:
+    ch = _channel(channel_id)
+    _agent_instance_or_409(ch["instance_id"])
+    job = _route_job(ch, "create")
+    store.record(user["email"], "messaging.route_recreated", ch["ref"], ch["route"])
+    return _channel_out(store.save_channel({**ch, "route_job": {"id": job["id"], "status": "queued", "error": None, "at": time.time()}}),
+                        store.messaging_states())
+
+
+@app.delete("/api/v1/messaging/channels/{channel_id}")
+def delete_channel(channel_id: str, user: dict = Depends(require("messaging.manage"))) -> dict:
+    """Forget a channel and ask its instance to drop the route. Deliveries stay: they are the record of what was sent."""
+    ch = _channel(channel_id)
+    inst = store.get_instance(ch["instance_id"])
+    if inst and inst["mode"] == "agent" and inst.get("agent_version"):
+        _route_job(ch, "remove")
+    store.delete_channel(channel_id)
+    store.record(user["email"], "messaging.channel_removed", ch["ref"], ch["route"])
+    return {"ok": True}
+
+
+@app.post("/api/v1/messaging/channels/{channel_id}/test", status_code=201)
+def test_channel(channel_id: str, user: dict = Depends(require("messaging.manage"))) -> dict:
+    ch = _channel(channel_id)
+    _agent_instance_or_409(ch["instance_id"])
+    doc = _deliver(ch, event="test", key=f"test:{uuid.uuid4().hex}", text=test_text(ch, user["email"], _settings()["portal_url"]),
+                   by=user["email"])
+    store.record(user["email"], "messaging.test_sent", ch["ref"], doc["id"])
+    return doc
+
+
+@app.get("/api/v1/messaging/deliveries")
+def list_deliveries(channel: Optional[str] = None, user: dict = Depends(require("messaging.read"))) -> list[dict]:
+    return store.list_deliveries(channel=channel, limit=100)
+
+
+class DeliveryRules(BaseModel):
+    rules: list[dict[str, Any]] = Field(..., max_length=50)
+
+
+@app.put("/api/v1/blueprints/{name}/{version}/delivery")
+def save_delivery_rules(name: str, version: int, body: DeliveryRules, user: dict = Depends(require("blueprints.write"))) -> dict:
+    """A draft's delivery rules, all at once: rules are part of the blueprint, so they reach the fleet by plan and apply."""
+    rec = _draft(name, version)
+    parsed = {**rec["parsed"], "delivery": body.rules}
+    try:
+        new = Blueprint.model_validate(parsed)
+    except ValidationError as exc:
+        raise HTTPException(422, "; ".join(f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in exc.errors()[:5]))
+    store.update_blueprint(name, version, dump_blueprint(new), new.model_dump(mode="json"), user["email"])
+    store.record(user["email"], "blueprint.delivery_saved", f"{name} v{version}", f"{len(new.delivery)} rules")
+    return {"name": name, "version": version, "delivery": [r.model_dump(mode="json") for r in new.delivery]}
 
 
 # ----------------------------------------------------------------------------- Integrations (Slice 3)
@@ -1257,6 +1486,12 @@ def _test_result(job: dict) -> None:
     store.update_test_run(run_id, file)
     store.record("fleetcontrol", f"test.{verdict['status']}", run_id,
                  f"{doc['blueprint']} v{doc['version']} {doc['test_id']} on {doc['instance_id']}")
+    for verdict_name, event in (("No evidence", "assurance.no_evidence"), ("Policy blocked", "assurance.policy_blocked")):
+        claims = [c for c in verdict["claims"] if c.get("verdict") == verdict_name]
+        if claims:
+            _notify(event, key=f"run:{run_id}:{event}",
+                    ctx={"instance": doc["instance_id"], "link": "/assurance",
+                         "detail": f"{doc['test_id']} ({doc['blueprint']} v{doc['version']}): {len(claims)} claim(s) {verdict_name}."})
 
 
 class TestEdit(BaseModel):
@@ -2260,6 +2495,26 @@ def job_result(job_id: str, result: dict[str, Any], inst: str = Depends(agent_in
         _test_result(job)
     if job["kind"] in ("mcp_discover", "mcp_write") and job["meta"].get("discovery"):
         _discovery_result(job, inst)
+    if job["kind"] == "deliver_message" and job["meta"].get("delivery"):
+        _delivery_result(job)
+    if job["kind"] in ("messaging_discover", "channel_route", "webhooks_enable"):
+        _messaging_result(job, inst)
+    if job["kind"] == "drift_scan" and job["status"] == "done":
+        report = store.drift_report(inst) or {}
+        if report.get("drift"):
+            fields = sum(len(v) for v in report["drift"].values())
+            _notify("drift.detected", key=f"drift:{inst}:{job['id']}",
+                    ctx={"instance": inst, "link": f"/instances/{inst}/drift",
+                         "detail": f"{fields} field(s) on {len(report['drift'])} profile(s) differ from "
+                                   f"{report.get('blueprint')} v{report.get('version')}."})
+    if job["kind"] == "apply" and job["meta"].get("plan_id"):
+        plan_id = job["meta"]["plan_id"]
+        plan = store.get_plan(plan_id) or {}
+        bp_ref = plan.get("blueprint") or {}
+        _notify("apply.completed" if job["status"] == "done" else "apply.failed", key=f"plan:{plan_id}:{job['status']}",
+                ctx={"instance": inst, "link": f"/plans/{plan_id}",
+                     "detail": f"{bp_ref.get('name')} v{bp_ref.get('version')}"
+                               + ("" if job["status"] == "done" else f": {((job.get('result') or {}).get('error') or 'see the plan')[:200]}")})
     applied = store.applied_for(inst) if job["kind"] == "apply" and job["status"] == "done" else None
     if applied:
         # drift detection starts right after an apply, against the version just applied

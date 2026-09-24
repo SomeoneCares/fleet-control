@@ -18,6 +18,7 @@ DEFAULTS: dict[str, Any] = {
     # a blueprint's agent tests must have passed on lab or staging before a production apply (build document §9)
     "require_tests_for_production": True,
     "token_max_days": 90,  # the longest lifetime a new API token may be given
+    "portal_url": "http://localhost:5173",  # where links in messages point (Messaging); the address people open
 }
 
 
@@ -31,6 +32,7 @@ class SettingsUpdate(BaseModel):
     approvals_lab: Optional[int] = Field(None, ge=0, le=5)
     require_tests_for_production: Optional[bool] = None
     token_max_days: Optional[int] = Field(None, ge=1, le=365)
+    portal_url: Optional[str] = Field(None, max_length=200, pattern=r"^https?://[^\s/]+(/[^\s]*)?$")
 
 
 def effective(stored: dict[str, Any]) -> dict[str, Any]:

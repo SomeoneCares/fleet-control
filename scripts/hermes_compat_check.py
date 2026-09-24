@@ -68,7 +68,7 @@ DASHBOARD_ROUTES = {
     "hermes_cli/web_routers/tools.py": ['"/api/tools/toolsets"'],
     "hermes_cli/web_routers/mcp.py": ['"/api/mcp/servers"', '"/api/mcp/servers/{name}/test"', '"/api/mcp/servers/{name}/enabled"'],
     "hermes_cli/web_routers/messaging.py": ['"/api/messaging/platforms"'],
-    "hermes_cli/web_routers/ops.py": ['"/api/webhooks"'],
+    "hermes_cli/web_routers/ops.py": ['"/api/webhooks"', '"/api/webhooks/{name}"', '"/api/webhooks/enable"'],
     "hermes_cli/web_routers/status.py": ['"/api/status"'],
 }
 
@@ -140,6 +140,7 @@ REQUEST_BODIES = {
     "ProfileModelUpdate": ["provider", "model"],
     "SkillToggle": ["name", "enabled", "profile"],
     "ToolsetToggle": ["enabled", "profile"],
+    "WebhookCreate": ["name", "description", "prompt", "deliver", "deliver_only", "deliver_chat_id", "secret"],
 }
 
 
@@ -169,6 +170,17 @@ def _mcp_summary(root):
     missing = [f for f in ("url", "command", "args", "auth") if f'"{f}": ' not in body]
     if '"env": _redact_mcp_env(' not in body:
         missing.append("env (no longer masked by _redact_mcp_env)")
+    return (not missing, f"missing: {missing}" if missing else "ok")
+
+
+@check("webhook routes still deliver_only and accept the V2 signature fleetctl-agent sends")
+def _webhook_v2(root):
+    # Messaging: the agent posts to its own deliver_only routes signed with X-Webhook-Signature-V2, a hex
+    # HMAC-SHA256 of "<timestamp>.<body>" with X-Webhook-Timestamp, and X-Request-ID for idempotency
+    src = read(root, "gateway/platforms/webhook.py")
+    needles = ["deliver_only", '"X-Webhook-Signature-V2"', '"X-Webhook-Timestamp"', 'v2_timestamp.encode() + b"." + body',
+               '"X-Request-ID"']
+    missing = [n for n in needles if n not in src]
     return (not missing, f"missing: {missing}" if missing else "ok")
 
 

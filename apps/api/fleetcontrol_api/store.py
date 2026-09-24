@@ -233,6 +233,12 @@ MESSAGING_STATE = Table(  # Messaging: the last discovery of an instance's platf
     Column("at", Float, nullable=False),
     Column("doc", Doc, nullable=False),
 )
+NOTIFY_PREFS = Table(  # Notifications: one person's own choices and addresses (notifications.py)
+    "notify_prefs", META,
+    Column("email", String(320), primary_key=True),
+    Column("updated_at", Float, nullable=False),
+    Column("doc", Doc, nullable=False),
+)
 ASK_THREADS = Table(  # Ask the fleet: one person's conversation with the orchestrator (ask.py)
     "ask_threads", META,
     Column("id", String(32), primary_key=True),
@@ -1090,6 +1096,17 @@ class Store:
         """{instance_id: {"at", **state}} from the last messaging discovery of each instance."""
         with self._tx() as c:
             return {r["instance_id"]: {"at": r["at"], **r["doc"]} for r in _all(c, select(MESSAGING_STATE))}
+
+    # ---- Notifications ---------------------------------------------------------------
+    def get_notify_prefs(self, email: str) -> Optional[dict]:
+        with self._tx() as c:
+            row = _one(c, select(NOTIFY_PREFS.c.doc).where(NOTIFY_PREFS.c.email == email))
+        return row["doc"] if row else None
+
+    def save_notify_prefs(self, email: str, doc: dict) -> dict:
+        with self._tx() as c:
+            _upsert(c, NOTIFY_PREFS, {"email": email}, {"updated_at": time.time(), "doc": doc})
+        return doc
 
     # ---- Ask the fleet ---------------------------------------------------------------
     def save_ask_thread(self, doc: dict) -> dict:

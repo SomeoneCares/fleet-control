@@ -44,14 +44,23 @@ def channel_id(name: str) -> str:
     return slug
 
 
+# A direct-message channel's route takes the recipient from each message: Hermes renders deliver_extra from the payload.
+DIRECT_CHAT = "{chat_id}"
+
+
 def new_channel(*, name: str, platform: str, instance_id: str, by: str, at: float, chat_id: Optional[str] = None,
-                audience: str = "", show_titles: bool = False) -> dict:
+                audience: str = "", show_titles: bool = False, direct: bool = False) -> dict:
+    """A channel. A ``direct`` one delivers each message to one person, at the address they gave in Settings →
+    Notifications; blueprint rules never send to it (a rule speaks to a group)."""
     cid = channel_id(name)
     platform = (platform or "").strip().lower()
     if not re.match(r"^[a-z][a-z0-9_]{1,30}$", platform):
         raise MessagingError("choose the messaging platform the channel delivers through")
+    if direct and (chat_id or "").strip():
+        raise MessagingError("a direct-message channel has no chat of its own: each person gives their address")
     return {"id": cid, "name": name.strip(), "platform": platform, "ref": f"{platform}:{cid}", "route": f"fc-{cid}",
-            "instance_id": instance_id, "chat_id": (chat_id or "").strip() or None, "audience": (audience or "").strip()[:120],
+            "instance_id": instance_id, "chat_id": DIRECT_CHAT if direct else ((chat_id or "").strip() or None),
+            "direct": bool(direct), "audience": (audience or "").strip()[:120] or ("each person, directly" if direct else ""),
             "show_titles": bool(show_titles), "enabled": True, "created_by": by, "created_at": at, "route_job": None}
 
 
@@ -96,7 +105,7 @@ def channel_health(channel: dict, state: Optional[dict]) -> dict:
 
 def rules_from(blueprints: Iterable[dict], channels: Iterable[dict]) -> list[dict]:
     """Every delivery rule of the given (applied) blueprints, with the channel its ``to`` names, if there is one."""
-    by_ref = {c["ref"]: c for c in channels}
+    by_ref = {c["ref"]: c for c in channels if not c.get("direct")}  # a rule speaks to a group, never to one person
     out = []
     for parsed in blueprints:
         meta = parsed["metadata"]
@@ -108,11 +117,11 @@ def rules_from(blueprints: Iterable[dict], channels: Iterable[dict]) -> list[dic
     return out
 
 
-def render(event: str, template: str, ctx: dict, *, show_titles: bool, portal_url: str) -> str:
+def render(event: str, template: str, ctx: dict, *, show_titles: bool, portal_url: str, head: Optional[str] = None) -> str:
     """The message: what happened, where, and a link back. ``ctx`` carries ``title`` (case content: shown only on a
     channel that shows titles), ``case``, ``instance``, ``detail`` (Fleet Control's own words) and ``link`` (a path)."""
-    head = {"decision-request": "Decision needed", "approval-request": "Second approval needed",
-            "output-summary": "New fleet output"}.get(template) or EVENTS.get(event, event)
+    head = head or {"decision-request": "Decision needed", "approval-request": "Second approval needed",
+                    "output-summary": "New fleet output"}.get(template) or EVENTS.get(event, event)
     lines = [f"Fleet Control · {head}"]
     if ctx.get("title") and show_titles:
         lines.append(str(ctx["title"])[:300])
@@ -134,7 +143,8 @@ def test_text(channel: dict, by: str, portal_url: str) -> str:
 
 
 def new_delivery(*, delivery_id: str, channel: dict, event: str, key: str, text: str, at: float, rule: Optional[dict] = None,
-                 by: Optional[str] = None) -> dict[str, Any]:
+                 by: Optional[str] = None, to: Optional[str] = None) -> dict[str, Any]:
+    """``to`` is the person (their account, never their address) a direct message went to."""
     return {"id": delivery_id, "channel": channel["id"], "instance_id": channel["instance_id"], "event": event, "key": key,
             "text": text, "status": "queued", "job_id": None, "error": None, "at": at, "finished_at": None,
-            "rule": {k: rule[k] for k in ("blueprint", "version", "n")} if rule else None, "by": by}
+            "rule": {k: rule[k] for k in ("blueprint", "version", "n")} if rule else None, "by": by, "to": to}

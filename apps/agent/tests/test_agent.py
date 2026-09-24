@@ -471,6 +471,18 @@ class MessagingTest(unittest.TestCase):
         self.assertEqual((out["ok"], out["http_status"]), (False, 502))
         self.assertFalse(jobs.dispatch({"kind": "deliver_message", "params": {"route": "fc-none", "text": "x", "delivery_id": "d"}})["ok"])
 
+    def test_a_direct_message_carries_its_recipient_and_never_goes_without_one(self):
+        jobs, h = self._jobs()
+        jobs.dispatch({"kind": "channel_route", "params": {"action": "create", "route": "fc-dm", "platform": "telegram", "chat_id": "{chat_id}"}})
+        self.assertEqual(h.created[0][2], "{chat_id}")  # the route takes the recipient from each message
+        out = jobs.dispatch({"kind": "deliver_message", "params": {"route": "fc-dm", "text": "hi", "delivery_id": "d1", "direct": True, "chat_id": "123456"}})
+        self.assertTrue(out["ok"])
+        self.assertEqual(h.posted[-1][1]["chat_id"], "123456")
+        for bad in ("", "   ", None, "{chat_id}"):  # Hermes would send these to the home channel, or fail oddly
+            out = jobs.dispatch({"kind": "deliver_message", "params": {"route": "fc-dm", "text": "x", "delivery_id": "d2", "direct": True, "chat_id": bad}})
+            self.assertFalse(out["ok"], bad)
+        self.assertEqual(len(h.posted), 1)
+
     def test_nothing_is_posted_while_the_webhook_platform_is_off(self):
         jobs, h = self._jobs(enabled=False)
         jobs._save_route_secrets({"fc-ops": "s"})

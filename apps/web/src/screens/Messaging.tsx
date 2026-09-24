@@ -120,7 +120,7 @@ function Channels({ doc, current, onSelect, now }: { doc: MessagingDoc; current:
             className={`w-full text-left grid grid-cols-[minmax(0,2fr)_110px_minmax(0,1fr)_minmax(0,1fr)_140px] gap-3 px-4 py-3 border-b border-hairline last:border-b-0 cursor-pointer items-center ${current?.id === c.id ? "bg-primary-tint" : "bg-transparent hover:bg-container-low"}`}>
             <span className="min-w-0">
               <span className="block text-[13px] font-medium truncate">{c.name}</span>
-              <Mono className="text-[11px] text-text-secondary">{c.ref}</Mono>
+              <Mono className="text-[11px] text-text-secondary">{c.direct ? "direct messages" : c.ref}</Mono>
             </span>
             <span className="text-[13px] capitalize">{c.platform}</span>
             <Mono className="text-[12px] truncate">{c.instance_id}</Mono>
@@ -190,7 +190,7 @@ function Detail({ channel: c, doc, manage, act, onRemoved }: {
       <div className="border border-hairline rounded-control divide-y divide-hairline text-[13px]">
         <Row label="Blueprints say"><Mono>{c.ref}</Mono></Row>
         <Row label="Gateway">Hermes {c.platform} on <Mono>{c.instance_id}</Mono></Row>
-        <Row label="Delivers to">{c.chat_id ? <>chat <Mono>{c.chat_id}</Mono></> : "the platform's home channel"}</Row>
+        <Row label="Delivers to">{c.direct ? "each person, at their own address (Settings → Notifications)" : c.chat_id ? <>chat <Mono>{c.chat_id}</Mono></> : "the platform's home channel"}</Row>
         <Row label="Route"><Mono>{c.route}</Mono> <span className="text-text-secondary">(deliver only; its secret stays on the instance)</span></Row>
         <Row label="Titles">{c.show_titles ? "Room questions and output names are shown" : "Hidden: messages carry the event, case id and a link"}</Row>
         <Row label="Rules">{rules.length ? rules.map((r) => r.event).join(", ") : "none use it yet"}</Row>
@@ -222,7 +222,7 @@ function Detail({ channel: c, doc, manage, act, onRemoved }: {
           <details key={d.id} className="text-small">
             <summary className="cursor-pointer flex items-center gap-2">
               <Chip tone={DELIVERY_TONE[d.status]}>{d.status}</Chip>
-              <span className="truncate">{d.event === "test" ? `Test by ${d.by}` : doc.events[d.event] ?? d.event}</span>
+              <span className="truncate">{d.event === "test" ? `Test by ${d.by}` : doc.events[d.event] ?? d.event}{d.to ? ` → ${d.to}` : ""}</span>
               <span className="text-text-secondary ml-auto shrink-0">{timeAgo(d.at)}</span>
             </summary>
             <pre className="mt-1.5 mb-0 p-2.5 bg-container-low rounded-control whitespace-pre-wrap break-words font-mono text-[11px]">{d.text}</pre>
@@ -253,6 +253,7 @@ function AddChannel({ doc, onClose, onAdded }: { doc: MessagingDoc; onClose: () 
   const [chatId, setChatId] = useState("");
   const [audience, setAudience] = useState("");
   const [titles, setTitles] = useState(false);
+  const [direct, setDirect] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const id = channelIdFrom(name);
@@ -261,8 +262,8 @@ function AddChannel({ doc, onClose, onAdded }: { doc: MessagingDoc; onClose: () 
     e.preventDefault();
     setBusy(true); setError(null);
     try {
-      await onAdded(await api.createChannel({ name: name.trim(), instance_id: instance, platform: chosen, chat_id: chatId.trim() || undefined,
-                                              audience: audience.trim(), show_titles: titles }));
+      await onAdded(await api.createChannel({ name: name.trim(), instance_id: instance, platform: chosen, chat_id: direct ? undefined : chatId.trim() || undefined,
+                                              audience: audience.trim(), show_titles: titles, direct }));
     } catch (err) { setError(errorText(err)); setBusy(false); }
   }
   return (
@@ -289,9 +290,13 @@ function AddChannel({ doc, onClose, onAdded }: { doc: MessagingDoc; onClose: () 
             <Field label="Name" hint={id ? <>Blueprint rules send to <Mono>{chosen}:{id}</Mono></> : "e.g. Ops on-call"}>
               <input className={INPUT} autoFocus value={name} maxLength={60} onChange={(e) => setName(e.target.value)} placeholder="Ops on-call" />
             </Field>
-            <Field label="Chat" hint={home ? `Optional. Empty = the home channel${home.name ? ` (${home.name})` : ""}.` : "Optional. Empty = the platform's home channel."}>
+            <label className="flex items-start gap-2 text-[13px] cursor-pointer mb-4">
+              <input type="checkbox" className="mt-0.5" checked={direct} onChange={(e) => setDirect(e.target.checked)} />
+              <span><b>Direct messages</b>: one message per person, at the address each gives in Settings → Notifications. Blueprint rules never send here.</span>
+            </label>
+            {!direct && <Field label="Chat" hint={home ? `Optional. Empty = the home channel${home.name ? ` (${home.name})` : ""}.` : "Optional. Empty = the platform's home channel."}>
               <input className={INPUT} value={chatId} maxLength={120} onChange={(e) => setChatId(e.target.value)} placeholder="-1001234567890" />
-            </Field>
+            </Field>}
             <Field label="Audience" hint="Who reads it, in words. Shown here only.">
               <input className={INPUT} value={audience} maxLength={120} onChange={(e) => setAudience(e.target.value)} placeholder="Fleet operators" />
             </Field>

@@ -19,7 +19,7 @@ from __future__ import annotations
 import os
 import time
 import uuid
-from typing import Any, Literal, Optional
+from typing import Any, Iterable, Literal, Optional
 
 from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import Response
@@ -29,6 +29,9 @@ from fleetcontrol_blueprint import Blueprint, dump_blueprint, json_schema, load_
 
 from .access import (
     agent_grants, combined_zones, person_permissions, person_zones, summary as access_summary, tool_verdict, why_apply, why_room,
+)
+from .notifications import (
+    PERSONAL_EVENTS, NotificationError, effective as notify_effective, reach as notify_reach, update as notify_update,
 )
 from .messaging import (
     EVENTS, TEMPLATES, MessagingError, channel_health, merge_gateway, new_channel, new_delivery, render, rules_from, test_text,
@@ -575,6 +578,9 @@ def _open_room(body: RoomCreate, *, opened_by: str, kind: str, actor: str, insta
     store.record(actor, "room.opened", room["id"], f"{room['question'][:80]} ({zone['id']})")
     _notify("decision_room.opened", key=f"room:{room['id']}:opened",
             ctx={"title": room["question"], "case": room.get("case"), "instance": instance_id, "link": f"/rooms/{room['id']}"})
+    _notify_people("room.waiting", key=f"room:{room['id']}:waiting",
+                   ctx={"title": room["question"], "case": room.get("case"), "link": f"/rooms/{room['id']}"},
+                   people=_people_with("rooms.decide", zone=room["zone"], except_=[opened_by]))
     return room
 
 
@@ -655,6 +661,10 @@ def decide_room(room_id: str, body: DecisionBody, user: dict = Depends(require("
         _notify("approval.second_needed", key=f"room:{updated['id']}:second",
                 ctx={"title": updated["question"], "case": updated.get("case"), "link": f"/rooms/{updated['id']}",
                      "detail": f"Waiting for {updated['second_approver']}."})
+        _notify_people("room.second_approval", key=f"room:{updated['id']}:second",
+                       ctx={"title": updated["question"], "case": updated.get("case"), "link": f"/rooms/{updated['id']}",
+                            "detail": f"{user['email']} has decided; the room waits for you."},
+                       people=[u for u in _people_with("rooms.decide", zone=updated["zone"]) if u["email"] == updated["second_approver"]])
     return room_view(updated, email=user["email"], role=user["role"])
 
 
@@ -867,6 +877,11 @@ def _ask_result(job: dict) -> None:
                          grounding=grounding(answer["cited"], tool_calls, evidence_error=result.get("evidence_error")))
 
     store.update_ask_thread(thread_id, file)
+    if answer and thread:
+        owner = store.get_user(thread["owner"])
+        if owner:
+            _notify_people("ask.answered", key=f"ask:{thread_id}:{turn_no}", people=[owner],
+                           ctx={"link": f"/ask?c={thread_id}", "detail": f"Verdict: {grounding(answer['cited'], tool_calls)['verdict']}."})
     detail = f"#{turn_no}: cites {', '.join(answer['cited']) or 'nothing'}" if answer else f"#{turn_no}: {(error or '')[:160]}"
     store.record("fleetcontrol", "ask.answered" if answer else "ask.failed", thread_id, detail)
 
@@ -1006,7 +1021,7 @@ def _notify(event: str, *, key: str, ctx: dict) -> None:
     if not _settings()["messaging_enabled"]:
         return  # switched off: nothing is sent, and nothing is queued to be sent later
     applied, _ = _blueprint_versions()
-    channels = {c["ref"]: c for c in store.list_channels()}
+    channels = {c["ref"]: c for c in store.list_channels() if not c.get("direct")}
     portal = _settings()["portal_url"]
     for rule in rules_from(applied, channels.values()):
         if rule["when"] != event or not rule["enabled"]:
@@ -1018,13 +1033,19 @@ def _notify(event: str, *, key: str, ctx: dict) -> None:
         _deliver(ch, event=event, key=key, text=text, rule=rule)
 
 
-def _deliver(ch: dict, *, event: str, key: str, text: str, rule: Optional[dict] = None, by: Optional[str] = None) -> Optional[dict]:
+def _deliver(ch: dict, *, event: str, key: str, text: str, rule: Optional[dict] = None, by: Optional[str] = None,
+             chat_id: Optional[str] = None, to: Optional[str] = None) -> Optional[dict]:
+    if ch.get("direct") and not (chat_id or "").strip():
+        # Hermes sends an empty chat_id to the platform's home channel: a personal message must never go there
+        raise ValueError(f"a direct message on {ch['id']} needs its recipient's address")
     doc = store.add_delivery(new_delivery(delivery_id="dlv_" + uuid.uuid4().hex[:10], channel=ch, event=event, key=key,
-                                          text=text, at=time.time(), rule=rule, by=by))
+                                          text=text, at=time.time(), rule=rule, by=by, to=to))
     if not doc:
-        return None  # this event already went to this channel
-    job = store.enqueue_job(ch["instance_id"], "deliver_message", {"route": ch["route"], "text": text, "delivery_id": doc["id"]},
-                            {"delivery": doc["id"]})
+        return None  # this event already went to this channel (or this person)
+    params = {"route": ch["route"], "text": text, "delivery_id": doc["id"]}
+    if ch.get("direct"):
+        params.update(chat_id=chat_id, direct=True)
+    job = store.enqueue_job(ch["instance_id"], "deliver_message", params, {"delivery": doc["id"]})
     return store.update_delivery(doc["id"], job_id=job["id"], status="sent")
 
 
@@ -1112,6 +1133,7 @@ class ChannelCreate(BaseModel):
     chat_id: Optional[str] = Field(None, max_length=120)
     audience: str = Field("", max_length=120)
     show_titles: bool = False
+    direct: bool = False  # one message per person, at the address they give in Settings → Notifications
 
 
 def _route_job(ch: dict, action: str) -> dict:
@@ -1126,7 +1148,7 @@ def create_channel(body: ChannelCreate, user: dict = Depends(require("messaging.
     _agent_instance_or_409(body.instance_id)
     try:
         ch = new_channel(name=body.name, platform=body.platform, instance_id=body.instance_id, by=user["email"], at=time.time(),
-                         chat_id=body.chat_id, audience=body.audience, show_titles=body.show_titles)
+                         chat_id=body.chat_id, audience=body.audience, show_titles=body.show_titles, direct=body.direct)
     except MessagingError as exc:
         raise HTTPException(422, str(exc))
     if store.get_channel(ch["id"]):
@@ -1190,8 +1212,15 @@ def test_channel(channel_id: str, user: dict = Depends(require("messaging.manage
     _messaging_on()
     ch = _channel(channel_id)
     _agent_instance_or_409(ch["instance_id"])
+    chat_id = None
+    if ch.get("direct"):
+        prefs = notify_effective(store.get_notify_prefs(user["email"]), user["role"])
+        chat_id = prefs["addresses"].get(ch["platform"])
+        if not chat_id:
+            raise HTTPException(409, f"a direct-message channel tests by writing to you: give your {ch['platform']} address "
+                                     "in Settings → Notifications first")
     doc = _deliver(ch, event="test", key=f"test:{uuid.uuid4().hex}", text=test_text(ch, user["email"], _settings()["portal_url"]),
-                   by=user["email"])
+                   by=user["email"], chat_id=chat_id, to=user["email"] if chat_id else None)
     store.record(user["email"], "messaging.test_sent", ch["ref"], doc["id"])
     return doc
 
@@ -1304,6 +1333,109 @@ def access_inspect(email: Optional[str] = None, blueprint: Optional[str] = None,
             raise HTTPException(422, "environment is lab, staging or production")
         out["checks"].append({"question": f"May {person['email']} apply a plan to {environment}?", **why_apply(environment, person["role"])})
     return out
+
+
+# ----------------------------------------------------------------------------- Notifications (Slice 4)
+
+# what a personal message is called, and whether it asks for a decision (then it says a reply is not one)
+_PERSONAL_HEAD = {"room.waiting": ("Decision waiting for you", "decision-request"),
+                  "room.second_approval": ("Your second approval is needed", "approval-request"),
+                  "plan.approval": ("A production plan needs your approval", "alert"),
+                  "ask.answered": ("The fleet answered your question", "alert"),
+                  "apply.failed": ("Apply failed", "alert"), "drift.detected": ("Drift detected", "alert"),
+                  "assurance.no_evidence": ("Assurance: No evidence", "alert")}
+
+
+def _direct_channels() -> dict[str, dict]:
+    """{platform: channel}: the enabled direct-message channel of each platform (the first, if there are several)."""
+    out: dict[str, dict] = {}
+    for ch in store.list_channels():
+        if ch.get("direct") and ch.get("enabled", True):
+            out.setdefault(ch["platform"], ch)
+    return out
+
+
+def _notify_people(event: str, *, key: str, ctx: dict, people: Iterable[dict]) -> None:
+    """Tell each of these people, if they asked for this event and can be reached. Callers pass only people who may
+    see what the event is about."""
+    if not _settings()["messaging_enabled"]:
+        return
+    direct = _direct_channels()
+    if not direct:
+        return
+    head, template = _PERSONAL_HEAD[event]
+    portal = _settings()["portal_url"]
+    for person in people:
+        if person.get("disabled"):
+            continue
+        prefs = notify_effective(store.get_notify_prefs(person["email"]), person["role"])
+        reach = notify_reach(prefs, event)
+        ch = direct.get(reach[0]) if reach else None
+        if not ch:
+            continue
+        text = render(event, template, ctx, show_titles=prefs["show_titles"], portal_url=portal, head=head)
+        _deliver(ch, event=event, key=f"{key}:to:{person['email']}", text=text, chat_id=reach[1], to=person["email"])
+
+
+def _people_with(permission: str, *, zone: Optional[str] = None, except_: Iterable[str] = ()) -> list[dict]:
+    """Active accounts whose role has ``permission`` (and reads ``zone``, when given)."""
+    z = store.get_zone(zone) if zone else None
+    skip = set(except_)
+    return [u for u in store.list_users()
+            if allowed(u["role"], permission) and u["email"] not in skip and not u.get("disabled")
+            and (z is None or may_read(z, u["role"]))]
+
+
+def _notifications_out(user: dict) -> dict:
+    prefs = notify_effective(store.get_notify_prefs(user["email"]), user["role"])
+    states = store.messaging_states()
+    platforms = [{"platform": p, "channel": ch["id"], "instance_id": ch["instance_id"], **channel_health(ch, states.get(ch["instance_id"]))}
+                 for p, ch in sorted(_direct_channels().items())]
+    return {"prefs": prefs, "platforms": platforms, "messaging_enabled": bool(_settings()["messaging_enabled"]),
+            "events": [{"event": e, "label": PERSONAL_EVENTS[e][0], "on": prefs["events"][e]} for e in prefs["events"]]}
+
+
+@app.get("/api/v1/me/notifications")
+def get_my_notifications(user: dict = Depends(current_user)) -> dict:
+    """Your own notification choices. Your address is yours: nobody else reads or sets it."""
+    return _notifications_out(user)
+
+
+class NotificationChange(BaseModel):
+    via: Optional[str] = Field(None, max_length=32)
+    address: Optional[str] = Field(None, max_length=120)
+    events: Optional[dict[str, bool]] = None
+    show_titles: Optional[bool] = None
+    clear: bool = False
+
+
+@app.patch("/api/v1/me/notifications")
+def change_my_notifications(body: NotificationChange, user: dict = Depends(current_user)) -> dict:
+    if body.via and body.via not in _direct_channels():
+        raise HTTPException(422, f"there is no direct-message channel for {body.via}: an Admin adds one in Messaging")
+    try:
+        prefs = notify_update(store.get_notify_prefs(user["email"]) or {}, user["role"], via=body.via, address=body.address,
+                              events=body.events, show_titles=body.show_titles, clear=body.clear)
+    except NotificationError as exc:
+        raise HTTPException(422, str(exc))
+    store.save_notify_prefs(user["email"], prefs)
+    what = "cleared" if body.clear else ", ".join(k for k, v in body.model_dump(exclude_unset=True).items() if v is not None)
+    store.record(user["email"], "notifications.changed", user["email"], what)  # never the address itself
+    return _notifications_out(user)
+
+
+@app.post("/api/v1/me/notifications/test", status_code=201)
+def test_my_notifications(user: dict = Depends(current_user)) -> dict:
+    _messaging_on()
+    prefs = notify_effective(store.get_notify_prefs(user["email"]), user["role"])
+    via = prefs["via"]
+    address = prefs["addresses"].get(via) if via else None
+    ch = _direct_channels().get(via) if via else None
+    if not (via and address and ch):
+        raise HTTPException(409, "choose how to be reached and give your address first")
+    text = f"Fleet Control · Test notification\nFor {user['email']}.\nOpen: {_settings()['portal_url'].rstrip('/')}/settings"
+    doc = _deliver(ch, event="test", key=f"test:{uuid.uuid4().hex}", text=text, chat_id=address, to=user["email"], by=user["email"])
+    return {k: doc[k] for k in ("id", "status", "channel", "at")}
 
 
 # ----------------------------------------------------------------------------- Integrations (Slice 3)
@@ -1598,9 +1730,11 @@ def _test_result(job: dict) -> None:
     for verdict_name, event in (("No evidence", "assurance.no_evidence"), ("Policy blocked", "assurance.policy_blocked")):
         claims = [c for c in verdict["claims"] if c.get("verdict") == verdict_name]
         if claims:
-            _notify(event, key=f"run:{run_id}:{event}",
-                    ctx={"instance": doc["instance_id"], "link": "/assurance",
-                         "detail": f"{doc['test_id']} ({doc['blueprint']} v{doc['version']}): {len(claims)} claim(s) {verdict_name}."})
+            ctx = {"instance": doc["instance_id"], "link": "/assurance",
+                   "detail": f"{doc['test_id']} ({doc['blueprint']} v{doc['version']}): {len(claims)} claim(s) {verdict_name}."}
+            _notify(event, key=f"run:{run_id}:{event}", ctx=ctx)
+            if event == "assurance.no_evidence":
+                _notify_people(event, key=f"run:{run_id}:{event}", ctx=ctx, people=_people_with("assurance.read"))
 
 
 class TestEdit(BaseModel):
@@ -2387,6 +2521,12 @@ def _save_plan(bp: Blueprint, live: dict, inst: dict, who: str, why: str = "") -
     plan["created_at"] = time.time()
     store.save_plan(plan)
     store.record(who, "plan.created", f"{bp.metadata.name} v{bp.metadata.version} → {inst['id']}", f"{len(plan['changes'])} changes{why}")
+    if plan["environment"] == "production" and plan.get("approvals_required"):
+        _notify_people("plan.approval", key=f"plan:{plan['id']}:approval",
+                       ctx={"instance": inst["id"], "link": f"/plans/{plan['id']}",
+                            "detail": f"{bp.metadata.name} v{bp.metadata.version}, {len(plan['changes'])} changes, "
+                                      f"{plan['approvals_required']} approval(s) needed; created by {who}."},
+                       people=_people_with("plans.approve.production", except_=[who]))
     return plan
 
 
@@ -2612,18 +2752,21 @@ def job_result(job_id: str, result: dict[str, Any], inst: str = Depends(agent_in
         report = store.drift_report(inst) or {}
         if report.get("drift"):
             fields = sum(len(v) for v in report["drift"].values())
-            _notify("drift.detected", key=f"drift:{inst}:{job['id']}",
-                    ctx={"instance": inst, "link": f"/instances/{inst}/drift",
-                         "detail": f"{fields} field(s) on {len(report['drift'])} profile(s) differ from "
-                                   f"{report.get('blueprint')} v{report.get('version')}."})
+            ctx = {"instance": inst, "link": f"/instances/{inst}/drift",
+                   "detail": f"{fields} field(s) on {len(report['drift'])} profile(s) differ from "
+                             f"{report.get('blueprint')} v{report.get('version')}."}
+            _notify("drift.detected", key=f"drift:{inst}:{job['id']}", ctx=ctx)
+            _notify_people("drift.detected", key=f"drift:{inst}:{job['id']}", ctx=ctx, people=_people_with("drift.read"))
     if job["kind"] == "apply" and job["meta"].get("plan_id"):
         plan_id = job["meta"]["plan_id"]
         plan = store.get_plan(plan_id) or {}
         bp_ref = plan.get("blueprint") or {}
-        _notify("apply.completed" if job["status"] == "done" else "apply.failed", key=f"plan:{plan_id}:{job['status']}",
-                ctx={"instance": inst, "link": f"/plans/{plan_id}",
-                     "detail": f"{bp_ref.get('name')} v{bp_ref.get('version')}"
-                               + ("" if job["status"] == "done" else f": {((job.get('result') or {}).get('error') or 'see the plan')[:200]}")})
+        ctx = {"instance": inst, "link": f"/plans/{plan_id}",
+               "detail": f"{bp_ref.get('name')} v{bp_ref.get('version')}"
+                         + ("" if job["status"] == "done" else f": {((job.get('result') or {}).get('error') or 'see the plan')[:200]}")}
+        _notify("apply.completed" if job["status"] == "done" else "apply.failed", key=f"plan:{plan_id}:{job['status']}", ctx=ctx)
+        if job["status"] != "done":
+            _notify_people("apply.failed", key=f"plan:{plan_id}:failed", ctx=ctx, people=_people_with("plans.apply.nonprod"))
     applied = store.applied_for(inst) if job["kind"] == "apply" and job["status"] == "done" else None
     if applied:
         # drift detection starts right after an apply, against the version just applied

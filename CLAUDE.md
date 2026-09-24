@@ -173,6 +173,15 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   checks: may <agent> call <tool> (policy → agent → system; a system's own permissions are named, never guessed), may
   <person> decide in <room>, may <person> apply to <environment>. `PERMISSION_LABEL` must cover every permission (a
   test fails otherwise).
+- DONE (2026-09-25): Slice 4 Notifications, personal delivery (Basem's choice): `notifications.py`,
+  `/api/v1/me/notifications` (every signed-in person, for themselves), Settings → Notifications. An Admin adds a
+  **direct-message channel** per platform in Messaging (`direct: true`): its route's `chat_id` is the template
+  `{chat_id}`, which Hermes renders from each payload (verified in gateway/platforms/webhook.py). **An empty chat_id
+  makes Hermes fall back to the platform's home channel**, so both `_deliver` and the agent refuse a direct message
+  without an address. Each person picks a platform, gives their own address (never logged; deliveries record `to` =
+  account) and ticks events offered to their role (`PERSONAL_EVENTS`); they are told only about what they may see
+  (rooms in zones they read, production plans they may approve, never their own). Blueprint rules never target a
+  direct channel. Settings → Notifications is Slice 4's last piece: Slice 4 is complete.
 - PLAN (Basem, 2026-09-16): complete the whole portal before Docker, every screen working end to end (real backend,
   real Hermes runs on the lab host where needed), in build-document order: Slice 2 Fleet Architect → Slice 3 Test
   Lab, Assurance, Integrations (+ Settings → Observability) → Slice 4 Workspace, Decision Rooms, Ask the fleet,

@@ -409,6 +409,14 @@ export interface AccessSubjects {
   rooms: { id: string; question: string; zone: string; case: string | null }[];
 }
 
+// Notifications (notifications.py): what reaches one person, and where. The address is theirs alone.
+export interface MyNotifications {
+  prefs: { via: string | null; addresses: Record<string, string>; events: Record<string, boolean>; show_titles: boolean };
+  platforms: { platform: string; channel: string; instance_id: string; status: ChannelStatus; detail: string | null }[];
+  messaging_enabled: boolean;
+  events: { event: string; label: string; on: boolean }[];
+}
+
 // Messaging (messaging.py): channels on instances, delivery rules from applied blueprints, what was sent.
 export type ChannelStatus = "ready" | "unknown" | "disabled" | "webhooks_off" | "platform_missing" | "platform_down" | "route_missing" | "route_off";
 
@@ -423,6 +431,7 @@ export interface Channel {
   audience: string;
   show_titles: boolean;
   enabled: boolean;
+  direct?: boolean;  // one message per person, at their own address (Settings → Notifications)
   created_by: string;
   created_at: number;
   route_job: { id: string; status: string; error: string | null; at: number } | null;
@@ -455,6 +464,7 @@ export interface Delivery {
   finished_at: number | null;
   rule: { blueprint: string; version: number; n: number } | null;
   by: string | null;
+  to?: string | null;  // the person a direct message went to (their account, never their address)
 }
 
 export interface MessagingPlatform {
@@ -1034,7 +1044,11 @@ export const api = {
   messaging: () => call<MessagingDoc>("GET", "/api/v1/messaging"),
   discoverMessaging: (instance_id: string) => call<{ job_id: string }>("POST", "/api/v1/messaging/discover", { instance_id }),
   enableWebhooks: (instance_id: string) => call<{ job_id: string }>("POST", "/api/v1/messaging/enable-webhooks", { instance_id }),
-  createChannel: (body: { name: string; instance_id: string; platform: string; chat_id?: string; audience?: string; show_titles?: boolean }) =>
+  myNotifications: () => call<MyNotifications>("GET", "/api/v1/me/notifications"),
+  changeMyNotifications: (body: { via?: string; address?: string; events?: Record<string, boolean>; show_titles?: boolean; clear?: boolean }) =>
+    call<MyNotifications>("PATCH", "/api/v1/me/notifications", body),
+  testMyNotifications: () => call<{ id: string; status: string }>("POST", "/api/v1/me/notifications/test"),
+  createChannel: (body: { name: string; instance_id: string; platform: string; chat_id?: string; audience?: string; show_titles?: boolean; direct?: boolean }) =>
     call<Channel>("POST", "/api/v1/messaging/channels", body),
   changeChannel: (id: string, body: { audience?: string; show_titles?: boolean; enabled?: boolean }) =>
     call<Channel>("PATCH", `/api/v1/messaging/channels/${enc(id)}`, body),

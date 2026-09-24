@@ -14,7 +14,7 @@ const TABS: { key: TabKey; label: string; icon: IconName; permission?: string; s
   { key: "observability", label: "Observability", icon: "graph", permission: "settings.read" },
   { key: "approvals", label: "Approvals", icon: "check", permission: "settings.read" },
   { key: "tokens", label: "API tokens", icon: "lock" },
-  { key: "notifications", label: "Notifications", icon: "message", slice: 4 },
+  { key: "notifications", label: "Notifications", icon: "message" },
 ];
 
 export function SettingsScreen() {
@@ -41,12 +41,90 @@ export function SettingsScreen() {
           {tab === "approvals" && <ApprovalsPanel />}
           {tab === "tokens" && <TokensPanel />}
           {tab === "observability" && <ObservabilityPanel />}
-          {tab === "notifications" && (
-            <LaterPanel title="Notifications" slice={4} subtitle="What reaches you, and where."
-              text="Delivery needs a messaging channel (Teams, Slack or email), so notification rules arrive with Messaging." />
-          )}
+          {tab === "notifications" && <NotificationsPanel />}
         </Card>
       </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------- notifications (every person, for themselves)
+
+const ADDRESS_HINT: Record<string, string> = {
+  telegram: "Your numeric Telegram user id (ask @userinfobot). Start a chat with the Hermes bot once, or it cannot write to you.",
+  email: "Your email address.",
+};
+
+function NotificationsPanel() {
+  const { data, error, reload } = useLoad(api.myNotifications, []);
+  const [address, setAddress] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ tone: "info" | "error" | "success"; text: string } | null>(null);
+  if (!data) return <Loading error={error} />;
+  const via = data.prefs.via;
+  const shown = address ?? (via ? data.prefs.addresses[via] ?? "" : "");
+  const platform = data.platforms.find((p) => p.platform === via);
+
+  async function change(body: Parameters<typeof api.changeMyNotifications>[0], done?: string) {
+    setBusy("save"); setMsg(null);
+    try { await api.changeMyNotifications(body); await reload(); setAddress(null); if (done) setMsg({ tone: "success", text: done }); }
+    catch (e) { setMsg({ tone: "error", text: errorText(e) }); } finally { setBusy(null); }
+  }
+
+  return (
+    <>
+      <PanelHead title="Notifications" subtitle="What reaches you personally, and where. Your address is yours: nobody else sees or sets it." />
+      {!data.messaging_enabled && <Banner tone="warning" className="m-5">Messaging is switched off for this workspace, so nothing is sent (Settings → General).</Banner>}
+      {data.messaging_enabled && data.platforms.length === 0 && (
+        <Banner tone="info" className="m-5">No way to reach people directly yet: an Admin adds a direct-message channel in Messaging (Add channel → Direct messages).</Banner>
+      )}
+      {data.platforms.length > 0 && (
+        <>
+          <Row label="Reach me on" hint={platform && platform.status !== "ready" ? `Not delivering right now: ${platform.detail ?? platform.status}` : "The platforms an Admin has set up for direct messages."}>
+            <select className={INPUT} aria-label="Reach me on" value={via ?? ""} disabled={busy !== null}
+              onChange={(e) => void change({ via: e.target.value })}>
+              <option value="">Nowhere (no notifications)</option>
+              {data.platforms.map((p) => <option key={p.platform} value={p.platform}>{p.platform}</option>)}
+            </select>
+          </Row>
+          {via && (
+            <Row label="My address" hint={ADDRESS_HINT[via] ?? `Your address on ${via}.`}>
+              <div className="flex gap-2">
+                <input className={INPUT} aria-label="My address" value={shown} maxLength={120} onChange={(e) => setAddress(e.target.value)} />
+                <Button disabled={busy !== null || address === null} onClick={() => void change({ address: shown }, "Address saved.")}>Save</Button>
+              </div>
+            </Row>
+          )}
+          <Row label="Tell me when" hint="Only what your role could act on, and only about things you may see.">
+            <div className="flex flex-col gap-1.5">
+              {data.events.map((e) => (
+                <label key={e.event} className="flex items-center gap-2 text-[13px] cursor-pointer">
+                  <input type="checkbox" className="accent-primary" checked={e.on} disabled={busy !== null}
+                    onChange={(ev) => void change({ events: { [e.event]: ev.target.checked } })} />
+                  {e.label}
+                </label>
+              ))}
+              {data.events.length === 0 && <span className="text-small text-text-secondary">Your role has nothing to be told about.</span>}
+            </div>
+          </Row>
+          <Row label="Titles" hint="Off: messages carry what happened, a case id and a link. On: also the room's question.">
+            <label className="flex items-center gap-2 text-[13px] cursor-pointer">
+              <input type="checkbox" className="accent-primary" checked={data.prefs.show_titles} disabled={busy !== null}
+                onChange={(e) => void change({ show_titles: e.target.checked })} />
+              Include titles in my messages
+            </label>
+          </Row>
+          <div className="px-5 py-4 flex items-center gap-3">
+            <Button disabled={busy !== null || !via || !data.prefs.addresses[via]} onClick={async () => {
+              setBusy("test"); setMsg(null);
+              try { await api.testMyNotifications(); setMsg({ tone: "info", text: "Test sent. It should reach you in a few seconds." }); }
+              catch (e) { setMsg({ tone: "error", text: errorText(e) }); } finally { setBusy(null); }
+            }}>{busy === "test" && <Spinner />}Send me a test</Button>
+            <span className="text-small text-text-secondary">A reply to a message is never a decision: decide in the portal.</span>
+          </div>
+        </>
+      )}
+      {msg && <Banner tone={msg.tone} className="mx-5 mb-5">{msg.text}</Banner>}
     </>
   );
 }
@@ -389,23 +467,6 @@ function ObservabilityPanel() {
       <div className="px-5 py-3 bg-surface text-small text-text-secondary">
         Langfuse also needs its Python package and keys on the instance (<Mono>HERMES_LANGFUSE_PUBLIC_KEY</Mono> and
         <Mono>HERMES_LANGFUSE_SECRET_KEY</Mono>), which stay there: Fleet Control never holds them.
-      </div>
-    </>
-  );
-}
-
-// ---------------------------------------------------------------- tabs that arrive with a later slice
-
-function LaterPanel({ title, subtitle, slice, text }: { title: string; subtitle: string; slice: number; text: string }) {
-  return (
-    <>
-      <PanelHead title={title} subtitle={subtitle} />
-      <div className="px-5 py-6 flex gap-3 items-start">
-        <Icon name="clock" size={20} className="text-text-secondary mt-0.5" />
-        <div>
-          <p className="m-0 font-semibold">Arrives with Slice {slice}.</p>
-          <p className="mt-1 mb-0 text-[13px] text-text-secondary">{text}</p>
-        </div>
       </div>
     </>
   );

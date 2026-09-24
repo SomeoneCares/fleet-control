@@ -390,7 +390,8 @@ class Jobs:
         return {"route": route, "url": summary.get("url"), "created": True}
 
     def deliver_message(self, p: dict) -> dict:
-        """params: {route, text, delivery_id}: post the text to this host's own route, signed. Hermes delivers it
+        """params: {route, text, delivery_id, direct?, chat_id?}: post the text to this host's own route, signed; a direct
+        route (chat_id template) gets the recipient in the payload. Hermes delivers it
         through the platform; the answer says whether the platform took it."""
         route = p["route"]
         secret = self._route_secrets().get(route)
@@ -402,7 +403,14 @@ class Jobs:
         url = next((r.get("url") for r in hooks["routes"] if r.get("name") == route), None)
         if not url:
             return {"ok": False, "error": f"route {route} is not on this instance: recreate the channel's route"}
-        status, body = self.hermes.webhook_post(url, {"text": p["text"], "event_type": "fleetcontrol"}, secret, p["delivery_id"])
+        payload = {"text": p["text"], "event_type": "fleetcontrol"}
+        if p.get("direct"):
+            chat_id = str(p.get("chat_id") or "").strip()
+            if not chat_id or "{" in chat_id:
+                # an empty chat_id makes Hermes fall back to the platform's home channel: never for a personal message
+                return {"ok": False, "error": "a direct message needs its recipient's address; nothing was sent"}
+            payload["chat_id"] = chat_id
+        status, body = self.hermes.webhook_post(url, payload, secret, p["delivery_id"])
         state = body.get("status") if isinstance(body, dict) else None
         ok = status == 200 and state in ("delivered", "duplicate")
         out = {"ok": ok, "http_status": status, "status": state}

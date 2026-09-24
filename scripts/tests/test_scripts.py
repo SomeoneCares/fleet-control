@@ -81,6 +81,20 @@ class CompatTest(unittest.TestCase):
             f.write(text)
         return root
 
+    def _mcp(self, summary):
+        root = self._tree()
+        with open(os.path.join(root, "hermes_cli", "web_server_mcp.py"), "w", encoding="utf-8") as f:
+            f.write(f"def _mcp_server_summary(name, cfg):\n    return {{\n{summary}    }}\n\n\ndef _next():\n    pass\n")
+        return root
+
+    def test_mcp_summary_fields_copy_mcp_relies_on(self):
+        good = ('        "url": cfg.get("url"),\n        "command": cfg.get("command"),\n        "args": list(cfg.get("args") or []),\n'
+                '        "env": _redact_mcp_env(cfg.get("env") or {}),\n        "auth": auth,\n')
+        self.assertEqual(compat._mcp_summary(self._mcp(good)), (True, "ok"))
+        ok, detail = compat._mcp_summary(self._mcp(good.replace("_redact_mcp_env(", "dict(")))
+        self.assertFalse(ok)
+        self.assertIn("no longer masked", detail)
+
     def test_essential_skills_match_daemon(self):
         ok, _ = compat._essential(self._skill_utils('ESSENTIAL_SKILLS: frozenset = frozenset({"hermes-agent"})\n'))
         self.assertTrue(ok)

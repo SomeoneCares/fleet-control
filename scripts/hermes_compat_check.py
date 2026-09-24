@@ -156,6 +156,22 @@ def _bodies(root):
     return (not missing, f"missing: {missing}" if missing else "ok")
 
 
+@check("MCP server list still shows url, command, args, auth and masked env (copy_mcp)")
+def _mcp_summary(root):
+    # HermesLocal.mcp_copy rebuilds a server's registration from this summary and refuses one with env keys or a
+    # header token; if a field disappears it could copy a server wrongly, and if env stopped being masked it
+    # would be reading secrets
+    src = read(root, "hermes_cli/web_server_mcp.py")
+    m = re.search(r"^def _mcp_server_summary\(.*?(?=^def )", src, re.M | re.S)
+    if not m:
+        return (False, "_mcp_server_summary gone")
+    body = m.group(0)
+    missing = [f for f in ("url", "command", "args", "auth") if f'"{f}": ' not in body]
+    if '"env": _redact_mcp_env(' not in body:
+        missing.append("env (no longer masked by _redact_mcp_env)")
+    return (not missing, f"missing: {missing}" if missing else "ok")
+
+
 @check("/v1 API server routes used still exist")
 def _api(root):
     src = read(root, "gateway/platforms/api_server.py") + read(root, "gateway/platforms/api_server_runs.py")

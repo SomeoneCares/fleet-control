@@ -118,10 +118,10 @@ export function WorkspaceHome() {
             {can("rooms.decide") && <li>Decide in a <Link to="/rooms">Decision Room</Link> and record a rationale. Decisions are made here, never in a chat reply.</li>}
             {can("content.read") && <li>Read <Link to="/outputs">outputs</Link> the fleet is allowed to share with your role.</li>}
             {can("plans.approve.production") && <li>Approve production plans.</li>}
+            {can("ask.use") && <li><Link to="/ask">Ask the fleet</Link> a question: it answers only from content your role may see, and shows its sources.</li>}
             {can("audit.read") && <li>Read the <Link to="/audit">audit log</Link>.</li>}
             <li>Read any plan you are sent a link to.</li>
           </ul>
-          <p className="m-0 mt-3 text-small text-text-secondary">Ask the fleet arrives next: a question answered only from content your role may see.</p>
         </Card>
       </div>
     </>

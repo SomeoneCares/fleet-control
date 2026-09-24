@@ -141,6 +141,14 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   tokens; OAuth logins become the plan's `manual_steps`), `remove_mcp` removes. Room evidence and findings carry a
   `basis` (source / analytical / interpretation / assumption / judgment; only people judge); an analytical finding
   names its tool and Fleet Control checks it against the run or the plugin's session events (`rooms.check_tool`).
+- DONE (2026-09-24): Slice 4 Ask the fleet (`ask.py`, `/api/v1/ask/*`, screen at `/ask`, `ask.use` = admin portal
+  roles + Approver). Fleet Control picks the sources (files, outputs, rooms) from zones the person may read AND the
+  orchestrator profile is granted by an applied blueprint's `content_zones`, numbers them S1…, and sends only those as
+  a `hermes_run` with `transcript: true`. Citations are checked (invented ones dropped); the answer's verdict is
+  Evidence found only if it cites sources and the transcript shows no tool calls. Conversations are the owner's alone;
+  saving to Fleet outputs is allowed only into zones whose readers could read every cited source, with the strictest
+  classification. The orchestrator is a settings choice (`ask`), or the `fleet-control-orchestrator` blueprint
+  (one tool-less `fc-orchestrator` granted chosen zones), planned and applied like any blueprint.
 - PLAN (Basem, 2026-09-16): complete the whole portal before Docker, every screen working end to end (real backend,
   real Hermes runs on the lab host where needed), in build-document order: Slice 2 Fleet Architect → Slice 3 Test
   Lab, Assurance, Integrations (+ Settings → Observability) → Slice 4 Workspace, Decision Rooms, Ask the fleet,

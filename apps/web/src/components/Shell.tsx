@@ -25,6 +25,7 @@ export const NAV: { group: string; items: NavItem[] }[] = [
   ] },
   { group: "Operate", items: [
     { key: "decision-rooms", label: "Decision Rooms", icon: "chat", to: "/rooms", permission: "rooms.read" },
+    { key: "ask-the-fleet", label: "Ask the fleet", icon: "spark", to: "/ask", permission: "ask.use" },
     { key: "assurance", label: "Assurance", icon: "shield", to: "/assurance", permission: "assurance.read" },
     { key: "test-lab", label: "Test Lab", icon: "flask", to: "/testlab" },
   ] },
@@ -54,7 +55,7 @@ export const WORKSPACE_NAV: { group: string; items: NavItem[] }[] = [
     { key: "fleet-outputs", label: "Fleet outputs", icon: "folder", to: "/outputs", permission: "content.read" },
     { key: "my-decisions", label: "My decisions", icon: "check", to: "/my-decisions", permission: "rooms.read" },
     { key: "decision-rooms", label: "Decision Rooms", icon: "chat", to: "/rooms", permission: "rooms.read" },
-    { key: "ask-the-fleet", label: "Ask the fleet", icon: "spark", slice: 4 },
+    { key: "ask-the-fleet", label: "Ask the fleet", icon: "spark", to: "/ask", permission: "ask.use" },
   ] },
 ];
 

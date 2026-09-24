@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router";
 import { api, type Classification, type ContentFile, type ContentZone, type RoleName } from "../api/client";
 import { useAuth } from "../lib/auth";
 import { errorText, useLoad } from "../lib/hooks";
@@ -13,7 +14,8 @@ export function ContentScreen() {
   const { can } = useAuth();
   const manage = can("content.manage");
   const { data: zones, error, reload } = useLoad(api.contentZones, [], 15_000);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [search] = useSearchParams();  // ?zone=&file= open one file (Ask the fleet links here)
+  const [selected, setSelected] = useState<string | null>(search.get("zone"));
   const [creating, setCreating] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -72,7 +74,7 @@ export function ContentScreen() {
             </p>
           )}
           {files?.map((f) => (
-            <FileRow key={f.id} file={f} manage={manage && !zone?.managed}
+            <FileRow key={f.id} file={f} startOpen={f.id === search.get("file")} manage={manage && !zone?.managed}
               onRemoved={async () => { await reloadFiles(); await reload(); setMsg(`Removed ${f.name}.`); }} />
           ))}
         </Card>
@@ -88,8 +90,8 @@ export function ContentScreen() {
   );
 }
 
-function FileRow({ file, manage, onRemoved }: { file: ContentFile; manage: boolean; onRemoved: () => Promise<void> }) {
-  const [open, setOpen] = useState(false);
+function FileRow({ file, manage, onRemoved, startOpen = false }: { file: ContentFile; manage: boolean; onRemoved: () => Promise<void>; startOpen?: boolean }) {
+  const [open, setOpen] = useState(startOpen);
   const [busy, setBusy] = useState(false);
   return (
     <>

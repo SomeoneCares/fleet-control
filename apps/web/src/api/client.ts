@@ -382,6 +382,64 @@ export interface IntegrationsDoc {
   discovery: { instance_id: string; at: number | null; can_discover: boolean }[];
 }
 
+// Ask the fleet (ask.py): a person's conversation with the orchestrator, bounded by what they may read.
+export interface AskSource {
+  id: string;  // S1, S2, … as the orchestrator saw them
+  key: string;
+  kind: "file" | "output" | "room";
+  ref: string;
+  label: string;
+  zone: string;
+  classification: string | null;
+  chars: number;
+  truncated: boolean;
+}
+
+export interface AskTurn {
+  n: number;
+  question: string;
+  asked_at: number;
+  status: "running" | "answered" | "failed";
+  orchestrator: { instance_id: string; profile: string };
+  searched_zones: string[];
+  not_searched: string[];
+  sources: AskSource[];
+  answer: string | null;
+  cited: string[];
+  dropped: string[];
+  format: "json" | "text" | null;
+  grounding: { verdict: Verdict; detail: string } | null;
+  tool_calls: ToolCallEvidence[] | null;
+  error: string | null;
+  answered_at: number | null;
+  saved_output: string | null;
+}
+
+export interface AskThread {
+  id: string;
+  owner: string;
+  created_at: number;
+  updated_at: number;
+  turns: AskTurn[];
+}
+
+export interface AskThreadRow {
+  id: string;
+  title: string;
+  created_at: number;
+  updated_at: number;
+  turns: number;
+  status: AskTurn["status"] | null;
+}
+
+export interface AskConfigDoc {
+  config: null | {
+    instance_id: string; profile: string; model: { provider?: string; name?: string } | null; instance_status: string;
+    granted_zones: string[]; searched_zones: string[]; not_searched: string[];
+  };
+  candidates: { instance_id: string; environment: Environment; profiles: string[] }[];  // Admins only
+}
+
 export type Verdict = "Evidence found" | "No evidence" | "Not verifiable" | "Policy blocked";
 // "cancelled" is someone stopping a run — it says nothing about the test, so it is never a failure.
 export type TestStatus = "running" | "passed" | "failed" | "not_verifiable" | "error" | "cancelled";
@@ -868,6 +926,19 @@ export const api = {
   testRuns: (q: { blueprint?: string; test_id?: string; instance_id?: string; limit?: number } = {}) =>
     call<TestRun[]>("GET", "/api/v1/testlab/runs", undefined, params(q)),
   testRun: (id: string) => call<TestRun>("GET", `/api/v1/testlab/runs/${enc(id)}`),
+  askConfig: () => call<AskConfigDoc>("GET", "/api/v1/ask/config"),
+  setAskConfig: (body: { instance_id: string; profile: string }) => call<AskConfigDoc>("PUT", "/api/v1/ask/config", body),
+  createAskAsset: (body: { instance_id: string; zones: string[] }) =>
+    call<{ name: string; version: number; status: string }>("POST", "/api/v1/ask/blueprint-asset", body),
+  askThreads: () => call<AskThreadRow[]>("GET", "/api/v1/ask/threads"),
+  askThread: (id: string) => call<AskThread>("GET", `/api/v1/ask/threads/${enc(id)}`),
+  ask: (question: string) => call<AskThread>("POST", "/api/v1/ask/threads", { question }),
+  askFollowUp: (id: string, question: string) => call<AskThread>("POST", `/api/v1/ask/threads/${enc(id)}/turns`, { question }),
+  stopAsk: (id: string, n: number) => call<AskThread>("POST", `/api/v1/ask/threads/${enc(id)}/turns/${n}/stop`),
+  askSaveTargets: (id: string, n: number) =>
+    call<{ zones: string[]; classification: string }>("GET", `/api/v1/ask/threads/${enc(id)}/turns/${n}/save-targets`),
+  saveAskAnswer: (id: string, n: number, body: { zone: string; name: string; case?: string }) =>
+    call<{ id: string; zone: string; name: string }>("POST", `/api/v1/ask/threads/${enc(id)}/turns/${n}/save`, body),
   cancelTestRun: (id: string) => call<TestRun>("POST", `/api/v1/testlab/runs/${enc(id)}/cancel`),
   deleteTestRun: (id: string) => call<{ ok: boolean; id: string }>("DELETE", `/api/v1/testlab/runs/${enc(id)}`),
   startTestRuns: (body: { blueprint: string; version: number; instance_id: string; test_ids?: string[] }) =>

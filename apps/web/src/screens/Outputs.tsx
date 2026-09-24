@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { api, type FleetOutput, type OutputKind } from "../api/client";
 import { useAuth } from "../lib/auth";
 import { errorText, useLoad } from "../lib/hooks";
@@ -15,7 +15,8 @@ export function OutputsScreen() {
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<OutputKind | "">("");
   const [caseId, setCaseId] = useState("");
-  const [open, setOpen] = useState<string | null>(null);
+  const [search] = useSearchParams();
+  const [open, setOpen] = useState<string | null>(search.get("id"));  // ?id= opens one output (Ask the fleet links here)
   const all = outputs ?? [];
   const rows = all.filter((o) => (!kind || o.kind === kind) && (!caseId || o.case === caseId) && matchesQuery(o, query));
 

@@ -46,6 +46,7 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     "rooms.decide": frozenset({"admin", "approver"}),  # build document §2.2: Approvers decide in Decision Rooms
     "content.read": _ALL,  # zones gate what each person actually sees (content.py)
     "content.manage": frozenset({"admin", "fleet_architect"}),
+    "ask.use": ADMIN_PORTAL | {"approver"},  # Ask the fleet: each question is an agent run, so not Viewers
     "tests.run": ADMIN_PORTAL,  # Test Lab: run tests on lab and staging instances, and stop a run
     "tests.manage": frozenset({"admin"}),  # delete a test run: it erases history, so Admin only
     "assurance.read": ADMIN_PORTAL,

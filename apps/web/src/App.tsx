@@ -4,6 +4,7 @@ import { Shell } from "./components/Shell";
 import { Card, PageHeader } from "./components/ui";
 import { useAuth, useMe } from "./lib/auth";
 import { AccessScreen } from "./screens/Access";
+import { AskFleetScreen } from "./screens/AskFleet";
 import { ApplyPlanScreen } from "./screens/ApplyPlan";
 import { AuditScreen } from "./screens/Audit";
 import { BlueprintsScreen } from "./screens/Blueprints";
@@ -62,6 +63,7 @@ export const router = createBrowserRouter([
       { path: "rooms", element: guarded("rooms.read", <DecisionRoomsScreen />) },
       { path: "rooms/:id", element: guarded("rooms.read", <DecisionRoomScreen />) },
       { path: "my-decisions", element: guarded("rooms.read", <MyDecisionsScreen />) },
+      { path: "ask", element: guarded("ask.use", <AskFleetScreen />) },
       { path: "integrations", element: guarded("instances.read", <IntegrationsScreen />) },
       { path: "testlab", element: guarded("blueprints.read", <TestLabScreen />) },
       { path: "assurance", element: guarded("assurance.read", <AssuranceScreen />) },

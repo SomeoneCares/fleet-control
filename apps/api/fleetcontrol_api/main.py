@@ -27,6 +27,10 @@ from pydantic import BaseModel, Field
 
 from fleetcontrol_blueprint import Blueprint, dump_blueprint, json_schema, load_blueprint
 
+from .ask import (
+    ORCHESTRATOR_BLUEPRINT, AskError, orchestrator_blueprint, check_question, classification_of, granted_zones, grounding, instructions as ask_instructions, parse_answer,
+    request_text as ask_request_text, room_text, save_targets, select_sources, thread_row,
+)
 from .architect import (
     ARCHITECT_BLUEPRINT, EDITABLE, Constraints, ProposalError, architect_blueprint, check_agent, estate_summary, instructions,
     merge_edit, parse_proposal, request_text, to_blueprint,
@@ -662,6 +666,308 @@ class FindingBody(BaseModel):
 # The two agent routes for rooms live with the rest of the /agent/v1 family, below `agent_instance`.
 
 
+# ----------------------------------------------------------------------------- Ask the fleet (Slice 4)
+
+
+def _blueprint_versions() -> tuple[list[dict], list[dict]]:
+    """(the newest applied version of each blueprint, the newer unapplied drafts), parsed."""
+    applied, drafts = [], []
+    for versions in store.all_blueprints().values():
+        done = [v for v, rec in versions.items() if rec.get("status") == "applied"]
+        newest_applied = max(done) if done else None
+        if newest_applied is not None:
+            applied.append(versions[newest_applied]["parsed"])
+        newest = max(versions)
+        if newest_applied is None or newest > newest_applied:
+            drafts.append(versions[newest]["parsed"])
+    return applied, drafts
+
+
+def _ask_config() -> Optional[dict]:
+    cfg = store.get_settings().get("ask")
+    return cfg if isinstance(cfg, dict) and cfg.get("instance_id") and cfg.get("profile") else None
+
+
+def _ask_out(user: dict) -> dict:
+    """The orchestrator, the zones it is granted, and — for an Admin, who chooses it — every profile that could be it."""
+    cfg = _ask_config()
+    if cfg:
+        state = (store.live_state_for(cfg["instance_id"]) or {}).get(cfg["profile"]) or {}
+        inst = store.get_instance(cfg["instance_id"])
+        granted = granted_zones(cfg["profile"], _blueprint_versions()[0])
+        mine = _my_zones(user)
+        cfg = {**cfg, "model": state.get("model"), "instance_status": inst["status"] if inst else "missing",
+               "granted_zones": granted, "searched_zones": [z for z in mine if z in granted],
+               "not_searched": [z for z in mine if z not in granted]}
+    candidates = []
+    if user["role"] == "admin":
+        for inst in store.list_instances():
+            live = store.live_state_for(inst["id"]) or {}
+            if inst["mode"] == "agent" and inst.get("agent_version") and live:
+                candidates.append({"instance_id": inst["id"], "environment": inst["environment"], "profiles": sorted(live)})
+    return {"config": cfg, "candidates": candidates}
+
+
+class AskConfig(BaseModel):
+    instance_id: str
+    profile: str
+
+
+@app.get("/api/v1/ask/config")
+def get_ask_config(user: dict = Depends(require("ask.use"))) -> dict:
+    return _ask_out(user)
+
+
+@app.put("/api/v1/ask/config")
+def set_ask_config(body: AskConfig, user: dict = Depends(require("settings.manage"))) -> dict:
+    inst = _require_instance(body.instance_id)
+    if inst["mode"] != "agent" or not inst.get("agent_version"):
+        raise HTTPException(409, f"{body.instance_id} has no paired Fleet Control Agent; questions go through it")
+    if body.profile not in (store.live_state_for(body.instance_id) or {}):
+        raise HTTPException(422, f"no profile {body.profile!r} in the last import from {body.instance_id}; import live profiles first")
+    store.set_settings({"ask": {"instance_id": body.instance_id, "profile": body.profile}}, user["email"])
+    store.record(user["email"], "ask.configured", f"{body.profile} on {body.instance_id}")
+    return _ask_out(user)
+
+
+class AskAsset(BaseModel):
+    instance_id: str
+    zones: list[str] = Field(..., min_length=1, max_length=20)
+
+
+@app.post("/api/v1/ask/blueprint-asset", status_code=201)
+def create_ask_asset(body: AskAsset, user: dict = Depends(require("settings.manage"))) -> dict:
+    """The fleet-control-orchestrator blueprint (one tool-less fc-orchestrator profile granted these zones) for an
+    instance, to plan and apply like any blueprint; then choose fc-orchestrator as the orchestrator."""
+    inst = _require_instance(body.instance_id)
+    unknown = sorted(z for z in set(body.zones) if not store.get_zone(z))
+    if unknown:
+        raise HTTPException(422, f"no such content zone: {', '.join(unknown)}")
+    live = store.live_state_for(body.instance_id) or {}
+    source = live.get("default") or next(iter(live.values()), None)
+    model = (source or {}).get("model") or {}
+    if not (model.get("provider") and model.get("name")):
+        raise HTTPException(409, f"import live profiles from {body.instance_id} first: the orchestrator uses its default model")
+    version = store.next_blueprint_version(ORCHESTRATOR_BLUEPRINT)
+    bp = orchestrator_blueprint(model, zones=body.zones, instance_id=body.instance_id, environment=inst["environment"],
+                                owner=user["email"], version=version)
+    rec = store.save_blueprint(ORCHESTRATOR_BLUEPRINT, version, dump_blueprint(bp), bp.model_dump(mode="json"), user["email"])
+    store.record(user["email"], "blueprint.saved", f"{ORCHESTRATOR_BLUEPRINT} v{version}",
+                 f"Ask the fleet orchestrator for {body.instance_id}: {', '.join(sorted(set(body.zones)))}")
+    return {"name": rec["name"], "version": rec["version"], "status": rec["status"]}
+
+
+def _ask_candidates(zones: list[str]) -> list[dict]:
+    """Everything in these zones an answer could rest on: files and outputs with text, and Decision Rooms."""
+    out = []
+    for f in store.list_files(zones):
+        if f.get("text"):
+            out.append({"key": f"file:{f['id']}", "kind": "file", "ref": f["id"], "label": f["name"], "zone": f["zone"],
+                        "classification": f.get("classification"), "text": f["text"]})
+    for o in store.list_outputs(zones):
+        if o.get("text"):
+            out.append({"key": f"output:{o['id']}", "kind": "output", "ref": o["id"], "zone": o["zone"],
+                        "label": o["name"] + (f" · {o['case']}" if o.get("case") else ""),
+                        "classification": o.get("classification"), "text": o["text"]})
+    for r in store.list_rooms(zones):
+        out.append({"key": f"room:{r['id']}", "kind": "room", "ref": r["id"], "zone": r["zone"], "classification": None,
+                    "label": "Decision Room: " + r["question"] + (f" · {r['case']}" if r.get("case") else ""), "text": room_text(r)})
+    return out
+
+
+def _ask_thread(thread_id: str, user: dict) -> dict:
+    t = store.get_ask_thread(thread_id)
+    if not t or t["owner"] != user["email"]:  # a conversation is its owner's alone
+        raise HTTPException(404, "no such conversation")
+    return t
+
+
+def _ask_turn(thread: dict, question: str, user: dict) -> dict:
+    """Choose the sources, file the turn, and queue the orchestrator's run."""
+    cfg = _ask_config()
+    if not cfg:
+        raise HTTPException(409, "no orchestrator is chosen yet: an Admin chooses it on Ask the fleet")
+    inst = store.get_instance(cfg["instance_id"])
+    if not inst or inst["mode"] != "agent" or not inst.get("agent_version"):
+        raise HTTPException(409, f"the orchestrator's instance {cfg['instance_id']} has no paired Fleet Control Agent")
+    granted = granted_zones(cfg["profile"], _blueprint_versions()[0])
+    mine = _my_zones(user)
+    searched = [z for z in mine if z in granted]
+    carry = [k for t in thread["turns"] if t["status"] == "answered" for k in t.get("cited_keys") or []]
+    sources = select_sources(question, _ask_candidates(searched), carry=carry)
+    turn_no = len(thread["turns"]) + 1
+    turn = {"n": turn_no, "question": question, "asked_at": time.time(), "status": "running", "job_id": None,
+            "orchestrator": {"instance_id": cfg["instance_id"], "profile": cfg["profile"]},
+            "searched_zones": searched, "not_searched": [z for z in mine if z not in granted],
+            "sources": [{k: v for k, v in s.items() if k != "excerpt"} | {"chars": len(s["excerpt"])} for s in sources],
+            "answer": None, "cited": [], "cited_keys": [], "dropped": [], "format": None, "grounding": None,
+            "tool_calls": None, "error": None, "run": None, "answered_at": None, "saved_output": None}
+    store.update_ask_thread(thread["id"], lambda d: d["turns"].append(turn))
+    params = {"profile": cfg["profile"], "input": ask_request_text(question, thread["turns"]),
+              "instructions": ask_instructions(asker=user.get("name") or user["email"], role=role_label(user["role"]), sources=sources),
+              "timeout": 300, "transcript": True}
+    job = store.enqueue_job(cfg["instance_id"], "hermes_run", params, {"ask_thread": thread["id"], "turn": turn_no})
+
+    def set_job(d: dict) -> None:
+        for t in d["turns"]:
+            if t["n"] == turn_no:
+                t["job_id"] = job["id"]
+
+    store.record(user["email"], "ask.asked", thread["id"], f"#{turn_no}: {question[:160]} ({len(sources)} sources)")
+    return store.update_ask_thread(thread["id"], set_job)
+
+
+def _ask_result(job: dict) -> None:
+    """The orchestrator answered (or did not): check the citations and the transcript, and file the answer."""
+    thread_id, turn_no = job["meta"]["ask_thread"], job["meta"]["turn"]
+    result = job.get("result") or {}
+    answer, error = None, None
+    thread = store.get_ask_thread(thread_id)
+    turn = next((t for t in (thread or {}).get("turns", []) if t["n"] == turn_no), None)
+    if not turn or turn["status"] != "running":
+        return  # stopped meanwhile: a late answer does not revive it
+    if job["status"] == "done":
+        try:
+            answer = parse_answer(result.get("output") or "", [s["id"] for s in turn["sources"]])
+        except AskError as exc:
+            error = str(exc)
+    else:
+        error = result.get("error") or f"the run ended {result.get('status') or 'without a result'}"
+    tool_calls = result.get("tool_calls") if "tool_calls" in result else None
+
+    def file(d: dict) -> None:
+        for t in d["turns"]:
+            if t["n"] != turn_no or t["status"] != "running":
+                continue
+            t.update(status="answered" if answer else "failed", error=error, answered_at=time.time(), tool_calls=tool_calls,
+                     run={"run_id": result.get("run_id"), "usage": result.get("usage"), "session_id": result.get("session_id")})
+            if answer:
+                by_id = {s["id"]: s for s in t["sources"]}
+                t.update(answer=answer["answer"], cited=answer["cited"], dropped=answer["dropped"], format=answer["format"],
+                         cited_keys=[by_id[i]["key"] for i in answer["cited"]],
+                         grounding=grounding(answer["cited"], tool_calls, evidence_error=result.get("evidence_error")))
+
+    store.update_ask_thread(thread_id, file)
+    detail = f"#{turn_no}: cites {', '.join(answer['cited']) or 'nothing'}" if answer else f"#{turn_no}: {(error or '')[:160]}"
+    store.record("fleetcontrol", "ask.answered" if answer else "ask.failed", thread_id, detail)
+
+
+class AskQuestion(BaseModel):
+    question: str = Field(..., min_length=3, max_length=1000)
+
+
+@app.get("/api/v1/ask/threads")
+def list_ask_threads(user: dict = Depends(require("ask.use"))) -> list[dict]:
+    return [thread_row(t) for t in store.list_ask_threads(user["email"])]
+
+
+@app.post("/api/v1/ask/threads", status_code=201)
+def start_ask_thread(body: AskQuestion, user: dict = Depends(require("ask.use"))) -> dict:
+    try:
+        question = check_question(body.question)
+    except AskError as exc:
+        raise HTTPException(422, str(exc))
+    if not _ask_config():
+        raise HTTPException(409, "no orchestrator is chosen yet: an Admin chooses it on Ask the fleet")
+    now = time.time()
+    thread = store.save_ask_thread({"id": "ask_" + uuid.uuid4().hex[:10], "owner": user["email"], "created_at": now,
+                                    "updated_at": now, "turns": []})
+    return _ask_turn(thread, question, user)
+
+
+@app.get("/api/v1/ask/threads/{thread_id}")
+def get_ask_thread(thread_id: str, user: dict = Depends(require("ask.use"))) -> dict:
+    return _ask_thread(thread_id, user)
+
+
+@app.post("/api/v1/ask/threads/{thread_id}/turns", status_code=201)
+def ask_follow_up(thread_id: str, body: AskQuestion, user: dict = Depends(require("ask.use"))) -> dict:
+    thread = _ask_thread(thread_id, user)
+    if any(t["status"] == "running" for t in thread["turns"]):
+        raise HTTPException(409, "the last question is still being answered")
+    try:
+        question = check_question(body.question)
+    except AskError as exc:
+        raise HTTPException(422, str(exc))
+    return _ask_turn(thread, question, user)
+
+
+@app.post("/api/v1/ask/threads/{thread_id}/turns/{turn_no}/stop")
+def stop_ask_turn(thread_id: str, turn_no: int, user: dict = Depends(require("ask.use"))) -> dict:
+    """Stop waiting for an answer (the instance may be gone); a late answer is then ignored."""
+    thread = _ask_thread(thread_id, user)
+    turn = next((t for t in thread["turns"] if t["n"] == turn_no), None)
+    if not turn:
+        raise HTTPException(404, "no such question in this conversation")
+    if turn["status"] != "running":
+        raise HTTPException(409, f"this question is already {turn['status']}")
+    job = store.get_job(turn["job_id"]) if turn.get("job_id") else None
+    if job and job["status"] in ("queued", "running"):
+        store.complete_job(job["id"], {"ok": False, "error": f"stopped by {user['email']}"}, instance_id=job["instance_id"])
+
+    def stop(d: dict) -> None:
+        for t in d["turns"]:
+            if t["n"] == turn_no and t["status"] == "running":
+                t.update(status="failed", error=f"stopped by {user['email']}", answered_at=time.time())
+
+    store.record(user["email"], "ask.stopped", thread_id, f"#{turn_no}")
+    return store.update_ask_thread(thread_id, stop)
+
+
+class AskSave(BaseModel):
+    zone: str
+    name: str = Field(..., min_length=1, max_length=200)
+    case: Optional[str] = Field(None, max_length=64)
+
+
+@app.get("/api/v1/ask/threads/{thread_id}/turns/{turn_no}/save-targets")
+def ask_save_targets(thread_id: str, turn_no: int, user: dict = Depends(require("ask.use"))) -> dict:
+    thread = _ask_thread(thread_id, user)
+    turn = next((t for t in thread["turns"] if t["n"] == turn_no), None)
+    if not turn or turn["status"] != "answered":
+        raise HTTPException(404, "no answer to save")
+    cited = [s for s in turn["sources"] if s["id"] in turn["cited"]]
+    return {"zones": save_targets(store.list_zones(), mine=_my_zones(user), cited_zones=[s["zone"] for s in cited]),
+            "classification": classification_of(s.get("classification") for s in cited)}
+
+
+@app.post("/api/v1/ask/threads/{thread_id}/turns/{turn_no}/save", status_code=201)
+def save_ask_answer(thread_id: str, turn_no: int, body: AskSave, user: dict = Depends(require("ask.use"))) -> dict:
+    """Keep an answer as a fleet output, in a zone no wider than the sources it cites, with their classification."""
+    thread = _ask_thread(thread_id, user)
+    turn = next((t for t in thread["turns"] if t["n"] == turn_no), None)
+    if not turn or turn["status"] != "answered":
+        raise HTTPException(404, "no answer to save")
+    cited = [s for s in turn["sources"] if s["id"] in turn["cited"]]
+    allowed = save_targets(store.list_zones(), mine=_my_zones(user), cited_zones=[s["zone"] for s in cited])
+    if body.zone not in allowed:
+        raise HTTPException(422, "that zone would show this answer to people who cannot read all of its sources; "
+                                 f"choose one of: {', '.join(allowed) or 'none'}")
+    orch = turn["orchestrator"]
+    lines = [turn["answer"], "", f"Question: {turn['question']}", "Sources:"]
+    lines += [f"[{s['id']}] {s['label']} ({s['kind']} {s['ref']}, zone {s['zone']})" for s in cited]
+    lines.append(f"Grounding: {turn['grounding']['verdict']} — {turn['grounding']['detail']}")
+    try:
+        out = new_output(output_id="out_" + uuid.uuid4().hex[:10], zone=body.zone, name=body.name, kind="summary",
+                         classification=classification_of(s.get("classification") for s in cited),
+                         produced_by=orch["profile"], at=time.time(), text="\n".join(lines), case=body.case,
+                         instance_id=orch["instance_id"],
+                         source={"kind": "ask", "thread": thread_id, "turn": turn_no, "asked_by": user["email"],
+                                 "run_id": (turn.get("run") or {}).get("run_id"), "cites": [s["key"] for s in cited]})
+    except OutputError as exc:
+        raise HTTPException(422, str(exc))
+    store.save_output(out)
+
+    def mark(d: dict) -> None:
+        for t in d["turns"]:
+            if t["n"] == turn_no:
+                t["saved_output"] = out["id"]
+
+    store.update_ask_thread(thread_id, mark)
+    store.record(user["email"], "output.saved_from_ask", out["id"], f"{thread_id} #{turn_no} → {body.zone}")
+    return output_row(out)
+
+
 # ----------------------------------------------------------------------------- Integrations (Slice 3)
 
 
@@ -672,15 +978,7 @@ def list_integrations(user: dict = Depends(require("instances.read"))) -> dict:
     live = {i["id"]: store.live_state_for(i["id"]) or {} for i in instances}
     probes = store.integrations()
     # who uses a server is what is applied, not the newest draft; a newer draft only shows as "planned"
-    applied, drafts = [], []
-    for versions in store.all_blueprints().values():
-        done = [v for v, rec in versions.items() if rec.get("status") == "applied"]
-        newest_applied = max(done) if done else None
-        if newest_applied is not None:
-            applied.append(versions[newest_applied]["parsed"])
-        newest = max(versions)
-        if newest_applied is None or newest > newest_applied:
-            drafts.append(versions[newest]["parsed"])
+    applied, drafts = _blueprint_versions()
     rows = aggregate(instances=instances, live=live, discovered={k: v["servers"] for k, v in probes.items()},
                      blueprints=applied, drafts=drafts, live_at=store.live_state_at(),
                      discovered_at={k: v["profile_at"] for k, v in probes.items()})
@@ -1956,6 +2254,8 @@ def job_result(job_id: str, result: dict[str, Any], inst: str = Depends(agent_in
     store.record("agent:" + inst, f"job.{job['status']}", job_id, job["kind"])
     if job["kind"] == "hermes_run" and job["meta"].get("architect_session"):
         _architect_result(job)
+    if job["kind"] == "hermes_run" and job["meta"].get("ask_thread"):
+        _ask_result(job)
     if job["kind"] == "run_test" and job["meta"].get("test_run"):
         _test_result(job)
     if job["kind"] in ("mcp_discover", "mcp_write") and job["meta"].get("discovery"):

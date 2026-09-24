@@ -377,11 +377,21 @@ class Jobs:
         return out
 
     def hermes_run(self, p: dict) -> dict:
-        """params: {profile, input, instructions?, timeout?}: one Hermes /v1 run, waited for (Fleet Architect)."""
+        """params: {profile, input, instructions?, timeout?, transcript?}: one Hermes /v1 run, waited for (Fleet
+        Architect, Ask the fleet). With ``transcript``, the run's tool calls come back too, from its session
+        transcript, so Fleet Control can tell whether the agent used anything besides what it was given."""
         profile = p.get("profile")
         notes = self._ensure_key(profile)
         out = self.hermes.run_agent(profile, p["input"], p.get("instructions"), float(p.get("timeout", 600)))
         out["ok"] = out.get("status") == "completed"
+        if p.get("transcript") and out["ok"]:
+            if out.get("session_id"):
+                try:
+                    out["tool_calls"] = tool_calls_from_messages(self.hermes.session_messages(profile, out["session_id"]))
+                except HermesLocalError as exc:
+                    out["evidence_error"] = str(exc)
+            else:
+                out["evidence_error"] = "the run reported no session id"
         if notes:
             out["notes"] = notes
         return out

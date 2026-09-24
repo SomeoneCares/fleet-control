@@ -212,6 +212,14 @@ TEST_RUNS = Table(  # Test Lab: one row per test run, with its checks and claims
     Column("created_at", Float, nullable=False, index=True),
     Column("doc", Doc, nullable=False),
 )
+ASK_THREADS = Table(  # Ask the fleet: one person's conversation with the orchestrator (ask.py)
+    "ask_threads", META,
+    Column("id", String(32), primary_key=True),
+    Column("owner", String(320), nullable=False, index=True),
+    Column("created_at", Float, nullable=False),
+    Column("updated_at", Float, nullable=False, index=True),
+    Column("doc", Doc, nullable=False),
+)
 ARCHITECT_SESSIONS = Table(  # Fleet Architect: mission, constraints, proposal versions, decisions (architect.py)
     "architect_sessions", META,
     Column("id", String(32), primary_key=True),
@@ -1004,4 +1012,34 @@ class Store:
             doc["updated_at"] = time.time()
             c.execute(update(ARCHITECT_SESSIONS).where(ARCHITECT_SESSIONS.c.id == session_id)
                       .values(updated_at=doc["updated_at"], doc=doc))
+            return doc
+
+    # ---- Ask the fleet ---------------------------------------------------------------
+    def save_ask_thread(self, doc: dict) -> dict:
+        with self._tx() as c:
+            _upsert(c, ASK_THREADS, {"id": doc["id"]},
+                    {"owner": doc["owner"], "created_at": doc["created_at"], "updated_at": doc["updated_at"], "doc": doc})
+        return doc
+
+    def get_ask_thread(self, thread_id: str) -> Optional[dict]:
+        with self._tx() as c:
+            row = _one(c, select(ASK_THREADS.c.doc).where(ASK_THREADS.c.id == thread_id))
+        return row["doc"] if row else None
+
+    def list_ask_threads(self, owner: str, limit: int = 50) -> list[dict]:
+        """One person's conversations, most recently active first."""
+        q = select(ASK_THREADS.c.doc).where(ASK_THREADS.c.owner == owner).order_by(ASK_THREADS.c.updated_at.desc()).limit(limit)
+        with self._tx() as c:
+            return [r["doc"] for r in _all(c, q)]
+
+    def update_ask_thread(self, thread_id: str, change: Callable[[dict], None]) -> Optional[dict]:
+        """Load, change and save one conversation in a transaction (a run result and a new question can race)."""
+        with self._tx() as c:
+            row = _one(c, select(ASK_THREADS.c.doc).where(ASK_THREADS.c.id == thread_id))
+            if not row:
+                return None
+            doc = row["doc"]
+            change(doc)
+            doc["updated_at"] = time.time()
+            c.execute(update(ASK_THREADS).where(ASK_THREADS.c.id == thread_id).values(updated_at=doc["updated_at"], doc=doc))
             return doc

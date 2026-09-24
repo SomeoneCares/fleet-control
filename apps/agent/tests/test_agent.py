@@ -206,6 +206,22 @@ class HermesRunTest(unittest.TestCase):
         self.assertEqual(h.calls, [("ensure_key", "fc-architect")])
         self.assertIn("API_SERVER_KEY", out["notes"][0])
 
+    def test_hermes_run_job_returns_the_tool_calls_when_asked(self):
+        h = FakeHermes()
+        h.profile_api_key = lambda p: "k"
+        h.run_agent = lambda *a: {"run_id": "r", "status": "completed", "output": "{}", "error": None, "usage": None, "session_id": "s1"}
+        h.session_messages = lambda profile, sid: [
+            {"role": "assistant", "tool_calls": [{"id": "c1", "type": "function", "function": {"name": "web_search", "arguments": "{}"}}]},
+            {"role": "tool", "tool_call_id": "c1", "tool_name": "web_search", "content": "…"}]
+        jobs = Jobs(AgentConfig(state_dir=tempfile.mkdtemp()), h)
+        out = jobs.dispatch({"kind": "hermes_run", "params": {"profile": "p", "input": "i", "transcript": True}})
+        self.assertEqual([c["name"] for c in out["tool_calls"]], ["web_search"])
+        self.assertNotIn("tool_calls", jobs.dispatch({"kind": "hermes_run", "params": {"profile": "p", "input": "i"}}))
+        h.session_messages = lambda profile, sid: (_ for _ in ()).throw(HermesLocalError("404"))
+        out = jobs.dispatch({"kind": "hermes_run", "params": {"profile": "p", "input": "i", "transcript": True}})
+        self.assertNotIn("tool_calls", out)  # unknown is not "none"
+        self.assertIn("404", out["evidence_error"])
+
 
 class EvidenceTest(unittest.TestCase):
     TRANSCRIPT = [

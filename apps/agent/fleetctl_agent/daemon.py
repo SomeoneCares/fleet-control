@@ -255,7 +255,8 @@ class Jobs:
     def apply(self, p: dict) -> dict:
         """params: {"changes": [ {op, profile, ...} ], "snapshot": true}.
         Ops: ensure_profile, write_soul, set_skill, set_toolset, sync_skills, sync_toolsets (enable exactly
-        the listed ones; used for new profiles). Order is preserved; first failure stops."""
+        the listed ones; used for new profiles), copy_mcp (register a server with the configuration another
+        profile of this host has for it; never its secrets) and remove_mcp. Order is preserved; first failure stops."""
         results = []
         snap = None
         if p.get("snapshot", True):
@@ -275,6 +276,13 @@ class Jobs:
                     self.hermes.sync_skills(ch["profile"], ch.get("skills") or [])
                 elif op == "sync_toolsets":
                     self.hermes.sync_toolsets(ch["profile"], ch.get("toolsets") or [])
+                elif op == "copy_mcp":
+                    done = self.hermes.mcp_copy(ch["profile"], ch["server"], ch.get("from_profile"))
+                    results.append({"op": op, "profile": ch["profile"], "server": ch["server"], "ok": True, **done})
+                    continue
+                elif op == "remove_mcp":
+                    if any(s.get("name") == ch["server"] for s in self.hermes.mcp_list(ch["profile"])):
+                        self.hermes.mcp_remove(ch["profile"], ch["server"])
                 else:
                     raise ValueError(f"unknown op {op!r}")
                 results.append({"op": op, "profile": ch.get("profile"), "ok": True})

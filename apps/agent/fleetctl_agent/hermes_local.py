@@ -158,6 +158,35 @@ class HermesLocal:
     def mcp_set_enabled(self, profile: str, server: str, enabled: bool) -> dict:
         return self.dashboard("mcp.enabled", {"enabled": enabled, "profile": profile}, name=profile, server=server) or {}
 
+    def mcp_copy(self, profile: str, server: str, from_profile: Optional[str]) -> dict:
+        """Register ``server`` on ``profile`` with the configuration it has on another profile of this host (the
+        blueprint names servers; their configuration lives on the instance). Nothing secret is copied: the
+        dashboard redacts env values and never returns header tokens, so a server that needs either is refused
+        with the reason, and OAuth tokens stay per profile (the profile logs in itself). Already there = no-op."""
+        if any(s.get("name") == server for s in self.mcp_list(profile)):
+            return {"already": True}
+        sources = [from_profile] if from_profile else []
+        sources += [p["name"] for p in self.profiles() if p.get("name") and p["name"] not in sources and p["name"] != profile]
+        src = next(((p, s) for p in sources for s in self.mcp_list(p) if s.get("name") == server), None)
+        if src is None:
+            raise HermesLocalError(f"{server} is not configured on any profile of this host: add it on Integrations first")
+        src_profile, cfg = src
+        auth = cfg.get("auth") or "none"
+        if cfg.get("url"):
+            if auth not in ("none", "oauth"):
+                raise HermesLocalError(f"{server} on {src_profile} signs in with a {auth} token, and tokens are not copied "
+                                       f"between profiles: add it to {profile} on the host")
+            config = {"name": server, "url": cfg["url"], "auth": auth}
+        elif cfg.get("command"):
+            if cfg.get("env"):
+                raise HermesLocalError(f"{server} on {src_profile} needs environment keys ({', '.join(sorted(cfg['env']))}), "
+                                       f"and secrets are not copied between profiles: add it to {profile} on the host")
+            config = {"name": server, "command": cfg["command"], "args": list(cfg.get("args") or [])}
+        else:
+            raise HermesLocalError(f"{server} on {src_profile} has neither a url nor a command")
+        self.mcp_add(profile, config)
+        return {"from": src_profile, "login_needed": auth == "oauth"}
+
     # ------------------------------------------------------------------ per-profile API keys
 
     def _profile_env(self, profile: str) -> str:

@@ -45,7 +45,7 @@ from .importer import LiveImportError, blueprint_from_live
 from .integrations import aggregate, mcp_config
 from .outputs import KINDS, OutputError, new_output, output_row, provenance
 from .rooms import RoomError, decide, new_evidence, new_finding, new_room, room_row, room_view
-from .planner import compute_plan, to_agent_job
+from .planner import compute_plan, mcp_sources, to_agent_job
 from .settings import DEFAULTS as SETTING_DEFAULTS
 from .settings import SettingsUpdate, approval_floor, effective as effective_settings
 from .store import Store
@@ -1725,8 +1725,13 @@ def create_plan(body: PlanCreate, user: dict = Depends(require("plans.create")))
 
 
 def _save_plan(bp: Blueprint, live: dict, inst: dict, who: str, why: str = "") -> dict:
+    # where each MCP server is configured on the instance: every profile of the last import (a revert plan's
+    # ``live`` holds only the blueprint's), and how it signs in from the last discovery
+    probe = store.integrations().get(inst["id"]) or {}
+    auth = {s["name"]: s.get("auth") for servers in (probe.get("servers") or {}).values() for s in servers if s.get("name")}
+    sources = mcp_sources({**(store.live_state_for(inst["id"]) or {}), **live}, auth)
     plan = compute_plan(bp, live, target_instance=inst["id"], agent_installed=(inst["mode"] == "agent" and inst.get("agent_version") is not None), environment=inst["environment"],
-                        default_approvals=approval_floor(_settings()))
+                        default_approvals=approval_floor(_settings()), sources=sources)
     plan["id"] = "plan_" + uuid.uuid4().hex[:10]
     plan["status"] = "planned"
     plan["approvals"] = []

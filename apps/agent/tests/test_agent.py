@@ -353,6 +353,55 @@ class EndpointDiagnosisTest(unittest.TestCase):
         self.assertEqual(rows["sas-viya"]["error"], "cannot connect")
         self.assertIn("no answer", rows["local"]["error"])
 
+
+class McpCopyTest(unittest.TestCase):
+    """copy_mcp registers a server with another profile's configuration, and never copies a secret."""
+
+    def _hermes(self, servers):
+        h = HermesLocal(HermesLocalConfig())
+        added = []
+        h.profiles = lambda: [{"name": p} for p in ("default", "analyst", "writer")]
+        h.mcp_list = lambda profile: servers.get(profile, [])
+        h.mcp_add = lambda profile, config: added.append((profile, config)) or {}
+        return h, added
+
+    def test_a_url_server_is_copied_with_its_auth_and_the_login_is_left_to_the_profile(self):
+        h, added = self._hermes({"analyst": [{"name": "sas-viya", "url": "https://viya/mcp", "auth": "oauth", "env": {}}]})
+        self.assertEqual(h.mcp_copy("writer", "sas-viya", None), {"from": "analyst", "login_needed": True})
+        self.assertEqual(added, [("writer", {"name": "sas-viya", "url": "https://viya/mcp", "auth": "oauth"})])
+
+    def test_already_registered_is_a_no_op(self):
+        h, added = self._hermes({"writer": [{"name": "sas-viya", "url": "u"}]})
+        self.assertEqual(h.mcp_copy("writer", "sas-viya", "analyst"), {"already": True})
+        self.assertEqual(added, [])
+
+    def test_secrets_are_never_copied(self):
+        h, added = self._hermes({"analyst": [{"name": "crm", "url": "https://crm/mcp", "auth": "header"}],
+                                 "default": [{"name": "fs", "command": "npx", "args": ["fs"], "env": {"API_KEY": "***"}},
+                                             {"name": "calc", "command": "calc-mcp", "args": ["--safe"], "env": {}}]})
+        with self.assertRaisesRegex(HermesLocalError, "header token"):
+            h.mcp_copy("writer", "crm", None)
+        with self.assertRaisesRegex(HermesLocalError, "API_KEY"):
+            h.mcp_copy("writer", "fs", None)
+        with self.assertRaisesRegex(HermesLocalError, "not configured on any profile"):
+            h.mcp_copy("writer", "nowhere", None)
+        self.assertEqual(h.mcp_copy("writer", "calc", None), {"from": "default", "login_needed": False})
+        self.assertEqual(added, [("writer", {"name": "calc", "command": "calc-mcp", "args": ["--safe"]})])
+
+    def test_apply_runs_the_mcp_ops(self):
+        h = FakeHermes()
+        h.mcp_copy = lambda profile, server, src: {"from": src, "login_needed": False}
+        h.mcp_list = lambda profile: [{"name": "old"}]
+        removed = []
+        h.mcp_remove = lambda profile, server: removed.append((profile, server))
+        out = Jobs(AgentConfig(state_dir=tempfile.mkdtemp()), h).apply({"snapshot": False, "changes": [
+            {"op": "copy_mcp", "profile": "writer", "server": "sas-viya", "from_profile": "analyst"},
+            {"op": "remove_mcp", "profile": "writer", "server": "old"},
+            {"op": "remove_mcp", "profile": "writer", "server": "never-there"}]})
+        self.assertTrue(all(r["ok"] for r in out["results"]), out)
+        self.assertEqual(out["results"][0]["from"], "analyst")
+        self.assertEqual(removed, [("writer", "old")])
+
 class ConfigTest(unittest.TestCase):
     def test_environment_overrides(self):
         env = {"HERMES_BIN": "/opt/hermes/bin/hermes", "HERMES_DASHBOARD_URL": "http://127.0.0.1:9129",

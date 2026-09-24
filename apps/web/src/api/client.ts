@@ -666,6 +666,10 @@ export interface Plan {
   policy_push: Record<string, { deny_tools: string[]; approve_tools: string[] }>;
   can_apply: boolean;
   blocked_reason: string | null;
+  // MCP servers: logins a person runs on the host after the apply (OAuth tokens are per profile), and what the
+  // plan could not do (a server no profile of the instance has). Absent on plans made before they existed.
+  manual_steps?: { profile: string; server: string; step: string }[];
+  warnings?: string[];
   status: "planned" | "applying" | "applied" | "failed";
   apply_result?: ApplyResult;
   created_by?: string;

@@ -1,6 +1,6 @@
 import os, unittest
 from fleetcontrol_blueprint import load_blueprint
-from fleetcontrol_api.planner import compute_plan, to_agent_job
+from fleetcontrol_api.planner import compute_plan, mcp_sources, to_agent_job
 
 EXAMPLE = os.path.join(os.path.dirname(__file__), "..", "..", "..", "packages", "blueprint_schema", "examples", "aml-investigation.yaml")
 
@@ -47,6 +47,39 @@ class PlannerTest(unittest.TestCase):
         self.assertIn(("set_skill", "quick-lookup"), ops)
         self.assertIn(("write_soul", None), ops)
         self.assertEqual(plan["unmanaged_profiles"], ["unmanaged-bot"])
+
+    def test_mcp_servers_are_reconciled_by_copying_from_another_profile(self):
+        live = {k: dict(v) for k, v in self.desired.items()}
+        live["sanctions-screener"]["mcps"] = ["scratch-pad"]  # opensanctions was deregistered, scratch-pad added by hand
+        live["ownership-tracer"]["mcps"] = ["corporate-registry", "opensanctions"]  # has opensanctions: a source
+        sources = mcp_sources(live, {"opensanctions": "oauth"})
+        plan = compute_plan(self.bp, live, target_instance="lab-01", agent_installed=True, environment="lab", sources=sources)
+        row = next(r for r in plan["changes"] if r["object"] == "profile sanctions-screener")
+        self.assertIn("MCP servers: +opensanctions, −scratch-pad", row["description"])
+        self.assertIn({"op": "copy_mcp", "profile": "sanctions-screener", "server": "opensanctions", "from_profile": "ownership-tracer"}, row["ops"])
+        self.assertIn({"op": "remove_mcp", "profile": "sanctions-screener", "server": "scratch-pad"}, row["ops"])
+        # an extra server the blueprint does not declare is removed from ownership-tracer too
+        tracer = next(r for r in plan["changes"] if r["object"] == "profile ownership-tracer")
+        self.assertEqual([o["op"] for o in tracer["ops"]], ["remove_mcp"])
+        # OAuth tokens are per profile: the new registration needs its own login, on the host
+        self.assertEqual(plan["manual_steps"], [{"profile": "sanctions-screener", "server": "opensanctions",
+                         "step": "hermes -p sanctions-screener mcp login opensanctions --flow browser, then hermes gateway restart"}])
+        self.assertTrue(plan["can_apply"])
+        self.assertEqual(plan["warnings"], [])
+
+    def test_a_server_no_profile_has_is_reported_not_invented(self):
+        plan = compute_plan(self.bp, {}, target_instance="fresh-01", agent_installed=True, environment="lab")
+        self.assertTrue(plan["can_apply"])  # the profiles can still be created
+        self.assertFalse([o for r in plan["changes"] for o in r["ops"] if o["op"] == "copy_mcp"])
+        self.assertEqual(len(plan["warnings"]), 1)
+        for server in ("case-store", "opensanctions", "corporate-registry", "document-store"):
+            self.assertIn(server, plan["warnings"][0])
+        # with the server configured on some other profile of the instance, the create registers it
+        plan = compute_plan(self.bp, {}, target_instance="lab-01", agent_installed=True, environment="lab",
+                            sources={"opensanctions": {"profile": "default", "auth": None}})
+        ops = next(r for r in plan["changes"] if r["object"] == "profile sanctions-screener")["ops"]
+        self.assertEqual(ops[-1], {"op": "copy_mcp", "profile": "sanctions-screener", "server": "opensanctions", "from_profile": "default"})
+        self.assertEqual(plan["manual_steps"], [])
 
     def test_the_organisation_floor_and_the_blueprint_target(self):
         live = {k: dict(v) for k, v in self.desired.items()}

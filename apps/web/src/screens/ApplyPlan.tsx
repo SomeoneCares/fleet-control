@@ -150,6 +150,11 @@ function Preflight({ plan }: { plan: Plan }) {
       <Check icon="shield" tone="neutral" title="Policies"
         detail={`${deny} blocked and ${approve} approval-gated tool rules pushed to ${policyProfiles.length} profiles first`} />
       <TestsCheck plan={plan} />
+      {(plan.warnings ?? []).map((w) => <Check key={w} icon="warning" tone="warning" title="MCP servers" detail={w} />)}
+      {(plan.manual_steps ?? []).length > 0 && (
+        <Check icon="clock" tone="warning" title="After the apply, on the host"
+          detail={`Each profile signs in to an OAuth server itself: ${(plan.manual_steps ?? []).map((m) => m.step).join("; ")}`} />
+      )}
     </Card>
   );
 }

@@ -140,6 +140,53 @@ class PluginSocketServer(threading.Thread):
                         logger.warning("bad plugin event line dropped")
 
 
+# ----------------------------------------------------------------------------- endpoint diagnosis
+
+
+def diagnose_endpoint(url: str, timeout: float = 5.0) -> str:
+    """Why an MCP server's url does not answer, one layer at a time: name, TCP, TLS, HTTP. Sends no credentials.
+    An HTTP answer of any status means the server is up, so the fault is past the connection."""
+    import ssl
+    import urllib.parse
+
+    parts = urllib.parse.urlsplit(url)
+    host = parts.hostname or ""
+    port = parts.port or (443 if parts.scheme == "https" else 80)
+    try:
+        socket.getaddrinfo(host, port)
+    except OSError as exc:
+        return f"cannot resolve {host}: {exc.strerror or exc}"
+    try:
+        socket.create_connection((host, port), timeout=timeout).close()
+    except OSError as exc:
+        reason = "timed out" if isinstance(exc, (socket.timeout, TimeoutError)) else (exc.strerror or str(exc) or type(exc).__name__)
+        return f"cannot connect to {host}:{port} ({reason}): the server or its ingress is down, not the credentials"
+    cafile = os.environ.get("SSL_CERT_FILE")
+    context = ssl.create_default_context(cafile=cafile if cafile and os.path.exists(cafile) else None)
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, method="GET"), timeout=timeout, context=context) as r:
+            status, reason = r.status, r.reason
+    except urllib.error.HTTPError as exc:
+        status, reason = exc.code, exc.reason
+    except urllib.error.URLError as exc:
+        inner = exc.reason
+        if isinstance(inner, ssl.SSLError):
+            return (f"TLS with {host}:{port} failed ({getattr(inner, 'verify_message', None) or inner}); Hermes checks "
+                    "certificates against the bundle in SSL_CERT_FILE, not the system store")
+        return f"{host}:{port} accepts connections but the request failed: {inner}"
+    except (TimeoutError, socket.timeout):
+        return f"{host}:{port} accepts connections but sent no answer within {timeout:g} s"
+    except OSError as exc:
+        return f"{host}:{port} accepts connections but the request failed: {exc}"
+    if status >= 500:
+        return f"the endpoint answers HTTP {status} {reason}: the server behind it is failing, not the credentials"
+    if status in (401, 403):
+        # this check sends no credentials, so a protected server answers 401 even when the profile's login is fine
+        return (f"the endpoint answers HTTP {status} {reason} to a request without credentials: it is up, so look at "
+                "the profile's login (missing or expired) or the MCP handshake")
+    return f"the endpoint answers HTTP {status} {reason}: it is up, so the failure is in the MCP handshake or the credentials"
+
+
 # ----------------------------------------------------------------------------- jobs
 
 
@@ -265,6 +312,11 @@ class Jobs:
                     probe = self.hermes.mcp_probe(profile, s["name"])
                     row["ok"] = bool(probe.get("ok"))
                     row["error"] = probe.get("error")
+                    if not row["ok"] and not (row["error"] or "").strip():
+                        # Hermes gives no text when the upstream never answers; say which layer failed
+                        # rather than leave a blank that reads like a credential problem
+                        row["error"] = diagnose_endpoint(s.get("url")) if s.get("url") else \
+                            "Hermes reported no error text: the server process gave no answer"
                     row["tools"] = [{"name": t.get("name"), "description": (t.get("description") or "")[:200]}
                                     for t in (probe.get("tools") or [])][:100]
                 servers.append(row)

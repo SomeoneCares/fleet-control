@@ -8,7 +8,7 @@ from fleetctl_agent.hermes_local import (
 )
 import urllib.error
 
-from fleetctl_agent.daemon import AgentDaemon, Jobs, AgentConfig, PluginSocketServer
+from fleetctl_agent.daemon import AgentDaemon, Jobs, AgentConfig, PluginSocketServer, diagnose_endpoint
 
 CAPTURE = os.path.join(os.path.dirname(__file__), "..", "..", "..", "docs", "dashboard-capture-0.21.2-write.json")
 
@@ -310,6 +310,48 @@ class ProfileKeyTest(unittest.TestCase):
         with self.assertRaises(HermesLocalError):
             self.h.ensure_profile_api_key("no-such-profile")
 
+
+
+class EndpointDiagnosisTest(unittest.TestCase):
+    """Hermes reports a dead upstream with an empty error; the agent says which layer failed instead."""
+
+    def _serve(self, status):
+        import http.server
+        class H(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(status); self.send_header("Content-Length", "0"); self.end_headers()
+            def log_message(self, *a): pass
+        srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.shutdown)
+        return f"http://127.0.0.1:{srv.server_address[1]}/mcp"
+
+    def test_a_closed_port_is_the_server_being_down(self):
+        s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+        msg = diagnose_endpoint(f"http://127.0.0.1:{port}/mcp", timeout=2)
+        self.assertIn(f"cannot connect to 127.0.0.1:{port}", msg)
+        self.assertIn("not the credentials", msg)
+
+    def test_a_502_is_the_server_behind_the_ingress(self):
+        self.assertIn("HTTP 502", diagnose_endpoint(self._serve(502)))
+        self.assertIn("not the credentials", diagnose_endpoint(self._serve(502)))
+
+    def test_a_401_to_a_credential_less_check_is_not_an_outage(self):
+        msg = diagnose_endpoint(self._serve(401))
+        self.assertIn("HTTP 401", msg)
+        self.assertIn("login", msg)
+
+    def test_discovery_fills_a_blank_error(self):
+        h = FakeHermes()
+        h.mcp_list = lambda profile: [{"name": "sas-viya", "enabled": True, "url": "http://viya.example/mcp"},
+                                      {"name": "local", "enabled": True, "command": "npx"}]
+        h.mcp_probe = lambda profile, server: {"ok": False, "error": ""}
+        with mock.patch("fleetctl_agent.daemon.diagnose_endpoint", return_value="cannot connect") as diag:
+            out = Jobs(AgentConfig(state_dir=tempfile.mkdtemp()), h).mcp_discover({"profiles": ["analyst"]})
+        diag.assert_called_once_with("http://viya.example/mcp")
+        rows = {r["name"]: r for r in out["servers"]["analyst"]}
+        self.assertEqual(rows["sas-viya"]["error"], "cannot connect")
+        self.assertIn("no answer", rows["local"]["error"])
 
 class ConfigTest(unittest.TestCase):
     def test_environment_overrides(self):

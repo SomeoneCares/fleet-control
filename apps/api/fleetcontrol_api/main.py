@@ -1356,6 +1356,49 @@ def get_instance(instance_id: str, user: dict = Depends(require("instances.read"
     return out
 
 
+class InstanceUpdate(BaseModel):
+    """What an instance's record may be changed to. The id is not editable: the agent on the host
+    was installed with it, and changing it here would orphan that agent."""
+    environment: Optional[str] = Field(None, pattern=r"^(lab|staging|production)$")
+    owner: Optional[str] = Field(None, min_length=3, max_length=200)
+
+
+@app.patch("/api/v1/instances/{instance_id}")
+def edit_instance(instance_id: str, body: InstanceUpdate, user: dict = Depends(require("instances.connect"))) -> dict:
+    """Change an instance's environment or owner. Moving an instance between environments changes the
+    approvals its applies need (Settings → Approvals), so the change is audited with both values."""
+    inst = store.get_instance(instance_id)
+    if not inst:
+        raise HTTPException(404, "no such instance")
+    changes = {k: v for k, v in body.model_dump(exclude_none=True).items() if inst.get(k) != v}
+    if not changes:
+        return _instance_row(inst)
+    updated = store.update_instance(instance_id, **changes)
+    for field, value in changes.items():
+        store.record(user["email"], "instance.updated", instance_id, f"{field}: {inst.get(field)} → {value}")
+    return _instance_row(updated)
+
+
+@app.delete("/api/v1/instances/{instance_id}")
+def remove_instance(instance_id: str, user: dict = Depends(require("instances.connect"))) -> dict:
+    """Forget an instance: Fleet Control stops tracking it and its agent can no longer report.
+
+    Nothing on the host changes — the Hermes profiles and the agent keep running there, so this is
+    reversible by connecting it again (which issues a new pairing token). History is kept: the audit
+    log, plans, test runs and anything the fleet produced stay exactly where they are.
+    """
+    inst = store.get_instance(instance_id)
+    if not inst:
+        raise HTTPException(404, "no such instance")
+    applied = store.applied_for(instance_id)
+    removed = store.delete_instance(instance_id)
+    detail = f"{inst.get('environment')}, {inst.get('mode')}"
+    if applied:
+        detail += f"; had {applied['name']} v{applied['version']} applied"
+    store.record(user["email"], "instance.removed", instance_id, detail)
+    return {"ok": True, "id": instance_id, "removed": removed, "had_applied": applied}
+
+
 @app.post("/api/v1/instances/{instance_id}/import")
 def import_profiles(instance_id: str, user: dict = Depends(require("instances.operate"))) -> dict:
     _require_instance(instance_id)

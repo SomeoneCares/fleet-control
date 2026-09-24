@@ -212,6 +212,33 @@ function InstanceRail({ inst, now, onChanged }: { inst: Instance; now: number; o
         </Button>}
         {can("plans.create") && <Button icon="layers" onClick={() => navigate(`/blueprints`)}>Plan a blueprint for this instance</Button>}
       </div>
+
+      {can("instances.connect") && (
+        <div className="mt-5 pt-4 border-t border-hairline flex flex-col gap-2">
+          <Label className="mb-0">Manage this instance</Label>
+          <div className="flex items-center gap-2">
+            <select aria-label="Environment" className={`${INPUT} h-8 flex-1`} value={inst.environment} disabled={busy !== null}
+              onChange={(e) => void run("env", () => api.editInstance(inst.id, { environment: e.target.value as Environment }),
+                `Moved to ${ENV_LABEL[e.target.value as Environment]}. Applies here now follow that environment's approvals.`)}>
+              {(["lab", "staging", "production"] as Environment[]).map((e) => <option key={e} value={e}>{ENV_LABEL[e]}</option>)}
+            </select>
+            {busy === "env" && <Spinner />}
+          </div>
+          <p className="m-0 text-small text-text-secondary">
+            Moving an instance changes how many approvals its applies need (Settings → Approvals).
+          </p>
+          <Button variant="danger" icon="close" disabled={busy !== null} onClick={() => {
+            const warning = inst.applied
+              ? `Forget ${inst.id}?\n\nIt has ${inst.applied.name} v${inst.applied.version} applied. Fleet Control stops tracking it and its agent can no longer report.\n\nNothing on the host changes: the Hermes profiles and the agent keep running there. History (audit, plans, test runs) is kept.`
+              : `Forget ${inst.id}?\n\nFleet Control stops tracking it and its agent can no longer report.\n\nNothing on the host changes. History is kept.`;
+            if (!window.confirm(warning)) return;
+            void run("remove", () => api.removeInstance(inst.id), `${inst.id} is no longer tracked. Connect it again to resume.`);
+          }}>
+            {busy === "remove" && <Spinner />}Forget this instance
+          </Button>
+        </div>
+      )}
+
       {msg && <Banner tone={msg.tone} className="mt-3">{msg.text}</Banner>}
       {importing && <ImportBlueprintModal instanceId={inst.id} onClose={() => { setImporting(false); onChanged(); }} />}
     </Card>

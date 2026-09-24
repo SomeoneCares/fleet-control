@@ -380,6 +380,43 @@ class Store:
         with self._tx() as c:
             return self._instance(c, instance_id)
 
+    def update_instance(self, instance_id: str, /, **fields) -> Optional[dict]:
+        """Change an instance's editable fields. None values are ignored, so a caller can pass a
+        sparse patch. The id is never editable: the agent on the host was installed with it."""
+        fields = {k: v for k, v in fields.items() if v is not None and k != "id"}
+        with self._tx() as c:
+            inst = self._instance(c, instance_id)
+            if not inst:
+                return None
+            inst.update(fields)
+            c.execute(update(INSTANCES).where(INSTANCES.c.id == instance_id).values(doc=inst))
+            return inst
+
+    def delete_instance(self, instance_id: str) -> Optional[dict[str, int]]:
+        """Forget an instance. Returns what was removed, or None when there is no such instance.
+
+        Operational state goes: its tokens (so a paired agent can no longer report), the live
+        profile state, queued jobs, drift and its exceptions, the applied record, and the last MCP
+        discovery. History stays — audit, plans, test runs, events, outputs and decision rooms are
+        the record of what happened, and they have to outlive the instance they happened on.
+
+        Nothing on the host is touched: the Hermes profiles and the agent keep running there.
+        """
+        removed: dict[str, int] = {}
+        with self._tx() as c:
+            if not self._instance(c, instance_id):
+                return None
+            for name, table, column in (("tokens", TOKENS, TOKENS.c.instance_id),
+                                        ("live_state", LIVE_STATE, LIVE_STATE.c.instance_id),
+                                        ("jobs", JOBS, JOBS.c.instance_id),
+                                        ("drift", DRIFT, DRIFT.c.instance_id),
+                                        ("drift_exceptions", DRIFT_EXCEPTIONS, DRIFT_EXCEPTIONS.c.instance_id),
+                                        ("applied", APPLIED, APPLIED.c.instance_id),
+                                        ("integrations", INTEGRATIONS, INTEGRATIONS.c.instance_id)):
+                removed[name] = c.execute(delete(table).where(column == instance_id)).rowcount
+            c.execute(delete(INSTANCES).where(INSTANCES.c.id == instance_id))
+        return removed
+
     def list_instances(self) -> list[dict]:
         with self._tx() as c:
             return [r["doc"] for r in _all(c, select(INSTANCES.c.doc).order_by(INSTANCES.c.created_at))]

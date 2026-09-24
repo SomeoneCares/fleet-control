@@ -770,6 +770,11 @@ export const api = {
   instance: (id: string) => call<InstanceDetail>("GET", `/api/v1/instances/${enc(id)}`),
   createInstance: (body: { id: string; environment: Environment; mode: InstanceMode }) =>
     call<CreatedInstance>("POST", "/api/v1/instances", body),
+  editInstance: (id: string, body: { environment?: Environment; owner?: string }) =>
+    call<Instance>("PATCH", `/api/v1/instances/${enc(id)}`, body),
+  removeInstance: (id: string) =>
+    call<{ ok: boolean; id: string; removed: Record<string, number>; had_applied: { name: string; version: number } | null }>(
+      "DELETE", `/api/v1/instances/${enc(id)}`),
   importProfiles: (id: string) => call<{ job_id: string }>("POST", `/api/v1/instances/${enc(id)}/import`),
   blueprintFromLive: (id: string, body: { name: string; profiles?: string[] }) =>
     call<LiveImportResult>("POST", `/api/v1/instances/${enc(id)}/blueprint-from-live`, body),

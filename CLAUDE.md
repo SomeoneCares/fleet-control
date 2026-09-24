@@ -161,6 +161,12 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   per event per channel. Messages carry the event, case id and a link (`portal_url` in Settings → General); a room's
   question or an output's name only on channels with `show_titles`. Enabling the webhook platform restarts the
   gateway (Hermes does it), so it is an explicit Admin action with a warning.
+- DONE (2026-09-24): the lab host updated itself to Hermes 0.21.4; re-captured → `docs/dashboard-capture-0.21.4*.json`.
+  Against 0.21.2: same routes and status codes, fields only added (`/api/status`: `gateway_heartbeat_stale_s`,
+  `parked_profiles`; cron jobs: `scheduler_heartbeat_age_s`), nothing the agent reads changed. `run_capture.sh`
+  defaults to port 9129, which `fleetctl-dashboard` now holds: run it as `CAPTURE_PORT=9139 bash run_capture.sh`.
+  After a Hermes self-update, restart `fleetctl-dashboard` too: until then it serves the old code and reports every
+  messaging platform as `gateway_stopped` while the gateway is fine.
 - PLAN (Basem, 2026-09-16): complete the whole portal before Docker, every screen working end to end (real backend,
   real Hermes runs on the lab host where needed), in build-document order: Slice 2 Fleet Architect → Slice 3 Test
   Lab, Assurance, Integrations (+ Settings → Observability) → Slice 4 Workspace, Decision Rooms, Ask the fleet,

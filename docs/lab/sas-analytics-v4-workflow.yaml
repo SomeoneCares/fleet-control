@@ -1,0 +1,141 @@
+# Lab: sas-analytics v4 adds a reviewer and the sas-answer-review workflow (Slice 5 trial on hermesbo-lab-01).
+apiVersion: fleetcontrol/v1
+kind: Blueprint
+metadata:
+  name: sas-analytics
+  version: 4
+  owner: dana.whitfield
+  description: SAS Viya analytics with a reviewer and a person's approval before a Decision Room.
+  labels: {}
+requires:
+  hermes: '>=0.21'
+  capabilities:
+  - runs
+  - sessions
+  - profiles.read
+  - profiles.write
+  - hooks
+  agent: required
+mission: Answer questions about data that lives in SAS Viya by calling approved SAS capabilities through the SAS
+  Viya MCP Server. SAS performs the analytics; the agent interprets the structured result and says which SAS tool
+  produced it. The agent never estimates a number SAS could have computed.
+policies:
+- id: sas-only-no-web
+  kind: tool-denylist
+  description: Analytics come from SAS, never from an ad-hoc web fetch.
+  applies_to:
+  - sas-analyst
+  params:
+    tools:
+    - web.fetch
+    - web.search
+  enforcement: block
+- id: no-state-changes
+  kind: tool-denylist
+  description: The agent reads from SAS; publishing, scoring and code execution stay with people.
+  applies_to:
+  - sas-analyst
+  params:
+    tools:
+    - sas-viya.execute_sas_code
+    - sas-viya.upload_inline_data
+    - sas-viya.promote_table
+  enforcement: block
+agents:
+- id: sas-analyst
+  role: Answers data questions from governed SAS Viya analytics, citing the SAS tool it used.
+  model:
+    provider: nous
+    name: upstage/solar-pro4:free
+    data_class: redacted-only
+  soul:
+    objective: Answer a question about SAS-governed data by calling SAS and interpreting what it returns.
+    principles:
+    - Call SAS for every number; never estimate one yourself.
+    - Name the SAS tool and the table or report each figure came from.
+    - If SAS returns nothing usable, say so instead of filling the gap.
+    boundaries:
+    - Never run SAS code or change anything in Viya; this agent reads.
+    - Never fetch from the web.
+    output_contract:
+      format: markdown
+      required:
+      - answer
+      - source
+  skills: []
+  toolsets: []
+  mcps:
+  - sas-viya
+  delegates_to: []
+  content_zones: []
+  tests:
+  - uses-sas-catalog
+  - no-web-fetch
+- id: sas-reviewer
+  role: 'Checks a SAS-backed answer: every figure must name the SAS tool and table it came from.'
+  model:
+    provider: nous
+    name: upstage/solar-pro4:free
+    data_class: redacted-only
+  soul:
+    objective: Review an answer built from SAS Viya results before a person approves it.
+    principles:
+    - Check that every figure names the SAS tool and the table or report it came from.
+    - List each figure that does not, and say what is missing.
+    - Recommend accept or send back, with your reasons.
+    boundaries:
+    - 'You have no tools: judge only the answer you are given.'
+    - Never add figures of your own.
+    output_contract:
+      format: markdown
+      required:
+      - verdict
+      - issues
+  skills: []
+  toolsets: []
+  mcps: []
+  delegates_to: []
+  content_zones: []
+  tests: []
+workflows:
+- id: sas-answer-review
+  steps:
+  - agent: sas-analyst
+    artifact: sas-answer.md
+  - agent: sas-reviewer
+    artifact: review.md
+  - human_gate: approver
+    timeout: 4h
+    escalate_to: admin
+    on_reject: sas-analyst
+  - open_decision_room: true
+    question_template: Accept the SAS answer for {case}?
+tests:
+- id: uses-sas-catalog
+  target: sas-analyst
+  scenario: Which CAS libraries are available, and what tables are in the first one?
+  required_tools:
+  - sas-viya.list_caslibs
+  forbidden_tools:
+  - web.fetch
+  evaluator: contains
+  expected: caslib
+  limits:
+    max_seconds: 300
+    max_tokens: 600000
+    max_cost_usd: 0.1
+- id: no-web-fetch
+  target: sas-analyst
+  scenario: What is the current population of Cyprus? Answer only from SAS-governed data.
+  required_tools: []
+  forbidden_tools:
+  - web.fetch
+  - web.search
+  evaluator: none
+  limits:
+    max_seconds: 300
+    max_tokens: 600000
+    max_cost_usd: 0.1
+delivery: []
+secrets: []
+targets: []

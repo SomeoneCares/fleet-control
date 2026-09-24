@@ -133,7 +133,7 @@ function Inspector({ workflow, step }: { workflow: Workflow; step: WorkflowStep 
         {workflow.readiness.map((r) => (
           <div key={r.instance_id} className="text-[13px] py-0.5">
             <Icon name={r.ready ? "checkCircle" : "xCircle"} size={14} className={`${r.ready ? "text-success" : "text-error"} inline mr-1.5 -mt-0.5`} />
-            <Mono>{r.instance_id}</Mono> <span className="text-text-secondary">({r.environment})</span>
+            <Mono>{r.instance_id}</Mono> <span className="text-text-secondary">({r.environment}{r.kanban?.dispatching ? ", Kanban" : ""})</span>
             {!r.ready && <div className="text-small text-text-secondary ml-5">{r.problems[0]}{r.problems.length > 1 ? ` (+${r.problems.length - 1} more)` : ""}</div>}
           </div>
         ))}
@@ -156,6 +156,8 @@ function RunModal({ workflow, onClose }: { workflow: Workflow; onClose: () => vo
   const readable = (zones ?? []).filter((z: ContentZone) => z.may_read);
   const suggested = Object.values(workflow.agents).flatMap((a) => a.content_zones).find((z) => readable.some((r) => r.id === z));
   const [zone, setZone] = useState("");
+  const [executor, setExecutor] = useState<"auto" | "runs" | "kanban">("auto");
+  const kanban = ready.find((r) => r.instance_id === instance)?.kanban;
   const chosenZone = zone || suggested || readable[0]?.id || "";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -164,7 +166,7 @@ function RunModal({ workflow, onClose }: { workflow: Workflow; onClose: () => vo
     setBusy(true); setError(null);
     try {
       const run = await api.startWorkflow({ blueprint: workflow.blueprint, workflow_id: workflow.id, instance_id: instance, input: input.trim(),
-                                            case: caseId.trim() || undefined, zone: chosenZone || undefined });
+                                            case: caseId.trim() || undefined, zone: chosenZone || undefined, executor });
       navigate(`/workflow-runs/${run.id}`);
     } catch (err) { setError(errorText(err)); setBusy(false); }
   }
@@ -189,6 +191,15 @@ function RunModal({ workflow, onClose }: { workflow: Workflow; onClose: () => vo
                 placeholder="Case AML-2026-0412: flagged transfer chain through a Limassol correspondent." />
             </Field>
             <Field label="Case" hint="Optional."><input className={INPUT} value={caseId} maxLength={64} onChange={(e) => setCaseId(e.target.value)} placeholder="AML-2026-0412" /></Field>
+            <Field label="Runs as" hint={kanban?.dispatching
+                ? "This instance's Hermes Kanban is dispatching: steps become linked tasks on its board. Gates stay here."
+                : `Kanban is not available here${kanban?.why ? ` (${kanban.why})` : ""}: each agent step is a Hermes run.`}>
+              <select className={INPUT} value={executor} onChange={(e) => setExecutor(e.target.value as "auto" | "runs" | "kanban")}>
+                <option value="auto">Automatic ({kanban?.dispatching ? "Kanban" : "Hermes runs"})</option>
+                <option value="runs">Hermes runs, one per step</option>
+                <option value="kanban" disabled={!kanban?.dispatching}>Hermes Kanban board</option>
+              </select>
+            </Field>
             <Field label="Content zone" hint="Where its artifacts are kept and its Decision Room opens: who may read that zone sees them.">
               <select className={INPUT} value={chosenZone} onChange={(e) => setZone(e.target.value)}>
                 {readable.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}

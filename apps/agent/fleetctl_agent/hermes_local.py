@@ -71,6 +71,13 @@ ROUTES = {
     "webhooks.delete": ("DELETE", "/api/webhooks/{route}"),
     "webhooks.enable": ("POST", "/api/webhooks/enable"),  # turns the webhook platform on AND restarts the gateway
     "cron.list": ("GET", "/api/cron/jobs?profile=all"),
+    # Kanban (bundled plugin, plugins/kanban/dashboard/plugin_api.py, mounted at /api/plugins/kanban/)
+    "kanban.boards": ("GET", "/api/plugins/kanban/boards"),
+    "kanban.board.create": ("POST", "/api/plugins/kanban/boards"),  # CreateBoardBody{slug, name, description}; idempotent
+    "kanban.task.create": ("POST", "/api/plugins/kanban/tasks?board={board}"),  # CreateTaskBody{title, body, assignee, parents, ...}
+    "kanban.task.get": ("GET", "/api/plugins/kanban/tasks/{task_id}?board={board}"),  # {task, comments, events, runs, ...}
+    "kanban.task.patch": ("PATCH", "/api/plugins/kanban/tasks/{task_id}?board={board}"),  # UpdateTaskBody{status, ...}
+    "kanban.task.reclaim": ("POST", "/api/plugins/kanban/tasks/{task_id}/reclaim?board={board}"),
 }
 
 API_ROUTES = {
@@ -190,6 +197,78 @@ class HermesLocal:
                 return e.code, raw
         except urllib.error.URLError as e:
             raise HermesLocalError(f"POST {url} unreachable: {e.reason} (is the webhook platform on and the gateway running?)") from e
+
+    # ------------------------------------------------------------------ Kanban (workflow runs)
+
+    def kanban_state(self) -> dict:
+        """Can Fleet Control run workflows on this host's Kanban board: is the plugin API there, and will anything
+        dispatch its tasks (a live gateway, per its own record, with kanban.dispatch_in_gateway on)."""
+        try:
+            self.dashboard("kanban.boards")
+        except HermesLocalError as exc:
+            return {"available": False, "dispatching": False, "why": f"Kanban API not reachable: {exc}"}
+        gateway = self.gateway_runtime() or {}
+        in_gateway = True
+        try:
+            import yaml
+
+            with open(os.path.join(self.cfg.hermes_home, "config.yaml"), encoding="utf-8") as f:
+                in_gateway = ((yaml.safe_load(f) or {}).get("kanban") or {}).get("dispatch_in_gateway", True) is not False
+        except Exception:
+            pass
+        if not gateway.get("alive"):
+            return {"available": True, "dispatching": False, "why": "no live gateway to run the Kanban dispatcher"}
+        if not in_gateway:
+            return {"available": True, "dispatching": False, "why": "kanban.dispatch_in_gateway is off in config.yaml"}
+        return {"available": True, "dispatching": True, "why": None}
+
+    def kanban_submit(self, board: str, tasks: list[dict]) -> dict:
+        """Create the board if needed, then the tasks in order; a task's ``parents`` name earlier tasks by ``key``.
+        Returns {key: task_id}. ``idempotency_key`` makes a retried submit reuse the task it already made."""
+        self.dashboard("kanban.board.create", {"slug": board, "name": "Fleet Control workflows",
+                                               "description": "Workflow runs submitted by Fleet Control"})
+        ids: dict[str, str] = {}
+        for t in tasks:
+            body = {"title": t["title"][:200], "body": t["body"], "assignee": t["assignee"], "tenant": t.get("tenant"),
+                    "parents": [ids[k] for k in t.get("parents") or []], "idempotency_key": t.get("idempotency_key"),
+                    "max_runtime_seconds": t.get("max_runtime_seconds")}
+            out = self.dashboard("kanban.task.create", body, board=board) or {}
+            task = out.get("task") or {}
+            if not task.get("id"):
+                raise HermesLocalError(f"Kanban did not create {t['key']}: {str(out)[:200]}")
+            ids[t["key"]] = task["id"]
+        return ids
+
+    def kanban_read(self, board: str, task_ids: list[str]) -> dict:
+        """Where each task stands: status, the worker's handoff, and each attempt's outcome."""
+        out = {}
+        for tid in task_ids:
+            try:
+                doc = self.dashboard("kanban.task.get", board=board, task_id=tid) or {}
+            except HermesLocalError as exc:
+                out[tid] = {"status": "missing", "error": str(exc)}
+                continue
+            task = doc.get("task") or {}
+            runs = [{k: r.get(k) for k in ("profile", "status", "outcome", "summary", "error", "started_at", "ended_at")}
+                    for r in doc.get("runs") or []]
+            out[tid] = {"status": task.get("status"), "result": task.get("result"), "summary": task.get("latest_summary"),
+                        "error": task.get("last_failure_error"), "failures": task.get("consecutive_failures"), "runs": runs[-5:]}
+        return out
+
+    def kanban_archive(self, board: str, task_ids: list[str]) -> dict:
+        """Stop and archive tasks: a running one is reclaimed first (its worker is terminated)."""
+        done = []
+        for tid in task_ids:
+            try:
+                self.dashboard("kanban.task.reclaim", {"reason": "workflow run cancelled in Fleet Control"}, board=board, task_id=tid)
+            except HermesLocalError:
+                pass  # not running: nothing to reclaim
+            try:
+                self.dashboard("kanban.task.patch", {"status": "archived"}, board=board, task_id=tid)
+                done.append(tid)
+            except HermesLocalError:
+                pass
+        return {"archived": done}
 
     # ------------------------------------------------------------------ MCP servers (Integrations)
 
@@ -382,6 +461,7 @@ class HermesLocal:
         report["capabilities"] = caps_out
         # A dashboard started before a Hermes self-update keeps serving the old code (Hermes only warns about it),
         # and its messaging page then calls a healthy gateway stopped. Say so where people look: the Instances page.
+        report["kanban"] = self.kanban_state()
         installed = self.installed_version()
         report["versions"] = {"dashboard": report["hermes_version"], "installed": installed}
         if installed and report["hermes_version"] and installed != report["hermes_version"]:

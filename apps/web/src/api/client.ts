@@ -402,11 +402,14 @@ export interface WorkflowStep {
   role?: string; timeout?: string; escalate_to?: string | null; on_reject?: string | null; escalated_at?: number | null;
   gate?: { by: string; approved: boolean; note: string; at: number } | null;
   question_template?: string | null; room_id?: string | null;
+  tasks?: Record<string, string>;  // agent -> Kanban task id (Kanban executor)
+  attempt?: number;
 }
 export interface Workflow {
   blueprint: string; version: number | null; id: string; steps: WorkflowStep[]; gates: number;
   agents: Record<string, { profile: string; mcps: string[]; content_zones: string[] }>;
-  readiness: { instance_id: string; environment: Environment; ready: boolean; problems: string[] }[];
+  readiness: { instance_id: string; environment: Environment; ready: boolean; problems: string[];
+               kanban: { available: boolean; dispatching: boolean; why: string | null } }[];
 }
 export interface WorkflowRunRow {
   id: string; blueprint: string; version: number; workflow_id: string; instance_id: string; status: WorkflowRunStatus;
@@ -417,6 +420,7 @@ export interface WorkflowRunRow {
 }
 export interface WorkflowRun {
   id: string; blueprint: string; version: number; workflow_id: string; instance_id: string; zone: string | null; case: string | null;
+  executor: "runs" | "kanban"; board: string | null;
   input: string | null; status: WorkflowRunStatus; started_by: string; started_at: number; updated_at: number; finished_at: number | null;
   steps: WorkflowStep[]; artifacts: Record<string, { agent: string; step: number; artifact_id: string | null; at: number }>;
   room_id: string | null; error: string | null; row: WorkflowRunRow;
@@ -1079,7 +1083,8 @@ export const api = {
   workflowRuns: (active = false) => call<WorkflowRunRow[]>("GET", `/api/v1/workflows/runs${active ? "?active=true" : ""}`),
   workflowRun: (id: string) => call<WorkflowRun>("GET", `/api/v1/workflows/runs/${enc(id)}`),
   workflowGatesForMe: () => call<WorkflowRunRow[]>("GET", "/api/v1/workflows/waiting-for-me"),
-  startWorkflow: (body: { blueprint: string; workflow_id: string; instance_id: string; input: string; case?: string; zone?: string }) =>
+  startWorkflow: (body: { blueprint: string; workflow_id: string; instance_id: string; input: string; case?: string; zone?: string;
+                          executor?: "auto" | "runs" | "kanban" }) =>
     call<WorkflowRun>("POST", "/api/v1/workflows/runs", body),
   decideWorkflowGate: (id: string, index: number, body: { approve: boolean; note?: string }) =>
     call<WorkflowRun>("POST", `/api/v1/workflows/runs/${enc(id)}/gates/${index}`, body),

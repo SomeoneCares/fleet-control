@@ -22,7 +22,7 @@ export function WorkflowRunScreen() {
     <>
       <PageHeader crumb={<>{can("blueprints.read") ? <Link to="/workflows">Workflows</Link> : "Workflows"} › {titleCase(run.workflow_id)}</>}
         title={run.case || titleCase(run.workflow_id)}
-        subtitle={<>{run.blueprint} v{run.version} on <Mono>{run.instance_id}</Mono> · started by {run.started_by} {timeAgo(run.started_at)}{run.zone ? <> · zone <Mono>{run.zone}</Mono></> : null}</>}
+        subtitle={<>{run.blueprint} v{run.version} on <Mono>{run.instance_id}</Mono> · {run.executor === "kanban" ? <>Kanban board <Mono>{run.board}</Mono></> : "Hermes runs"} · started by {run.started_by} {timeAgo(run.started_at)}{run.zone ? <> · zone <Mono>{run.zone}</Mono></> : null}</>}
         actions={<>
           <Chip tone={st.tone}>{st.label}</Chip>
           {going && can("workflows.run") && <Button variant="danger" onClick={async () => {
@@ -63,8 +63,10 @@ function StepCard({ run, step: s, now, onChanged }: { run: WorkflowRun; step: Wo
                 <summary className="cursor-pointer text-[13px] flex items-center gap-2">
                   <span className="font-medium">{titleCase(m.agent)}</span>
                   {m.artifact && <Mono className="text-text-secondary">{m.artifact}</Mono>}
+                  {s.tasks?.[m.agent] && s.tasks[m.agent] !== "submitting" && <Mono className="text-[11px] text-text-secondary">task {s.tasks[m.agent]}</Mono>}
                   <span className="ml-auto text-small text-text-secondary">
-                    {r ? (r.ok ? `done${r.tools ? ` · ${r.tools.length ? "called " + r.tools.join(", ") : "called no tools"}` : ""}` : `failed: ${r.error}`) : s.status === "running" ? "working…" : ""}
+                    {r ? (r.ok ? `done${r.tools ? ` · ${r.tools.length ? "called " + r.tools.join(", ") : "called no tools"}` : ""}` : `failed: ${r.error}`)
+                      : s.tasks?.[m.agent] === "submitting" ? "submitting to Kanban…" : s.tasks?.[m.agent] ? "on the Kanban board" : s.status === "running" ? "working…" : ""}
                   </span>
                 </summary>
                 {r?.output && <pre className="mt-2 mb-0 p-3 bg-container-low rounded-control whitespace-pre-wrap break-words font-mono text-[12px] max-h-[320px] overflow-auto">{r.output}</pre>}

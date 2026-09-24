@@ -136,5 +136,77 @@ class WorkflowsApiTest(unittest.TestCase):
         self.assertEqual((run["status"], run["error"]), ("failed", "case-orchestrator did not finish"))
 
 
+    def kanban_on(self):
+        self.admin.post(f"/agent/v1/instances/{self.inst}/heartbeat", headers=self.agent,
+                        json={"agent_version": "0.1.0", "report": {"kanban": {"available": True, "dispatching": True, "why": None}}})
+
+    def board(self, tasks_state):
+        """Play the agent's Kanban: answer a kanban_read with these states, keyed by agent."""
+        self.admin.post(f"/agent/v1/instances/{self.inst}/heartbeat", headers=self.agent, json={"agent_version": "0.1.0",
+                        "report": {"kanban": {"available": True, "dispatching": True, "why": None}}})
+        job = self.admin.get(f"/agent/v1/instances/{self.inst}/jobs/next", headers=self.agent).json()
+        self.assertEqual(job["kind"], "kanban_read", job)
+        ids = job["params"]["task_ids"]
+        result = {"ok": True, "tasks": {t: tasks_state.get(self.task_agent[t], {"status": "running"}) for t in ids}}
+        self.admin.post(f"/agent/v1/jobs/{job['id']}/result", json=result, headers=self.agent)
+
+    def submitted(self):
+        job = self.admin.get(f"/agent/v1/instances/{self.inst}/jobs/next", headers=self.agent).json()
+        self.assertEqual(job["kind"], "kanban_submit", job)
+        ids = {t["key"]: f"t_{os.urandom(3).hex()}" for t in job["params"]["tasks"]}
+        self.task_agent = {**getattr(self, "task_agent", {}), **{ids[t["key"]]: t["agent"] for t in job["params"]["tasks"]}}
+        self.admin.post(f"/agent/v1/jobs/{job['id']}/result", json={"ok": True, "ids": ids}, headers=self.agent)
+        return job
+
+    def test_on_kanban_a_run_is_linked_tasks_and_the_gate_stays_in_the_portal(self):
+        self.kanban_on()
+        r = self.start()
+        self.assertEqual(r.status_code, 201, r.text)
+        run_id = r.json()["id"]
+        self.assertEqual(r.json()["executor"], "kanban")
+        job = self.submitted()
+        tasks = job["params"]["tasks"]
+        self.assertEqual([t["assignee"] for t in tasks], ["case-orchestrator", "sanctions-screener", "ownership-tracer", "challenger"])
+        self.assertEqual((job["params"]["board"], tasks[0]["tenant"]), ("fleetcontrol", run_id))
+        self.assertIn("Case AML-2026-0412", tasks[0]["body"])
+
+        self.board({"case-orchestrator": {"status": "done", "summary": "Brief"}})
+        self.assertEqual(store.get_workflow_run(run_id)["steps"][0]["status"], "done")
+        self.board({"sanctions-screener": {"status": "done", "summary": "0 matches"}, "ownership-tracer": {"status": "done", "summary": "UBO"},
+                    "challenger": {"status": "done", "summary": "Memo v1"}})
+        run = self.approver.get(f"/api/v1/workflows/runs/{run_id}").json()
+        self.assertEqual((run["status"], run["row"]["awaiting_role"]), ("waiting", "approver"))  # Kanban never passes a gate
+        self.approver.post(f"/api/v1/workflows/runs/{run_id}/gates/3", json={"approve": False, "note": "Check the second wire leg"})
+        again = self.submitted()["params"]["tasks"]
+        self.assertEqual([(t["agent"], t["key"]) for t in again], [("challenger", "2:challenger:1")])  # a fresh task, not the old one
+        self.assertIn("Check the second wire leg", again[0]["body"])
+        self.assertIn("Memo v1", again[0]["body"])  # it is given what came before, since its parents are not on the board
+        self.board({"challenger": {"status": "done", "summary": "Memo v2"}})
+        self.approver.post(f"/api/v1/workflows/runs/{run_id}/gates/3", json={"approve": True})
+        self.assertEqual(self.submitted()["params"]["tasks"][0]["agent"], "sar-drafter")
+        self.board({"sar-drafter": {"status": "done", "summary": "SAR draft"}})
+        run = self.admin.get(f"/api/v1/workflows/runs/{run_id}").json()
+        self.assertEqual((run["status"], bool(run["room_id"])), ("done", True))
+        self.assertTrue(run["steps"][4]["results"]["sar-drafter"]["kanban_task"].startswith("t_"))
+
+    def test_a_blocked_kanban_task_fails_the_run_and_cancel_archives_what_is_open(self):
+        self.kanban_on()
+        run_id = self.start().json()["id"]
+        self.submitted()
+        self.board({"case-orchestrator": {"status": "blocked", "error": "profile case-orchestrator crashed twice"}})
+        run = self.admin.get(f"/api/v1/workflows/runs/{run_id}").json()
+        self.assertEqual(run["status"], "failed")
+        self.assertIn("crashed twice", run["steps"][0]["results"]["case-orchestrator"]["error"])
+
+        run_id = self.start().json()["id"]
+        self.submitted()
+        self.operator.post(f"/api/v1/workflows/runs/{run_id}/cancel")
+        job = self.admin.get(f"/agent/v1/instances/{self.inst}/jobs/next", headers=self.agent).json()
+        self.assertEqual((job["kind"], len(job["params"]["task_ids"])), ("kanban_cancel", 4))
+
+    def test_kanban_is_chosen_only_where_it_dispatches(self):
+        self.assertEqual(self.start(executor="kanban").status_code, 409)  # the agent has not reported Kanban
+        self.assertEqual(self.start().json()["executor"], "runs")  # auto falls back to Hermes runs
+
 if __name__ == "__main__":
     unittest.main()

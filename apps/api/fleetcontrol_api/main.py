@@ -28,7 +28,8 @@ from pydantic import BaseModel, Field, ValidationError
 from fleetcontrol_blueprint import Blueprint, dump_blueprint, json_schema, load_blueprint
 
 from .workflows import (
-    WorkflowError, agents_used, compose_input, current_step, decide_gate, escalate_due, finish_room_step,
+    WorkflowError, agents_used, compose_input, current_step, decide_gate, escalate_due, finish_room_step, kanban_outcome,
+    kanban_tasks, segment,
     instructions as wf_instructions, may_decide_gate, missing_requirements, new_run, normalize_steps, pending_members,
     question_for, record_result, run_row as wf_run_row, settle, start_step,
 )
@@ -1468,7 +1469,8 @@ def _wf_readiness(parsed: dict, steps: list[dict]) -> list[dict]:
         problems = [f"{a} runs as profile {agents[a]['profile']}, which {inst['id']} does not have"
                     for a in agents_used(steps) if a in agents and agents[a]["profile"] not in live]
         problems += missing_requirements(steps, agents, mcps)
-        out.append({"instance_id": inst["id"], "environment": inst["environment"], "ready": not problems, "problems": problems})
+        out.append({"instance_id": inst["id"], "environment": inst["environment"], "ready": not problems, "problems": problems,
+                    "kanban": _wf_kanban(inst)})
     return out
 
 
@@ -1494,6 +1496,14 @@ class WorkflowStart(BaseModel):
     input: str = Field(..., min_length=3, max_length=4000)
     case: Optional[str] = Field(None, max_length=64)
     zone: Optional[str] = None  # where artifacts and the Decision Room live
+    # auto: the instance's Kanban board when it is there and dispatching, otherwise one Hermes run per agent step
+    executor: Literal["auto", "runs", "kanban"] = "auto"
+
+
+def _wf_kanban(inst: Optional[dict]) -> dict:
+    """What the instance's agent last said about Kanban (capability report, refreshed every heartbeat)."""
+    return ((inst or {}).get("report") or {}).get("kanban") or {"available": False, "dispatching": False,
+                                                                  "why": "the agent has not reported Kanban (update it)"}
 
 
 def _wf_escalate() -> None:
@@ -1528,7 +1538,16 @@ def _wf_advance(run_id: str) -> Optional[dict]:
                 start_step(cur, time.time())
                 todo["started"] = cur["index"]
             d["status"] = "waiting" if cur["kind"] == "human_gate" else "running"
-            if cur["kind"] in ("agent", "parallel"):
+            if cur["kind"] in ("agent", "parallel") and d.get("executor") == "kanban":
+                # Kanban runs the whole stretch up to the next gate: submit it once, as linked tasks
+                if any(m["agent"] not in (cur.get("tasks") or {}) for m in cur["members"]):
+                    stretch = segment(d, cur["index"])
+                    for s in stretch:
+                        s.setdefault("tasks", {})
+                        for m in s["members"]:
+                            s["tasks"][m["agent"]] = "submitting"
+                    todo["kanban"] = [s["index"] for s in stretch]
+            elif cur["kind"] in ("agent", "parallel"):
                 members = [m for m in pending_members(cur) if m["agent"] not in cur["jobs"]]
                 for m in members:
                     cur["jobs"][m["agent"]] = "queued"  # claimed here, so a concurrent advance cannot queue it twice
@@ -1543,6 +1562,18 @@ def _wf_advance(run_id: str) -> Optional[dict]:
             return run
         parsed = (store.get_blueprint(run["blueprint"], run["version"]) or {}).get("parsed") or {}
         agents = _wf_agents(parsed)
+        if todo.get("kanban"):
+            stretch = [run["steps"][i] for i in todo["kanban"]]
+            first = stretch[0]
+            tasks = kanban_tasks(run, stretch, {m["agent"]: compose_input(run, m, first) for m in first["members"]},
+                                 lambda m, s: wf_instructions(run, m, s))
+            for t in tasks:
+                t.update(assignee=agents.get(t["agent"], {}).get("profile", t["agent"]), max_runtime_seconds=WF_STEP_TIMEOUT)
+            store.enqueue_job(run["instance_id"], "kanban_submit", {"board": run["board"], "tasks": tasks},
+                              {"workflow_run": run_id, "kanban": "submit"})
+            store.record("fleetcontrol", "workflow.kanban_submitted", run_id,
+                         f"steps {todo['kanban'][0] + 1}–{todo['kanban'][-1] + 1}: {len(tasks)} task(s) on board {run['board']}")
+            return run
         for index, member in todo.get("agents", []):
             step = run["steps"][index]
             job = store.enqueue_job(run["instance_id"], "hermes_run",
@@ -1605,26 +1636,94 @@ def _wf_result(job: dict) -> None:
     if step["jobs"].get(agent) != job["id"]:
         return  # an answer for an earlier attempt (the step was sent back and asked again)
     ok = job["status"] == "done" and bool(result.get("output"))
-    output = result.get("output") if ok else None
+    tools = [c.get("name") for c in (result.get("tool_calls") or [])] if "tool_calls" in result else None
+    _wf_record(run, index, agent, ok=ok, output=result.get("output") if ok else None, error=result.get("error") or "no answer",
+               run_ref=result.get("run_id"), tools=tools, session_id=result.get("session_id"))
+    _wf_advance(run["id"])
+
+
+def _wf_record(run: dict, index: int, agent: str, *, ok: bool, output: Optional[str], error: Optional[str],
+               run_ref: Optional[str] = None, tools: Optional[list] = None, session_id: Optional[str] = None,
+               task_id: Optional[str] = None) -> None:
+    """One agent's result, from either executor: keep the artifact as a fleet output, file it in the run."""
+    step = run["steps"][index]
     artifact_id = None
     member = next((m for m in step["members"] if m["agent"] == agent), {})
     if ok and run.get("zone") and store.get_zone(run["zone"]):
         out = new_output(output_id="out_" + uuid.uuid4().hex[:10], zone=run["zone"], name=member.get("artifact") or f"{agent} result",
                          kind="markdown", classification="confidential", produced_by=agent, at=time.time(), text=output[:200_000],
                          case=run.get("case"), instance_id=run["instance_id"], blueprint=run["blueprint"],
-                         source={"kind": "agent", "workflow_run": run["id"], "step": index + 1, "run_id": result.get("run_id")})
+                         source={"kind": "agent", "workflow_run": run["id"], "step": index + 1, "run_id": run_ref,
+                                 **({"kanban_task": task_id} if task_id else {})})
         store.save_output(out)
         artifact_id = out["id"]
-    tools = [c.get("name") for c in (result.get("tool_calls") or [])] if "tool_calls" in result else None
 
     def file(d: dict) -> None:
-        record_result(d, index, agent, ok=ok, output=output, artifact_id=artifact_id, run_ref=result.get("run_id"),
-                      error=None if ok else (result.get("error") or "no answer"))
-        d["steps"][index]["results"][agent].update(tools=tools, session_id=result.get("session_id"))
+        if agent in d["steps"][index]["results"]:
+            return  # already filed (a second read of the same Kanban task)
+        record_result(d, index, agent, ok=ok, output=output, artifact_id=artifact_id, run_ref=run_ref, error=None if ok else error)
+        d["steps"][index]["results"][agent].update(tools=tools, session_id=session_id, kanban_task=task_id)
 
     store.update_workflow_run(run["id"], file)
     store.record("fleetcontrol", "workflow.step_done" if ok else "workflow.step_failed", run["id"],
-                 f"step {index + 1} {agent}" + ("" if ok else f": {(result.get('error') or 'no answer')[:160]}"))
+                 f"step {index + 1} {agent}" + ("" if ok else f": {(error or 'no answer')[:160]}"))
+
+
+def _wf_kanban_submitted(job: dict) -> None:
+    """The agent made the tasks: remember which task is whose. If it could not, the run fails and says why."""
+    run_id, result = job["meta"]["workflow_run"], job.get("result") or {}
+    ids = result.get("ids") or {}
+
+    def file(d: dict) -> None:
+        if job["status"] != "done":
+            for s in d["steps"]:
+                for a, t in list((s.get("tasks") or {}).items()):
+                    if t == "submitting":
+                        del s["tasks"][a]
+            err = f"Kanban refused the tasks: {(result.get('error') or 'no answer')[:300]}"
+            d.update(status="failed", error=err, finished_at=time.time())
+            return
+        for key, task_id in ids.items():
+            index, agent, attempt = key.split(":")
+            s = d["steps"][int(index)]
+            if str(s.get("attempt", 0)) == attempt and (s.get("tasks") or {}).get(agent) == "submitting":
+                s["tasks"][agent] = task_id
+
+    run = store.update_workflow_run(run_id, file)
+    if run and run["status"] == "failed":
+        store.record("fleetcontrol", "workflow.failed", run_id, run["error"])
+
+
+def _wf_kanban_sync(instance_id: str) -> None:
+    """Ask the agent where this instance's Kanban tasks stand (one read in flight per run). Called on heartbeats."""
+    for run in store.list_workflow_runs(active=True):
+        if run.get("executor") != "kanban" or run["instance_id"] != instance_id:
+            continue
+        pending = [t for s in run["steps"] for a, t in (s.get("tasks") or {}).items()
+                   if t not in (None, "submitting") and a not in (s.get("results") or {})]
+        busy = run.get("sync_job") and (store.get_job(run["sync_job"]) or {}).get("status") in ("queued", "running")
+        if not pending or busy:
+            continue
+        job = store.enqueue_job(instance_id, "kanban_read", {"board": run["board"], "task_ids": pending},
+                                {"workflow_run": run["id"], "kanban": "read"})
+        store.update_workflow_run(run["id"], lambda d, j=job["id"]: d.update(sync_job=j))
+
+
+def _wf_kanban_read(job: dict) -> None:
+    """Kanban tasks that settled become the run's results; the run moves on."""
+    run = store.get_workflow_run(job["meta"]["workflow_run"])
+    if not run or run["status"] not in ("running", "waiting") or job["status"] != "done":
+        return
+    tasks = (job.get("result") or {}).get("tasks") or {}
+    for s in run["steps"]:
+        for agent, task_id in (s.get("tasks") or {}).items():
+            if task_id not in tasks or agent in (s.get("results") or {}):
+                continue
+            settled = kanban_outcome(tasks[task_id])
+            if settled:
+                ok, output, error = settled
+                _wf_record(run, s["index"], agent, ok=ok, output=output, error=error, task_id=task_id)
+                run = store.get_workflow_run(run["id"])
     _wf_advance(run["id"])
 
 
@@ -1653,11 +1752,15 @@ def start_workflow(body: WorkflowStart, user: dict = Depends(require("workflows.
         raise HTTPException(404, "no such content zone")
     if needs_room and not zone:
         raise HTTPException(422, "this workflow opens a Decision Room: choose the content zone it lives in")
+    kanban = _wf_kanban(inst)
+    if body.executor == "kanban" and not kanban.get("dispatching"):
+        raise HTTPException(409, f"Kanban cannot run it on {inst['id']}: {kanban.get('why') or 'not available'}")
+    executor = "kanban" if body.executor == "kanban" or (body.executor == "auto" and kanban.get("dispatching")) else "runs"
     run = new_run(run_id="wfr_" + uuid.uuid4().hex[:10], blueprint=body.blueprint, version=parsed["metadata"]["version"],
                   workflow_id=wf["id"], instance_id=inst["id"], steps=wf["steps"], started_by=user["email"], at=time.time(),
-                  zone=zone, case=body.case, input_text=body.input)
+                  zone=zone, case=body.case, input_text=body.input, executor=executor)
     store.save_workflow_run(run)
-    store.record(user["email"], "workflow.started", run["id"], f"{body.blueprint} {wf['id']} on {inst['id']}")
+    store.record(user["email"], "workflow.started", run["id"], f"{body.blueprint} {wf['id']} on {inst['id']} ({executor})")
     return _wf_advance(run["id"])
 
 
@@ -1740,6 +1843,11 @@ def cancel_workflow_run(run_id: str, user: dict = Depends(require("workflows.run
             job = store.get_job(job_id) if job_id and job_id != "queued" else None
             if job and job["status"] in ("queued", "running"):
                 store.complete_job(job["id"], {"ok": False, "error": f"run cancelled by {user['email']}"}, instance_id=job["instance_id"])
+    open_tasks = [t for s in run["steps"] for a, t in (s.get("tasks") or {}).items()
+                  if t not in (None, "submitting") and a not in (s.get("results") or {})]
+    if open_tasks:  # stop the workers and take the cards off the board
+        store.enqueue_job(run["instance_id"], "kanban_cancel", {"board": run["board"], "task_ids": open_tasks},
+                          {"workflow_run": run_id, "kanban": "cancel"})
     run = store.update_workflow_run(run_id, lambda d: d.update(status="cancelled", finished_at=time.time(), updated_at=time.time(),
                                                                 error=f"cancelled by {user['email']}"))
     store.record(user["email"], "workflow.cancelled", run_id)
@@ -2968,6 +3076,7 @@ def heartbeat(instance_id: str, body: HeartbeatBody, inst: str = Depends(agent_i
         raise HTTPException(403)
     store.heartbeat(instance_id, body.agent_version, body.report)
     _wf_escalate()  # heartbeats are Fleet Control's clock: an overdue workflow gate escalates within a beat
+    _wf_kanban_sync(instance_id)  # and Kanban-run workflows are followed at the same pace
     return {"ok": True}
 
 
@@ -3051,6 +3160,10 @@ def job_result(job_id: str, result: dict[str, Any], inst: str = Depends(agent_in
         _ask_result(job)
     if job["kind"] == "hermes_run" and job["meta"].get("workflow_run"):
         _wf_result(job)
+    if job["kind"] == "kanban_submit" and job["meta"].get("workflow_run"):
+        _wf_kanban_submitted(job)
+    if job["kind"] == "kanban_read" and job["meta"].get("workflow_run"):
+        _wf_kanban_read(job)
     if job["kind"] == "run_test" and job["meta"].get("test_run"):
         _test_result(job)
     if job["kind"] in ("mcp_discover", "mcp_write") and job["meta"].get("discovery"):

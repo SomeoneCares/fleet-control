@@ -94,15 +94,67 @@ def missing_requirements(steps: Iterable[dict], agents: dict[str, dict], availab
     return problems
 
 
+EXECUTORS = ("runs", "kanban")  # one Hermes run per agent step, or linked tasks on the instance's Kanban board
+
+
 def new_run(*, run_id: str, blueprint: str, version: int, workflow_id: str, instance_id: str, steps: list[dict],
             started_by: str, at: float, zone: Optional[str] = None, case: Optional[str] = None,
-            input_text: Optional[str] = None) -> dict:
+            input_text: Optional[str] = None, executor: str = "runs") -> dict:
+    if executor not in EXECUTORS:
+        raise WorkflowError(f"a run executes as one of: {', '.join(EXECUTORS)}")
     return {
-        "id": run_id, "blueprint": blueprint, "version": version, "workflow_id": workflow_id,
+        "id": run_id, "blueprint": blueprint, "version": version, "workflow_id": workflow_id, "executor": executor,
+        "board": "fleetcontrol" if executor == "kanban" else None, "sync_job": None,
         "instance_id": instance_id, "zone": zone, "case": case, "input": (input_text or "").strip() or None,
         "status": "running", "started_by": started_by, "started_at": at, "updated_at": at, "finished_at": None,
         "steps": normalize_steps(steps), "artifacts": {}, "room_id": None, "error": None,
     }
+
+
+def segment(run: dict, start: int) -> list[dict]:
+    """The agent steps from ``start`` up to the next human gate or room: what Kanban can run on its own, in order,
+    before a person has to look."""
+    out = []
+    for s in run["steps"][start:]:
+        if s["kind"] not in ("agent", "parallel"):
+            break
+        out.append(s)
+    return out
+
+
+def kanban_tasks(run: dict, steps: list[dict], first_input: dict[str, str], instructions_for) -> list[dict]:
+    """Kanban tasks for a segment: one per agent, parented on the previous step's tasks (so a parallel group
+    shares its parents and the next step waits for all of it). The first step's tasks carry the whole context;
+    later ones read their parents' results through Kanban."""
+    tasks, previous = [], []
+    for s in steps:
+        keys = []
+        for m in s["members"]:
+            key = f"{s['index']}:{m['agent']}:{s.get('attempt', 0)}"
+            body = first_input.get(m["agent"]) if s is steps[0] else "\n\n".join(filter(None, [
+                ("Request: " + run["input"]) if run.get("input") else None,
+                ("Input: " + m["input"]) if m.get("input") else None,
+                "The results of the steps before yours are in your task's context (parent results).",
+                ("Produce: " + m["artifact"]) if m.get("artifact") else None]))
+            tasks.append({"key": key, "step": s["index"], "agent": m["agent"],
+                          "title": f"{run['workflow_id']} · step {s['index'] + 1} · {m['agent']}" + (f" · {run['case']}" if run.get("case") else ""),
+                          "body": body + "\n\n" + instructions_for(m, s), "parents": list(previous), "tenant": run["id"],
+                          "idempotency_key": f"{run['id']}:{key}"})
+            keys.append(key)
+        previous = keys
+    return tasks
+
+
+def kanban_outcome(task: dict) -> Optional[tuple[bool, Optional[str], Optional[str]]]:
+    """(ok, output, error) once a Kanban task has settled; None while it is still in play."""
+    status = task.get("status")
+    if status == "done":
+        output = task.get("summary") or task.get("result")
+        return (True, output, None) if output else (False, None, "the task finished without a result")
+    if status in ("blocked", "archived", "missing"):
+        last = next((r for r in reversed(task.get("runs") or []) if r.get("error") or r.get("summary")), {})
+        return False, None, task.get("error") or last.get("error") or f"the task is {status}" + (f": {last['summary']}" if last.get("summary") else "")
+    return None
 
 
 def current_step(run: dict) -> Optional[dict]:
@@ -159,7 +211,12 @@ def _last_step_with(run: dict, agent: Optional[str], before: int) -> Optional[in
 def _reset_step(step: dict) -> None:
     step.update(status="pending", started_at=None, finished_at=None, error=None)
     if step["kind"] in ("agent", "parallel"):
-        step["jobs"], step["results"] = {}, {}
+        # what it produced last time stays with the step, so the next attempt revises it instead of starting over
+        kept = {a: r["output"] for a, r in (step.get("results") or {}).items() if r.get("ok") and r.get("output")}
+        if kept:
+            step["previous"] = kept
+        step["jobs"], step["results"], step["tasks"] = {}, {}, {}
+        step["attempt"] = step.get("attempt", 0) + 1  # a fresh attempt: Kanban gets new tasks, never the old ones back
     if step["kind"] == "human_gate":
         step["gate"], step["escalated_at"] = None, None  # a reopened gate gets its full timeout again
     if step["kind"] == "decision_room":
@@ -270,6 +327,10 @@ def compose_input(run: dict, member: dict, step: dict) -> str:
                 text = result["output"]
                 cut = "" if len(text) <= ARTIFACT_CHARS else f"\n[… {len(text) - ARTIFACT_CHARS} more characters not shown]"
                 parts.append(f"Earlier in this run, {agent} produced {name}:\n{text[:ARTIFACT_CHARS]}{cut}")
+    previous = (step.get("previous") or {}).get(member["agent"])
+    if previous:
+        cut = "" if len(previous) <= ARTIFACT_CHARS else f"\n[… {len(previous) - ARTIFACT_CHARS} more characters not shown]"
+        parts.append(f"Your previous version, which was sent back:\n{previous[:ARTIFACT_CHARS]}{cut}")
     if step.get("note"):
         parts.append("A reviewer sent this back to you with this note: " + step["note"])
     if member.get("artifact"):

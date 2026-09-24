@@ -70,6 +70,8 @@ DASHBOARD_ROUTES = {
     "hermes_cli/web_routers/messaging.py": ['"/api/messaging/platforms"'],
     "hermes_cli/web_routers/ops.py": ['"/api/webhooks"', '"/api/webhooks/{name}"', '"/api/webhooks/enable"'],
     "hermes_cli/web_routers/status.py": ['"/api/status"'],
+    # Kanban's API, mounted at /api/plugins/kanban/ (workflow runs on the Kanban executor)
+    "plugins/kanban/dashboard/plugin_api.py": ['"/boards"', '"/tasks"', '"/tasks/{task_id}"', '"/tasks/{task_id}/reclaim"'],
 }
 
 
@@ -191,6 +193,22 @@ def _gateway_record(root):
     needles = ['_RUNTIME_STATUS_FILE = "gateway_state.json"', '"gateway_state"', '"platforms"', '"updated_at"', '"pid"',
                "_RUNTIME_STATUS_STALE_TTL_S = 120"]
     missing = [n for n in needles if n not in src]
+    return (not missing, f"missing: {missing}" if missing else "ok")
+
+
+@check("Kanban still takes the task fields fleetctl-agent sends, and reports what it reads back")
+def _kanban(root):
+    src = read(root, "plugins/kanban/dashboard/plugin_api.py")
+    m = re.search(r"^class CreateTaskBody\([^\n]*\n((?:[ \t]+[^\n]*\n|[ \t]*\n)*)", src, re.M)
+    if not m:
+        return (False, "CreateTaskBody gone")
+    missing = [f for f in ("title", "body", "assignee", "tenant", "parents", "idempotency_key", "max_runtime_seconds")
+               if not re.search(rf"^[ \t]+{f}[ \t]*:", m.group(1), re.M)]
+    db = read(root, "hermes_cli/kanban_db.py")
+    missing += [f"Task.{f}" for f in ("status", "result", "last_failure_error", "consecutive_failures") if f"    {f}:" not in db]
+    missing += [f"Run.{f}" for f in ("outcome", "summary", "error") if f"    {f}:" not in db]
+    if '"latest_summary"' not in src:
+        missing.append("task latest_summary")
     return (not missing, f"missing: {missing}" if missing else "ok")
 
 

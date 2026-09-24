@@ -555,6 +555,54 @@ class GatewayRecordTest(unittest.TestCase):
         h.dashboard = lambda route, *a, **k: {"version": "0.21.4"}
         self.assertNotIn("dashboard_stale", h.capability_report())
 
+
+class KanbanTest(unittest.TestCase):
+    """Workflow runs on Hermes Kanban: the agent makes linked tasks, reads where they stand, and archives them."""
+
+    class Board(HermesLocal):
+        def __init__(self):
+            super().__init__(HermesLocalConfig(hermes_home=tempfile.mkdtemp()))
+            self.calls, self.n = [], 0
+        def dashboard(self, route, body=None, **params):
+            self.calls.append((route, body, params))
+            if route == "kanban.task.create":
+                self.n += 1
+                return {"task": {"id": f"t_{self.n}"}}
+            if route == "kanban.task.get":
+                return {"task": {"status": "done", "latest_summary": "Memo", "consecutive_failures": 0},
+                        "runs": [{"profile": "challenger", "outcome": "completed", "summary": "Memo", "error": None}]}
+            if route == "kanban.task.reclaim":
+                raise HermesLocalError("409: not running")
+            return {}
+
+    def test_parents_are_named_by_key_and_become_the_new_task_ids(self):
+        h = self.Board()
+        ids = h.kanban_submit("fleetcontrol", [
+            {"key": "0:a:0", "title": "a", "body": "b", "assignee": "a", "parents": []},
+            {"key": "1:b:0", "title": "b", "body": "b", "assignee": "b", "parents": ["0:a:0"]},
+            {"key": "1:c:0", "title": "c", "body": "b", "assignee": "c", "parents": ["0:a:0"]},
+            {"key": "2:d:0", "title": "d", "body": "b", "assignee": "d", "parents": ["1:b:0", "1:c:0"]}])
+        self.assertEqual(ids, {"0:a:0": "t_1", "1:b:0": "t_2", "1:c:0": "t_3", "2:d:0": "t_4"})
+        creates = [c for c in h.calls if c[0] == "kanban.task.create"]
+        self.assertEqual(creates[3][1]["parents"], ["t_2", "t_3"])
+        self.assertEqual(h.calls[0][0], "kanban.board.create")  # the board first (idempotent)
+
+    def test_reading_and_archiving(self):
+        h = self.Board()
+        got = h.kanban_read("fleetcontrol", ["t_9"])["t_9"]
+        self.assertEqual((got["status"], got["summary"], got["runs"][0]["outcome"]), ("done", "Memo", "completed"))
+        self.assertEqual(h.kanban_archive("fleetcontrol", ["t_9"]), {"archived": ["t_9"]})  # not running: no reclaim needed
+
+    def test_kanban_counts_only_when_it_will_dispatch(self):
+        h = self.Board()
+        h.gateway_runtime = lambda: {"alive": False}
+        self.assertEqual(h.kanban_state()["dispatching"], False)
+        h.gateway_runtime = lambda: {"alive": True}
+        self.assertEqual(h.kanban_state(), {"available": True, "dispatching": True, "why": None})
+        with open(os.path.join(h.cfg.hermes_home, "config.yaml"), "w") as f:
+            f.write("kanban:\n  dispatch_in_gateway: false\n")
+        self.assertIn("dispatch_in_gateway", h.kanban_state()["why"])
+
 class ConfigTest(unittest.TestCase):
     def test_environment_overrides(self):
         env = {"HERMES_BIN": "/opt/hermes/bin/hermes", "HERMES_DASHBOARD_URL": "http://127.0.0.1:9129",
@@ -608,7 +656,7 @@ class RouteTableTest(unittest.TestCase):
     def test_routes_are_well_formed(self):
         for table in (ROUTES, API_ROUTES):
             for k, (m, p) in table.items():
-                self.assertIn(m, ("GET", "POST", "PUT", "DELETE"), k)
+                self.assertIn(m, ("GET", "POST", "PUT", "PATCH", "DELETE"), k)
                 self.assertTrue(p.startswith("/"), k)
 
 

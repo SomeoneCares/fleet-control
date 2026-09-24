@@ -210,6 +210,9 @@ class Jobs:
             "channel_route": self.channel_route,
             "deliver_message": self.deliver_message,
             "webhooks_enable": self.webhooks_enable,
+            "kanban_submit": self.kanban_submit,
+            "kanban_read": self.kanban_read,
+            "kanban_cancel": self.kanban_cancel,
         }
 
     def dispatch(self, job: dict) -> dict:
@@ -417,6 +420,17 @@ class Jobs:
         if not ok:
             out["error"] = f"HTTP {status}: {body if isinstance(body, str) else json.dumps(body)[:300]}"
         return out
+
+    def kanban_submit(self, p: dict) -> dict:
+        """params: {board, tasks: [{key, title, body, assignee, parents, idempotency_key, tenant, max_runtime_seconds}]}."""
+        return {"ids": self.hermes.kanban_submit(p["board"], p["tasks"])}
+
+    def kanban_read(self, p: dict) -> dict:
+        """params: {board, task_ids}."""
+        return {"tasks": self.hermes.kanban_read(p["board"], p["task_ids"])}
+
+    def kanban_cancel(self, p: dict) -> dict:
+        return self.hermes.kanban_archive(p["board"], p["task_ids"])
 
     def webhooks_enable(self, p: dict) -> dict:
         """Turn the webhook platform on. Hermes restarts the gateway to start it."""

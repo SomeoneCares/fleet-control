@@ -8,7 +8,7 @@ from fleetcontrol_blueprint import load_blueprint
 from fleetcontrol_api.workflows import (
     WorkflowError, compose_input, current_step, decide_gate, escalate_due, finish_room_step, instructions,
     may_decide_gate, missing_requirements, new_run, pending_members, progress, question_for, record_result, run_row,
-    settle, start_step,
+    kanban_outcome, kanban_tasks, segment, settle, start_step,
 )
 
 EXAMPLE = os.path.join(os.path.dirname(__file__), "..", "..", "..", "packages", "blueprint_schema", "examples", "aml-investigation.yaml")
@@ -94,6 +94,44 @@ class RunTest(unittest.TestCase):
         problems = missing_requirements(run["steps"], agents, available_mcps=["opensanctions"])
         self.assertIn("case-orchestrator needs the MCP server 'case-store', which this instance does not have", problems)
         self.assertIn("ownership-tracer is not an agent in this blueprint", problems)
+
+
+class KanbanTest(unittest.TestCase):
+    def test_a_stretch_up_to_the_gate_becomes_linked_tasks(self):
+        run = example_run()
+        stretch = segment(run, 0)
+        self.assertEqual([s["index"] for s in stretch], [0, 1, 2])  # up to the human gate
+        tasks = kanban_tasks(run, stretch, {"case-orchestrator": "FULL CONTEXT"}, lambda m, s: "INSTRUCTIONS")
+        by = {t["agent"]: t for t in tasks}
+        self.assertEqual([t["agent"] for t in tasks], ["case-orchestrator", "sanctions-screener", "ownership-tracer", "challenger"])
+        self.assertEqual(by["case-orchestrator"]["parents"], [])
+        self.assertEqual(by["sanctions-screener"]["parents"], ["0:case-orchestrator:0"])
+        self.assertEqual(sorted(by["challenger"]["parents"]), ["1:ownership-tracer:0", "1:sanctions-screener:0"])  # waits for both
+        self.assertTrue(by["case-orchestrator"]["body"].startswith("FULL CONTEXT"))
+        self.assertIn("parent results", by["challenger"]["body"])
+        self.assertEqual((by["challenger"]["tenant"], by["challenger"]["idempotency_key"]), ("wfr_1", "wfr_1:2:challenger:0"))
+        self.assertEqual(segment(run, 3), [])  # a gate is not Kanban's to run
+
+    def test_only_settled_tasks_count_and_a_blocked_one_says_why(self):
+        self.assertIsNone(kanban_outcome({"status": "running"}))
+        self.assertIsNone(kanban_outcome({"status": "ready"}))
+        self.assertEqual(kanban_outcome({"status": "done", "summary": "memo"}), (True, "memo", None))
+        self.assertEqual(kanban_outcome({"status": "done"})[0], False)  # done with nothing to show is not a result
+        self.assertEqual(kanban_outcome({"status": "blocked", "error": "profile missing"}), (False, None, "profile missing"))
+
+    def test_a_sent_back_step_gets_a_new_attempt_and_new_tasks(self):
+        run = example_run()
+        for i, agent in ((0, "case-orchestrator"), (2, "challenger")):
+            start_step(run["steps"][i], 1)
+            run["steps"][i]["tasks"] = {agent: f"t_{i}"}
+            record_result(run, i, agent, ok=True, output="x", at=2)
+        start_step(run["steps"][1], 1)
+        record_result(run, 1, "sanctions-screener", ok=True, output="x", at=2)
+        record_result(run, 1, "ownership-tracer", ok=True, output="x", at=2)
+        start_step(run["steps"][3], 3)
+        decide_gate(run, 3, by="lena@x", role="approver", approve=False, note="again", at=4)
+        self.assertEqual((run["steps"][2]["attempt"], run["steps"][2]["tasks"]), (1, {}))
+        self.assertEqual(kanban_tasks(run, segment(run, 2), {"challenger": "c"}, lambda m, s: "")[0]["key"], "2:challenger:1")
 
 
 if __name__ == "__main__":

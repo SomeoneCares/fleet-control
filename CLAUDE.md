@@ -190,8 +190,17 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   or send back with a note to `on_reject` (everything after it reruns); overdue gates escalate once on the next agent
   heartbeat to `escalate_to` (role or email; a missing target is audited, not skipped). The last step opens a
   Decision Room with every artifact as evidence. Personal events `gate.waiting` / `gate.escalated`.
-  NEXT (part 2): map runs onto Hermes Kanban where the instance has it (`/api/plugins/kanban/…`: boards, tasks with
-  parent links, comments, attachments; dispatcher in the gateway), portal still owning the gates.
+- DONE (2026-09-25): Slice 5 part 2, the Kanban executor. The agent reports `kanban {available, dispatching, why}`
+  in its capability report (plugin API reachable at `/api/plugins/kanban/`, gateway alive per its own record,
+  `kanban.dispatch_in_gateway` not off). A run starts as `auto` (Kanban when dispatching, else Hermes runs), `runs` or
+  `kanban`. On Kanban, each stretch up to the next gate is submitted once (`kanban_submit`) to board `fleetcontrol` as
+  one task per agent, assigned to its profile, parented on the previous step's tasks, tenant = run id,
+  idempotency key `run:step:agent:attempt`; heartbeats trigger `kanban_read` and settled tasks (done with a
+  summary, blocked, archived) become results. Gates stay in the portal: the next stretch is submitted after
+  approval; a send-back bumps the step's `attempt` (fresh tasks) and the agent gets its previous version plus the
+  note (both executors). Cancel archives open tasks (reclaiming running workers). Compat check pins the Kanban
+  routes, `CreateTaskBody` and the Task/Run fields read back; all 16 checks pass on the host's 0.21.4 source.
+  Evidence on Kanban is Kanban's own run records (tool calls are not reported through it).
 - PLAN (Basem, 2026-09-16): complete the whole portal before Docker, every screen working end to end (real backend,
   real Hermes runs on the lab host where needed), in build-document order: Slice 2 Fleet Architect → Slice 3 Test
   Lab, Assurance, Integrations (+ Settings → Observability) → Slice 4 Workspace, Decision Rooms, Ask the fleet,

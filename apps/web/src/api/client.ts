@@ -13,6 +13,7 @@ export interface Me {
   role_label: string;
   portal: "admin" | "workspace";
   permissions: string[];
+  features?: { messaging: boolean };  // workspace switches (Settings → General); absent from older APIs = on
 }
 
 export interface RoleInfo {
@@ -126,6 +127,7 @@ export interface SettingsValues {
   require_tests_for_production: boolean;
   token_max_days: number;
   portal_url: string;  // where links in messages point
+  messaging_enabled: boolean;
 }
 
 export interface SettingsDoc {

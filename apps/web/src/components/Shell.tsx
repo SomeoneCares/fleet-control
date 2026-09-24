@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
-import { api } from "../api/client";
+import { api, type Me } from "../api/client";
 import { useAuth, useMe } from "../lib/auth";
 import { errorText, useLoad } from "../lib/hooks";
 import { initials } from "../lib/view";
@@ -13,6 +13,7 @@ export interface NavItem {
   to?: string; // built screens; the rest open a "not built yet" page naming their slice
   slice?: number;
   permission?: string; // hidden from roles without it
+  feature?: "messaging"; // hidden while that feature is switched off (Settings → General)
 }
 
 // Build document §3.1: one shell on every admin screen.
@@ -32,7 +33,7 @@ export const NAV: { group: string; items: NavItem[] }[] = [
   { group: "Estate", items: [
     { key: "instances", label: "Instances", icon: "server", to: "/instances" },
     { key: "integrations", label: "Integrations", icon: "plug", to: "/integrations", permission: "instances.read" },
-    { key: "messaging", label: "Messaging", icon: "message", to: "/messaging", permission: "messaging.read" },
+    { key: "messaging", label: "Messaging", icon: "message", to: "/messaging", permission: "messaging.read", feature: "messaging" },
   ] },
   { group: "Govern", items: [
     { key: "access", label: "Access", icon: "lock", to: "/access", permission: "users.read" },
@@ -58,6 +59,11 @@ export const WORKSPACE_NAV: { group: string; items: NavItem[] }[] = [
     { key: "ask-the-fleet", label: "Ask the fleet", icon: "spark", to: "/ask", permission: "ask.use" },
   ] },
 ];
+
+/** A feature is on unless the workspace switched it off. */
+export function featureOn(me: Pick<Me, "features">, feature?: NavItem["feature"]): boolean {
+  return !feature || me.features?.[feature] !== false;
+}
 
 export const ALL_NAV_ITEMS: NavItem[] = [...NAV, ...WORKSPACE_NAV].flatMap((g) => g.items);
 
@@ -87,7 +93,7 @@ export function Shell() {
   const { data: instances } = useLoad(() => (can("instances.read") ? api.instances() : Promise.resolve(null)), [me.role], 15_000);
   const versions = [...new Set((instances ?? []).map((i) => i.hermes_version).filter(Boolean))];
   const groups = (me.portal === "workspace" ? WORKSPACE_NAV : NAV)
-    .map((g) => ({ ...g, items: g.items.filter((it) => !it.permission || can(it.permission)) }))
+    .map((g) => ({ ...g, items: g.items.filter((it) => (!it.permission || can(it.permission)) && featureOn(me, it.feature)) }))
     .filter((g) => g.items.length > 0);
 
   return (

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Navigate, createBrowserRouter } from "react-router";
-import { Shell } from "./components/Shell";
+import { Shell, featureOn } from "./components/Shell";
 import { Card, PageHeader } from "./components/ui";
 import { useAuth, useMe } from "./lib/auth";
 import { AccessScreen } from "./screens/Access";
@@ -43,6 +43,18 @@ function Guard({ permission, children }: { permission: string; children: ReactNo
 
 const guarded = (permission: string, screen: ReactNode) => <Guard permission={permission}>{screen}</Guard>;
 
+/** A workspace switch (Settings → General) can turn a whole area off; its page then says so instead of failing. */
+function FeatureGate({ feature, label, children }: { feature: "messaging"; label: string; children: ReactNode }) {
+  const me = useMe();
+  if (featureOn(me, feature)) return <>{children}</>;
+  return (
+    <>
+      <PageHeader crumb="Switched off" title={`${label} is off`} />
+      <Card className="p-6 max-w-[640px]">An Admin switched {label} off for this workspace (Settings → General). Nothing is sent while it is off.</Card>
+    </>
+  );
+}
+
 export const router = createBrowserRouter([
   {
     path: "/",
@@ -66,7 +78,7 @@ export const router = createBrowserRouter([
       { path: "my-decisions", element: guarded("rooms.read", <MyDecisionsScreen />) },
       { path: "ask", element: guarded("ask.use", <AskFleetScreen />) },
       { path: "integrations", element: guarded("instances.read", <IntegrationsScreen />) },
-      { path: "messaging", element: guarded("messaging.read", <MessagingScreen />) },
+      { path: "messaging", element: guarded("messaging.read", <FeatureGate feature="messaging" label="Messaging"><MessagingScreen /></FeatureGate>) },
       { path: "testlab", element: guarded("blueprints.read", <TestLabScreen />) },
       { path: "assurance", element: guarded("assurance.read", <AssuranceScreen />) },
       { path: "settings", element: <SettingsScreen /> },  // every role: tabs follow permissions (API tokens for all)

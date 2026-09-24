@@ -122,7 +122,7 @@ def require(*permissions: str):
 def _me(user: dict) -> dict:
     return {"email": user["email"], "name": user["name"], "role": user["role"], "role_label": role_label(user["role"]),
             "portal": "admin" if user["role"] in ADMIN_PORTAL else "workspace", "permissions": permissions_for(user["role"]),
-            "workspace_name": _settings()["workspace_name"]}
+            "workspace_name": _settings()["workspace_name"], "features": {"messaging": bool(_settings()["messaging_enabled"])}}
 
 
 def _person(user: dict) -> dict:
@@ -988,12 +988,20 @@ def save_ask_answer(thread_id: str, turn_no: int, body: AskSave, user: dict = De
 # ----------------------------------------------------------------------------- Messaging (Slice 4)
 
 
+def _messaging_on() -> None:
+    """Messaging can be switched off for the whole workspace (Settings → General); then its API says so."""
+    if not _settings()["messaging_enabled"]:
+        raise HTTPException(409, "Messaging is off (Settings → General)")
+
+
 def _channel_out(ch: dict, states: dict) -> dict:
     return {**ch, **channel_health(ch, states.get(ch["instance_id"]))}
 
 
 def _notify(event: str, *, key: str, ctx: dict) -> None:
     """A fleet event happened: send it to every channel an applied blueprint's delivery rule names for it, once."""
+    if not _settings()["messaging_enabled"]:
+        return  # switched off: nothing is sent, and nothing is queued to be sent later
     applied, _ = _blueprint_versions()
     channels = {c["ref"]: c for c in store.list_channels()}
     portal = _settings()["portal_url"]
@@ -1051,6 +1059,7 @@ def _agent_instance_or_409(instance_id: str) -> dict:
 def get_messaging(user: dict = Depends(require("messaging.read"))) -> dict:
     """Channels with their health, the delivery rules of the applied blueprints, the platforms each instance has, and
     the latest deliveries."""
+    _messaging_on()
     states = store.messaging_states()
     channels = [_channel_out(c, states) for c in store.list_channels()]
     applied, drafts = _blueprint_versions()
@@ -1074,6 +1083,7 @@ class MessagingInstance(BaseModel):
 
 @app.post("/api/v1/messaging/discover")
 def discover_messaging(body: MessagingInstance, user: dict = Depends(require("messaging.read"))) -> dict:
+    _messaging_on()
     _agent_instance_or_409(body.instance_id)
     job = store.enqueue_job(body.instance_id, "messaging_discover", {}, {"messaging": body.instance_id})
     return {"job_id": job["id"]}
@@ -1082,6 +1092,7 @@ def discover_messaging(body: MessagingInstance, user: dict = Depends(require("me
 @app.post("/api/v1/messaging/enable-webhooks")
 def enable_webhooks(body: MessagingInstance, user: dict = Depends(require("messaging.manage"))) -> dict:
     """Turn on the webhook platform on an instance. Hermes restarts its gateway to start it."""
+    _messaging_on()
     _agent_instance_or_409(body.instance_id)
     job = store.enqueue_job(body.instance_id, "webhooks_enable", {}, {"messaging": body.instance_id})
     store.record(user["email"], "messaging.webhooks_enabled", body.instance_id, "the gateway restarts")
@@ -1105,6 +1116,7 @@ def _route_job(ch: dict, action: str) -> dict:
 
 @app.post("/api/v1/messaging/channels", status_code=201)
 def create_channel(body: ChannelCreate, user: dict = Depends(require("messaging.manage"))) -> dict:
+    _messaging_on()
     _agent_instance_or_409(body.instance_id)
     try:
         ch = new_channel(name=body.name, platform=body.platform, instance_id=body.instance_id, by=user["email"], at=time.time(),
@@ -1135,6 +1147,7 @@ def _channel(channel_id: str) -> dict:
 
 @app.patch("/api/v1/messaging/channels/{channel_id}")
 def change_channel(channel_id: str, body: ChannelChange, user: dict = Depends(require("messaging.manage"))) -> dict:
+    _messaging_on()
     ch = _channel(channel_id)
     changes = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
     ch = store.save_channel({**ch, **changes})
@@ -1144,6 +1157,7 @@ def change_channel(channel_id: str, body: ChannelChange, user: dict = Depends(re
 
 @app.post("/api/v1/messaging/channels/{channel_id}/route")
 def recreate_route(channel_id: str, user: dict = Depends(require("messaging.manage"))) -> dict:
+    _messaging_on()
     ch = _channel(channel_id)
     _agent_instance_or_409(ch["instance_id"])
     job = _route_job(ch, "create")
@@ -1155,6 +1169,7 @@ def recreate_route(channel_id: str, user: dict = Depends(require("messaging.mana
 @app.delete("/api/v1/messaging/channels/{channel_id}")
 def delete_channel(channel_id: str, user: dict = Depends(require("messaging.manage"))) -> dict:
     """Forget a channel and ask its instance to drop the route. Deliveries stay: they are the record of what was sent."""
+    _messaging_on()
     ch = _channel(channel_id)
     inst = store.get_instance(ch["instance_id"])
     if inst and inst["mode"] == "agent" and inst.get("agent_version"):
@@ -1166,6 +1181,7 @@ def delete_channel(channel_id: str, user: dict = Depends(require("messaging.mana
 
 @app.post("/api/v1/messaging/channels/{channel_id}/test", status_code=201)
 def test_channel(channel_id: str, user: dict = Depends(require("messaging.manage"))) -> dict:
+    _messaging_on()
     ch = _channel(channel_id)
     _agent_instance_or_409(ch["instance_id"])
     doc = _deliver(ch, event="test", key=f"test:{uuid.uuid4().hex}", text=test_text(ch, user["email"], _settings()["portal_url"]),
@@ -1176,6 +1192,7 @@ def test_channel(channel_id: str, user: dict = Depends(require("messaging.manage
 
 @app.get("/api/v1/messaging/deliveries")
 def list_deliveries(channel: Optional[str] = None, user: dict = Depends(require("messaging.read"))) -> list[dict]:
+    _messaging_on()
     return store.list_deliveries(channel=channel, limit=100)
 
 

@@ -134,6 +134,25 @@ class MessagingApiTest(unittest.TestCase):
         self.assertEqual(self.admin.delete(f"/api/v1/messaging/channels/{ch['id']}").status_code, 200)
         self.assertEqual(self.agent_does("channel_route", {"ok": True})["params"]["action"], "remove")
 
+    def test_messaging_can_be_switched_off_and_then_sends_nothing(self):
+        ch = self.channel()
+        with open(EXAMPLE, encoding="utf-8") as f:
+            text = f.read().replace("name: aml-investigation", f"name: msgoff-{self.tag}")
+        self.admin.post("/api/v1/blueprints", json={"yaml": text.replace('to: "teams:aml-investigations"', f'to: "{ch["ref"]}"', 1)})
+        store.set_blueprint_status(f"msgoff-{self.tag}", 3, "applied")
+        self.addCleanup(lambda: store.set_settings({"messaging_enabled": True}, "tests"))
+        self.assertEqual(self.admin.patch("/api/v1/settings", json={"messaging_enabled": False}).status_code, 200)
+        self.assertEqual(self.admin.get("/api/v1/auth/me").json()["features"], {"messaging": False})  # the menu hides it
+        self.assertEqual(self.admin.get("/api/v1/messaging").status_code, 409)
+        self.assertEqual(self.admin.post(f"/api/v1/messaging/channels/{ch['id']}/test").status_code, 409)
+        self.admin.post("/api/v1/rooms", json={"question": "Should we file a SAR for this case?", "zone": self.zone, "options": ["File", "Wait"]})
+        self.assertEqual(self.queued(), [])  # the rule matched, but nothing is sent while messaging is off
+        self.assertTrue(any(e["action"] == "settings.updated" and "messaging_enabled" in e["detail"] for e in self.admin.get("/api/v1/audit").json()))
+        self.assertEqual(signed_in("operator").patch("/api/v1/settings", json={"messaging_enabled": True}).status_code, 403)
+
+        self.admin.patch("/api/v1/settings", json={"messaging_enabled": True})
+        self.assertEqual(self.mine(self.admin.get("/api/v1/messaging").json(), ch["id"])["id"], ch["id"])  # kept while off
+
 
 if __name__ == "__main__":
     unittest.main()

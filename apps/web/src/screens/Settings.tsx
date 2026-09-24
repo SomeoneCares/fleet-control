@@ -95,6 +95,7 @@ function Loading({ error }: { error: string | null }) {
 // ---------------------------------------------------------------- General and Approvals share one form
 
 function useSettingsForm() {
+  const { setMe } = useAuth();
   const { data, error, reload } = useLoad(api.settings, []);
   const [draft, setDraft] = useState<Partial<SettingsValues>>({});
   const [busy, setBusy] = useState(false);
@@ -116,6 +117,7 @@ function useSettingsForm() {
       await api.updateSettings(Object.fromEntries(changed.map((k) => [k, draft[k]])) as Partial<SettingsValues>);
       setDraft({});
       await reload();
+      setMe(await api.me());  // switches such as Messaging change the menu straight away
       setSaved(true);
     } catch (e) {
       setFailure(errorText(e));
@@ -164,6 +166,13 @@ function GeneralPanel() {
       <Row label="Sign-in lasts" hint="Without activity, before signing in again. Applies to new sign-ins.">
         <NumberField label="Sign-in hours" value={v.session_hours} min={1} max={24} unit="hours (1–24)" disabled={locked}
           onChange={(n) => form.set("session_hours", n)} />
+      </Row>
+      <Row label="Messaging" hint="Deliver fleet events through the instances' messaging gateways. Off hides Messaging from the menu and sends nothing; channels and rules are kept.">
+        <label className="flex items-center gap-2 text-[13px] cursor-pointer">
+          <input type="checkbox" className="accent-primary" disabled={locked} checked={v.messaging_enabled}
+            onChange={(e) => form.set("messaging_enabled", e.target.checked)} />
+          Messaging on
+        </label>
       </Row>
       <Row label="Portal address" hint="Where links in messages point (Messaging): the address people open Fleet Control at.">
         <input className={INPUT} aria-label="Portal address" maxLength={200} value={v.portal_url} disabled={locked}

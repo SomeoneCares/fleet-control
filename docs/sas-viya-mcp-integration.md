@@ -118,7 +118,46 @@ expiring independently. The alternative is `allowRawBearer: true` on the SAS cha
 `auth: "header"` with a service-account token — one credential, no consent, but every agent then
 shares one identity in SAS's audit trail. Per-profile OAuth is more work and better evidence.
 
-Token refresh across a restart is **not yet verified**.
+## Trap 4b — a login lasts as long as the SAS Logon refresh token, and no longer
+
+Verified 2026-09-24 on `hermesbo-lab-01` (FastMCP 4.0.0 inside sas-mcp-server 1.15.0):
+
+| When (UTC) | What happened |
+|---|---|
+| 09-23 15:41 | `sas-analyst` logs in (client `…7023a9`) |
+| 09-24 03:41:56 | access token (12 h) expires; Hermes refreshes; the MCP server logs `Issued new FastMCP tokens (rotated refresh)` and Hermes writes the new token to disk |
+| 09-24 15:41:21 | the **new** refresh token's `exp`, i.e. exactly 24 h after the login, 33 s *before* the access token it would renew |
+| 09-24 15:43 onwards | `Refresh token not found … (token_hash=8470eb44)`: the hash of the token on disk. Hermes parks the server with `OAuthNonInteractiveError`; Kanban workers start with no SAS tools |
+
+This is **not** a race between Hermes processes (an earlier reading of these logs said so, which
+was wrong: the 03:44 failures belong to another client). Refresh works. The limit is upstream. The
+MCP server is a FastMCP `OAuthProxy`. On login it records when SAS Logon's refresh token expires. On
+every refresh it keeps that **absolute** expiry, because SAS Logon refresh tokens do not slide, and it
+dates the refresh token it issues to match. On this Viya that is 24 h after the login. After that,
+nothing but a human in a browser gets the agent back.
+
+Levers, from cheapest:
+
+1. **Raise the lifetime on the `sas-mcp` client in SAS Logon.** `refresh_token_validity` and
+   `access_token_validity` are per-client fields (`examples/register_mcp_client.py` carries both;
+   SAS community answers put the refresh ceiling at 30 days). Re-register or `PUT` the client as a
+   `clients.admin` user, then log each profile in once more. This buys a login per profile per
+   month, not zero.
+2. **Headless: SAS's own recommendation for automation.** Set `ALLOW_RAW_BEARER=true` on the chart.
+   Hermes sends a Viya JWT in `Authorization: Bearer` (`auth: header`), minted on the host for a SAS
+   service identity. There is no consent or refresh chain, and restarts are harmless. The price is on
+   the SAS side: *any* JWT this SAS Logon signs becomes an MCP credential (`deploy/K8S-DEPLOYMENT.md`).
+   Give each agent its own SAS identity if per-agent attribution in SAS's audit trail matters. The
+   minting and renewal would live in the Fleet Control Agent. Credentials stay on the host (mode
+   600, like `API_SERVER_KEY`) and never pass through Fleet Control. This is not built yet.
+3. Whatever the lifetime, the agent should report each profile's login **expiry** (the refresh
+   JWT's `exp`, never the token), so Integrations can warn days ahead instead of a workflow
+   discovering it mid-run.
+
+Also found: the **default** profile still carries a `sas-viya` registration (client `…4b17e3`,
+from 09-20) whose token died with the 09-23 pod restart. Its gateway retries every 300 s, which is
+most of the `Refresh token not found` noise in the MCP server log. Remove `sas-viya` from the root
+config or log it in again.
 
 ## Trap 5 — a running gateway keeps serving the credential it started with
 

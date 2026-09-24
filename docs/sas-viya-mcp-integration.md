@@ -121,6 +121,8 @@ shares one identity in SAS's audit trail. Per-profile OAuth is more work and bet
 ## Trap 4b — a login lasts as long as the SAS Logon refresh token, and no longer
 
 Verified 2026-09-24 on `hermesbo-lab-01` (FastMCP 4.0.0 inside sas-mcp-server 1.15.0):
+1.16.1 (installed 2026-09-24 with `helm upgrade` from the `v1.16.1` tag, same values file) changes no
+authentication code and ships the same FastMCP, so an upgrade does not lift this limit.
 
 | When (UTC) | What happened |
 |---|---|

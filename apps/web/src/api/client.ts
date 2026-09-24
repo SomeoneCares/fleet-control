@@ -408,7 +408,7 @@ export interface WorkflowStep {
 export interface Workflow {
   blueprint: string; version: number | null; id: string; steps: WorkflowStep[]; gates: number;
   agents: Record<string, { profile: string; mcps: string[]; content_zones: string[] }>;
-  readiness: { instance_id: string; environment: Environment; ready: boolean; problems: string[];
+  readiness: { instance_id: string; environment: Environment; ready: boolean; problems: string[]; warnings: string[];
                kanban: { available: boolean; dispatching: boolean; why: string | null } }[];
 }
 export interface WorkflowRunRow {

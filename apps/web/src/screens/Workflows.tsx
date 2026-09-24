@@ -135,6 +135,7 @@ function Inspector({ workflow, step }: { workflow: Workflow; step: WorkflowStep 
             <Icon name={r.ready ? "checkCircle" : "xCircle"} size={14} className={`${r.ready ? "text-success" : "text-error"} inline mr-1.5 -mt-0.5`} />
             <Mono>{r.instance_id}</Mono> <span className="text-text-secondary">({r.environment}{r.kanban?.dispatching ? ", Kanban" : ""})</span>
             {!r.ready && <div className="text-small text-text-secondary ml-5">{r.problems[0]}{r.problems.length > 1 ? ` (+${r.problems.length - 1} more)` : ""}</div>}
+            {r.ready && (r.warnings ?? []).map((w) => <div key={w} className="text-small text-warning ml-5">{w}</div>)}
           </div>
         ))}
       </div>
@@ -186,6 +187,7 @@ function RunModal({ workflow, onClose }: { workflow: Workflow; onClose: () => vo
                 {ready.map((r) => <option key={r.instance_id} value={r.instance_id}>{r.instance_id} ({r.environment})</option>)}
               </select>
             </Field>
+            {(ready.find((r) => r.instance_id === instance)?.warnings ?? []).map((w) => <Banner key={w} tone="warning" className="mb-3 text-small">{w}</Banner>)}
             <Field label="Request" hint="What the first step is asked; every later step also reads what came before.">
               <textarea className={TEXTAREA} rows={4} autoFocus value={input} maxLength={4000} onChange={(e) => setInput(e.target.value)}
                 placeholder="Case AML-2026-0412: flagged transfer chain through a Limassol correspondent." />

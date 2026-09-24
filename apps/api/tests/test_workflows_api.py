@@ -197,12 +197,25 @@ class WorkflowsApiTest(unittest.TestCase):
         run = self.admin.get(f"/api/v1/workflows/runs/{run_id}").json()
         self.assertEqual(run["status"], "failed")
         self.assertIn("crashed twice", run["steps"][0]["results"]["case-orchestrator"]["error"])
+        left = self.admin.get(f"/agent/v1/instances/{self.inst}/jobs/next", headers=self.agent).json()
+        self.assertEqual((left["kind"], len(left["params"]["task_ids"])), ("kanban_cancel", 3))  # nothing left waiting on the board
+        self.admin.post(f"/agent/v1/jobs/{left['id']}/result", json={"ok": True, "archived": left["params"]["task_ids"]}, headers=self.agent)
 
         run_id = self.start().json()["id"]
         self.submitted()
         self.operator.post(f"/api/v1/workflows/runs/{run_id}/cancel")
         job = self.admin.get(f"/agent/v1/instances/{self.inst}/jobs/next", headers=self.agent).json()
         self.assertEqual((job["kind"], len(job["params"]["task_ids"])), ("kanban_cancel", 4))
+
+    def test_an_mcp_server_the_last_discovery_could_not_reach_is_warned_about_before_a_run(self):
+        store.save_integrations(self.inst, {"case-orchestrator": [{"name": "case-store", "ok": False, "error": "token expired"}]}, 1.0,
+                                covered=["case-orchestrator"])
+        wf = next(w for w in self.admin.get("/api/v1/workflows").json() if w["blueprint"] == self.bp)
+        mine = next(r for r in wf["readiness"] if r["instance_id"] == self.inst)
+        self.assertTrue(mine["ready"])  # a warning, not a block: the login may be fixed by the time it runs
+        self.assertEqual(len(mine["warnings"]), 1)
+        self.assertIn("case-store was unreachable from case-orchestrator", mine["warnings"][0])
+        self.assertIn("token expired", mine["warnings"][0])
 
     def test_kanban_is_chosen_only_where_it_dispatches(self):
         self.assertEqual(self.start(executor="kanban").status_code, 409)  # the agent has not reported Kanban

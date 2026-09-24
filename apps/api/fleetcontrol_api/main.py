@@ -1457,9 +1457,19 @@ def _wf_agents(parsed: dict) -> dict[str, dict]:
                       "content_zones": list(a.get("content_zones") or [])} for a in parsed.get("agents") or []}
 
 
+def _mcp_health() -> dict[tuple[str, str, str], tuple[str, Optional[str]]]:
+    """{(instance, profile, server): (health, error)} from the last MCP discoveries (Integrations)."""
+    rows = list_integrations({"email": "fleetcontrol", "role": "admin"})["integrations"]
+    return {(e["instance"], e["profile"], r["name"]): (e["health"], e.get("error"))
+            for r in rows if r["kind"] == "mcp" for e in r.get("profile_health") or []}
+
+
 def _wf_readiness(parsed: dict, steps: list[dict]) -> list[dict]:
-    """Per instance with a paired agent: can this workflow run there, and if not, why (a missing profile or MCP server)."""
+    """Per instance with a paired agent: can this workflow run there, and if not, why (a missing profile or MCP server).
+    ``warnings`` do not block: an MCP server the last discovery found unreachable from the agent's profile (an expired
+    login, typically) will fail that step, so it is said before the run starts rather than found by a worker."""
     agents = _wf_agents(parsed)
+    health = _mcp_health()
     out = []
     for inst in store.list_instances():
         if inst["mode"] != "agent" or not inst.get("agent_version"):
@@ -1469,8 +1479,16 @@ def _wf_readiness(parsed: dict, steps: list[dict]) -> list[dict]:
         problems = [f"{a} runs as profile {agents[a]['profile']}, which {inst['id']} does not have"
                     for a in agents_used(steps) if a in agents and agents[a]["profile"] not in live]
         problems += missing_requirements(steps, agents, mcps)
+        warnings = []
+        for a in agents_used(steps):
+            profile = agents.get(a, {}).get("profile")
+            for mcp in agents.get(a, {}).get("mcps", []):
+                state, error = health.get((inst["id"], profile, mcp), (None, None))
+                if state == "unreachable":
+                    warnings.append(f"{mcp} was unreachable from {profile} at the last discovery"
+                                    + (f" ({error[:160]})" if error else "") + ": log the profile in again, then Discover")
         out.append({"instance_id": inst["id"], "environment": inst["environment"], "ready": not problems, "problems": problems,
-                    "kanban": _wf_kanban(inst)})
+                    "warnings": warnings, "kanban": _wf_kanban(inst)})
     return out
 
 
@@ -1724,7 +1742,20 @@ def _wf_kanban_read(job: dict) -> None:
                 ok, output, error = settled
                 _wf_record(run, s["index"], agent, ok=ok, output=output, error=error, task_id=task_id)
                 run = store.get_workflow_run(run["id"])
+    if run["status"] == "failed":
+        _wf_kanban_clear(run, "the workflow run failed")  # its later tasks would otherwise wait on the board forever
+        return
     _wf_advance(run["id"])
+
+
+def _wf_kanban_clear(run: dict, why: str) -> None:
+    """Archive a run's Kanban tasks that have no result yet (running workers are reclaimed first)."""
+    open_tasks = [t for s in run["steps"] for a, t in (s.get("tasks") or {}).items()
+                  if t not in (None, "submitting") and a not in (s.get("results") or {})]
+    if open_tasks and run.get("board"):
+        store.enqueue_job(run["instance_id"], "kanban_cancel", {"board": run["board"], "task_ids": open_tasks},
+                          {"workflow_run": run["id"], "kanban": "cancel"})
+        store.record("fleetcontrol", "workflow.kanban_cleared", run["id"], f"{len(open_tasks)} task(s): {why}")
 
 
 @app.post("/api/v1/workflows/runs", status_code=201)
@@ -1843,11 +1874,7 @@ def cancel_workflow_run(run_id: str, user: dict = Depends(require("workflows.run
             job = store.get_job(job_id) if job_id and job_id != "queued" else None
             if job and job["status"] in ("queued", "running"):
                 store.complete_job(job["id"], {"ok": False, "error": f"run cancelled by {user['email']}"}, instance_id=job["instance_id"])
-    open_tasks = [t for s in run["steps"] for a, t in (s.get("tasks") or {}).items()
-                  if t not in (None, "submitting") and a not in (s.get("results") or {})]
-    if open_tasks:  # stop the workers and take the cards off the board
-        store.enqueue_job(run["instance_id"], "kanban_cancel", {"board": run["board"], "task_ids": open_tasks},
-                          {"workflow_run": run_id, "kanban": "cancel"})
+    _wf_kanban_clear(run, f"run cancelled by {user['email']}")  # stop the workers and take the cards off the board
     run = store.update_workflow_run(run_id, lambda d: d.update(status="cancelled", finished_at=time.time(), updated_at=time.time(),
                                                                 error=f"cancelled by {user['email']}"))
     store.record(user["email"], "workflow.cancelled", run_id)

@@ -6,6 +6,29 @@ import { formatDateTime } from "../lib/view";
 import { Banner, Card, Chip, Icon, PageHeader, Spinner } from "../components/ui";
 
 // design/screens/WorkspaceHome: decisions waiting for me, and the ones I have already made.
+/** Workflow runs stopped at a gate you may decide (your role, or escalated to you). */
+function WorkflowGates() {
+  const { data: gates } = useLoad(api.workflowGatesForMe, [], 20_000);
+  if (!gates || gates.length === 0) return null;
+  return (
+    <Card className="p-[18px] flex flex-col gap-2.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[15px] font-semibold">Workflow approvals waiting for me</span>
+        <Chip tone="warning">{gates.length} waiting</Chip>
+      </div>
+      {gates.map((g) => (
+        <Link key={g.id} to={`/workflow-runs/${g.id}`} className="flex items-center gap-3 py-2 border-b border-hairline last:border-b-0 no-underline text-text">
+          <span className="flex-1 min-w-0">
+            <span className="block text-[13px] font-medium truncate">{g.case || g.workflow_id}</span>
+            <span className="text-small text-text-secondary">{g.workflow_id} · step {(g.gate?.index ?? 0) + 1} of {g.progress.total} · {g.blueprint}</span>
+          </span>
+          {g.gate?.escalated_at ? <Chip tone="error">Escalated to you</Chip> : g.overdue ? <Chip tone="error">Overdue</Chip> : null}
+        </Link>
+      ))}
+    </Card>
+  );
+}
+
 export function MyDecisionsScreen() {
   const { data: rooms, error } = useLoad(() => api.rooms(), [], 20_000);
   const { waiting, decided, elsewhere } = decisionQueue(rooms ?? []);
@@ -29,6 +52,8 @@ export function MyDecisionsScreen() {
               {waiting.map((r) => <RoomLine key={r.id} room={r} />)}
             </div>
           </Card>
+
+          <WorkflowGates />
 
           {decided.length > 0 && (
             <Card className="p-[18px] flex flex-col gap-2.5">

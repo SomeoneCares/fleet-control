@@ -385,6 +385,44 @@ export interface IntegrationsDoc {
   discovery: { instance_id: string; at: number | null; can_discover: boolean }[];
 }
 
+// Workflows (workflows.py): a blueprint's workflow, and its runs step by step.
+export type WorkflowStepKind = "agent" | "parallel" | "human_gate" | "decision_room";
+export type WorkflowStepStatus = "pending" | "running" | "waiting" | "done" | "failed" | "skipped";
+export type WorkflowRunStatus = "running" | "waiting" | "done" | "failed" | "cancelled";
+
+export interface WorkflowMember { agent: string; artifact: string | null; input: string | null }
+export interface WorkflowStepResult {
+  ok: boolean; output: string | null; error: string | null; artifact_id: string | null; run_ref: string | null; at: number;
+  tools?: string[] | null; session_id?: string | null;
+}
+export interface WorkflowStep {
+  index: number; kind: WorkflowStepKind; status: WorkflowStepStatus; label: string;
+  started_at: number | null; finished_at: number | null; error: string | null;
+  members?: WorkflowMember[]; results?: Record<string, WorkflowStepResult>; note?: string | null;
+  role?: string; timeout?: string; escalate_to?: string | null; on_reject?: string | null; escalated_at?: number | null;
+  gate?: { by: string; approved: boolean; note: string; at: number } | null;
+  question_template?: string | null; room_id?: string | null;
+}
+export interface Workflow {
+  blueprint: string; version: number | null; id: string; steps: WorkflowStep[]; gates: number;
+  agents: Record<string, { profile: string; mcps: string[]; content_zones: string[] }>;
+  readiness: { instance_id: string; environment: Environment; ready: boolean; problems: string[] }[];
+}
+export interface WorkflowRunRow {
+  id: string; blueprint: string; version: number; workflow_id: string; instance_id: string; status: WorkflowRunStatus;
+  case: string | null; started_by: string; started_at: number; updated_at: number; finished_at: number | null; error: string | null;
+  room_id: string | null; progress: { done: number; total: number; current: number | null; current_label: string | null };
+  awaiting_role: string | null; overdue: boolean;
+  gate?: { index: number; role: string; timeout: string; started_at: number; escalated_at: number | null };
+}
+export interface WorkflowRun {
+  id: string; blueprint: string; version: number; workflow_id: string; instance_id: string; zone: string | null; case: string | null;
+  input: string | null; status: WorkflowRunStatus; started_by: string; started_at: number; updated_at: number; finished_at: number | null;
+  steps: WorkflowStep[]; artifacts: Record<string, { agent: string; step: number; artifact_id: string | null; at: number }>;
+  room_id: string | null; error: string | null; row: WorkflowRunRow;
+  may_decide: Record<string, { allowed: boolean; why: string | null }>;
+}
+
 // Access inspector (access.py): effective access, each line with the rule behind it.
 export interface AccessPermission { permission: string; area: string; label: string; allowed: boolean; why: string }
 export interface AccessZone { zone: string; name: string; classification?: string | null; allowed: boolean; why: string }
@@ -1037,6 +1075,15 @@ export const api = {
   testRuns: (q: { blueprint?: string; test_id?: string; instance_id?: string; limit?: number } = {}) =>
     call<TestRun[]>("GET", "/api/v1/testlab/runs", undefined, params(q)),
   testRun: (id: string) => call<TestRun>("GET", `/api/v1/testlab/runs/${enc(id)}`),
+  workflows: () => call<Workflow[]>("GET", "/api/v1/workflows"),
+  workflowRuns: (active = false) => call<WorkflowRunRow[]>("GET", `/api/v1/workflows/runs${active ? "?active=true" : ""}`),
+  workflowRun: (id: string) => call<WorkflowRun>("GET", `/api/v1/workflows/runs/${enc(id)}`),
+  workflowGatesForMe: () => call<WorkflowRunRow[]>("GET", "/api/v1/workflows/waiting-for-me"),
+  startWorkflow: (body: { blueprint: string; workflow_id: string; instance_id: string; input: string; case?: string; zone?: string }) =>
+    call<WorkflowRun>("POST", "/api/v1/workflows/runs", body),
+  decideWorkflowGate: (id: string, index: number, body: { approve: boolean; note?: string }) =>
+    call<WorkflowRun>("POST", `/api/v1/workflows/runs/${enc(id)}/gates/${index}`, body),
+  cancelWorkflowRun: (id: string) => call<WorkflowRun>("POST", `/api/v1/workflows/runs/${enc(id)}/cancel`),
   accessSubjects: () => call<AccessSubjects>("GET", "/api/v1/access/subjects"),
   accessInspect: (q: { email?: string; blueprint?: string; agent?: string; tool?: string; room?: string; environment?: string }) =>
     call<AccessInspection>("GET", "/api/v1/access/inspect?" + new URLSearchParams(

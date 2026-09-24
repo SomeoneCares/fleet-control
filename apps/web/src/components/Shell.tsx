@@ -22,7 +22,7 @@ export const NAV: { group: string; items: NavItem[] }[] = [
     { key: "fleet-architect", label: "Fleet Architect", icon: "spark", to: "/architect" },
     { key: "fleet-designer", label: "Fleet Designer", icon: "graph", to: "/designer" },
     { key: "agent-studio", label: "Agent Studio", icon: "bot", to: "/studio" },
-    { key: "workflows", label: "Workflows", icon: "flow", slice: 5 },
+    { key: "workflows", label: "Workflows", icon: "flow", to: "/workflows", permission: "blueprints.read" },
   ] },
   { group: "Operate", items: [
     { key: "decision-rooms", label: "Decision Rooms", icon: "chat", to: "/rooms", permission: "rooms.read" },

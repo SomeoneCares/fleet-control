@@ -5,6 +5,8 @@ import { Card, PageHeader } from "./components/ui";
 import { useAuth, useMe } from "./lib/auth";
 import { AccessScreen } from "./screens/Access";
 import { AskFleetScreen } from "./screens/AskFleet";
+import { WorkflowsScreen } from "./screens/Workflows";
+import { WorkflowRunScreen } from "./screens/WorkflowRun";
 import { ApplyPlanScreen } from "./screens/ApplyPlan";
 import { AuditScreen } from "./screens/Audit";
 import { BlueprintsScreen } from "./screens/Blueprints";
@@ -77,6 +79,8 @@ export const router = createBrowserRouter([
       { path: "rooms/:id", element: guarded("rooms.read", <DecisionRoomScreen />) },
       { path: "my-decisions", element: guarded("rooms.read", <MyDecisionsScreen />) },
       { path: "ask", element: guarded("ask.use", <AskFleetScreen />) },
+      { path: "workflows", element: guarded("blueprints.read", <WorkflowsScreen />) },
+      { path: "workflow-runs/:id", element: <WorkflowRunScreen /> },  // the API decides: readers of blueprints, or whoever decides a gate
       { path: "integrations", element: guarded("instances.read", <IntegrationsScreen />) },
       { path: "messaging", element: guarded("messaging.read", <FeatureGate feature="messaging" label="Messaging"><MessagingScreen /></FeatureGate>) },
       { path: "testlab", element: guarded("blueprints.read", <TestLabScreen />) },

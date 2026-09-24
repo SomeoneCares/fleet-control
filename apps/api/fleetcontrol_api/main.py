@@ -1508,7 +1508,7 @@ def _wf_escalate() -> None:
                          f"step {step['index'] + 1}: {step['timeout']} passed; " + (f"escalated to {target}" if people
                                                                                      else f"no role or account {target!r} to escalate to"))
             _notify_people("gate.escalated", key=f"wf:{run['id']}:gate{step['index']}:escalated", people=people,
-                           ctx={"case": run.get("case"), "link": f"/workflows?run={run['id']}",
+                           ctx={"case": run.get("case"), "link": f"/workflow-runs/{run['id']}",
                                 "detail": f"{run['workflow_id']}: the {step['role']} approval is overdue ({step['timeout']})."})
 
 
@@ -1556,7 +1556,7 @@ def _wf_advance(run_id: str) -> Optional[dict]:
             store.record("fleetcontrol", "workflow.gate_waiting", run_id, f"step {gate['index'] + 1}: {gate['role']} to approve")
             _notify_people("gate.waiting", key=f"wf:{run_id}:gate{gate['index']}:{gate['started_at']}",
                            people=[u for u in store.list_users() if u["role"] == gate["role"]],
-                           ctx={"case": run.get("case"), "link": f"/workflows?run={run_id}",
+                           ctx={"case": run.get("case"), "link": f"/workflow-runs/{run_id}",
                                 "detail": f"{run['workflow_id']} step {gate['index'] + 1}; decide within {gate['timeout']}."})
             return run
         if "room" in todo:
@@ -1670,6 +1670,19 @@ def list_workflow_runs(active: bool = False, user: dict = Depends(require("bluep
 def _wf_run_out(run: dict, user: dict) -> dict:
     gates = {s["index"]: may_decide_gate(s, email=user["email"], role=user["role"]) for s in run["steps"] if s["kind"] == "human_gate"}
     return {**run, "row": wf_run_row(run), "may_decide": {i: {"allowed": ok, "why": why} for i, (ok, why) in gates.items()}}
+
+
+@app.get("/api/v1/workflows/waiting-for-me")
+def workflow_gates_for_me(user: dict = Depends(current_user)) -> list[dict]:
+    """Runs stopped at a gate this person may decide now (its role, an Admin, or whom it escalated to)."""
+    _wf_escalate()
+    out = []
+    for run in store.list_workflow_runs(active=True):
+        cur = current_step(run)
+        if cur and cur["kind"] == "human_gate" and may_decide_gate(cur, email=user["email"], role=user["role"])[0]:
+            out.append({**wf_run_row(run), "gate": {"index": cur["index"], "role": cur["role"], "timeout": cur["timeout"],
+                                                    "started_at": cur["started_at"], "escalated_at": cur.get("escalated_at")}})
+    return out
 
 
 @app.get("/api/v1/workflows/runs/{run_id}")

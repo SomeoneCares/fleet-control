@@ -233,7 +233,7 @@ def settle(run: dict, at: Optional[float] = None) -> dict:
 def gate_overdue(step: dict, now: Optional[float] = None) -> bool:
     """A gate past its timeout."""
     now = now if now is not None else time.time()
-    if step["kind"] != "human_gate" or step["status"] != "waiting" or not step.get("started_at"):
+    if step["kind"] != "human_gate" or step["status"] != "waiting" or step.get("started_at") is None:
         return False
     return now - step["started_at"] > duration_seconds(step.get("timeout", "24h"))
 

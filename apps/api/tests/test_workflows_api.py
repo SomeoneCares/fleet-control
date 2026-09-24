@@ -77,6 +77,9 @@ class WorkflowsApiTest(unittest.TestCase):
         challenger = self.answer("Memo v1")
         self.assertIn("UBO: J. Doe", challenger["params"]["input"])  # it reviews what the others produced
 
+        mine = self.approver.get("/api/v1/workflows/waiting-for-me").json()
+        self.assertEqual([(m["id"], m["gate"]["index"]) for m in mine if m["id"] == run_id], [(run_id, 3)])
+        self.assertEqual([m for m in self.operator.get("/api/v1/workflows/waiting-for-me").json() if m["id"] == run_id], [])
         run = self.approver.get(f"/api/v1/workflows/runs/{run_id}").json()
         self.assertEqual((run["status"], run["row"]["awaiting_role"], run["may_decide"]["3"]["allowed"]), ("waiting", "approver", True))
         self.assertEqual(self.operator.post(f"/api/v1/workflows/runs/{run_id}/gates/3", json={"approve": True}).status_code, 409)

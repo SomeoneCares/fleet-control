@@ -182,6 +182,16 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   account) and ticks events offered to their role (`PERSONAL_EVENTS`); they are told only about what they may see
   (rooms in zones they read, production plans they may approve, never their own). Blueprint rules never target a
   direct channel. Settings → Notifications is Slice 4's last piece: Slice 4 is complete.
+- DONE (2026-09-25): Slice 5 part 1, workflow runs (`workflows.py` state machine, `/api/v1/workflows*`, screens
+  `/workflows` and `/workflow-runs/:id`, gates on My decisions; `workflows.run` = admin portal roles). A run starts
+  only where every agent's profile and MCP server exists; each agent step is a `hermes_run` with the transcript, a
+  parallel group queues all at once, every agent reads the request plus the full text of earlier artifacts, every
+  result is a fleet output in the run's zone. Gates are decided in the portal by their role (or an Admin), approve
+  or send back with a note to `on_reject` (everything after it reruns); overdue gates escalate once on the next agent
+  heartbeat to `escalate_to` (role or email; a missing target is audited, not skipped). The last step opens a
+  Decision Room with every artifact as evidence. Personal events `gate.waiting` / `gate.escalated`.
+  NEXT (part 2): map runs onto Hermes Kanban where the instance has it (`/api/plugins/kanban/…`: boards, tasks with
+  parent links, comments, attachments; dispatcher in the gateway), portal still owning the gates.
 - PLAN (Basem, 2026-09-16): complete the whole portal before Docker, every screen working end to end (real backend,
   real Hermes runs on the lab host where needed), in build-document order: Slice 2 Fleet Architect → Slice 3 Test
   Lab, Assurance, Integrations (+ Settings → Observability) → Slice 4 Workspace, Decision Rooms, Ask the fleet,

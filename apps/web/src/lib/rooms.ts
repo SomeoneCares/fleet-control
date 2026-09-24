@@ -1,4 +1,4 @@
-import type { DecisionRoomRow, EvidenceKind, RoomBase, RoomOption } from "../api/client";
+import type { Basis, DecisionRoomRow, EvidenceKind, RoomBase, RoomOption } from "../api/client";
 import type { IconName } from "../components/ui";
 import type { Tone } from "./view";
 
@@ -15,6 +15,37 @@ export const EVIDENCE_LABEL: Record<EvidenceKind, string> = {
   claim: "Assurance claim",
   note: "Note",
 };
+
+// What each item rests on, so a person deciding can tell data from computation from reading from judgment.
+export const BASIS_LABEL: Record<Basis, string> = {
+  source: "Source data",
+  analytical: "Analytical result",
+  interpretation: "Agent interpretation",
+  assumption: "Assumption",
+  judgment: "Human judgment",
+};
+
+export const BASIS_TONE: Record<Basis, Tone> = {
+  source: "neutral",
+  analytical: "info",
+  interpretation: "neutral",
+  assumption: "warning",
+  judgment: "success",
+};
+
+// Which bases a person may pick for each kind of evidence (rooms.py _EVIDENCE_BASES; the first is the default).
+export const EVIDENCE_BASES: Record<EvidenceKind, Basis[]> = {
+  note: ["judgment", "assumption", "source"],
+  file: ["source", "analytical", "assumption"],
+  output: ["interpretation", "analytical", "assumption"],
+  claim: [],
+};
+
+/** How many items of the room rest on each basis, in a fixed order, leaving out the ones with none. */
+export function basisCounts(items: { basis?: Basis | null }[]): { basis: Basis; count: number }[] {
+  const order: Basis[] = ["source", "analytical", "interpretation", "assumption", "judgment"];
+  return order.map((basis) => ({ basis, count: items.filter((i) => i.basis === basis).length })).filter((b) => b.count > 0);
+}
 
 /** A room's state, said the way the room itself reports it: a split decision is not hidden. */
 export function statusChip(room: Pick<RoomBase, "status" | "outcome">): { label: string; tone: Tone } {

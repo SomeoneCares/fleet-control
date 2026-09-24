@@ -44,7 +44,7 @@ from .testlab import VERDICTS, evaluate
 from .importer import LiveImportError, blueprint_from_live
 from .integrations import aggregate, mcp_config
 from .outputs import KINDS, OutputError, new_output, output_row, provenance
-from .rooms import RoomError, decide, new_evidence, new_finding, new_room, room_row, room_view
+from .rooms import RoomError, check_tool, decide, new_evidence, new_finding, new_room, room_row, room_view
 from .planner import compute_plan, mcp_sources, to_agent_job
 from .settings import DEFAULTS as SETTING_DEFAULTS
 from .settings import SettingsUpdate, approval_floor, effective as effective_settings
@@ -587,6 +587,7 @@ class EvidenceAdd(BaseModel):
     ref: Optional[str] = None
     source: Optional[str] = None
     verdict: Optional[str] = None
+    basis: Optional[Literal["source", "analytical", "interpretation", "assumption", "judgment"]] = None
 
 
 @app.post("/api/v1/rooms/{room_id}/evidence", status_code=201)
@@ -598,7 +599,7 @@ def add_evidence(room_id: str, body: EvidenceAdd, user: dict = Depends(require("
         raise HTTPException(404, "no such output in a zone you may read")
     try:
         item = new_evidence(kind=body.kind, label=body.label, ref=body.ref, source=body.source, verdict=body.verdict,
-                            added_by=user["email"], at=time.time())
+                            added_by=user["email"], at=time.time(), basis=body.basis)
     except RoomError as exc:
         raise HTTPException(422, str(exc))
     updated = store.update_room(room["id"], lambda r: (r["evidence"].append(item), r.update(updated_at=item["at"]))[0])
@@ -651,6 +652,11 @@ class FindingBody(BaseModel):
     text: str = Field(..., min_length=1, max_length=2000)
     verdict: Optional[str] = None
     run_id: Optional[str] = None
+    # what the finding rests on (rooms.FINDING_BASES); an analytical one names the tool that computed it, and
+    # session_id is the Hermes session it came from, whose recorded tool calls Fleet Control checks
+    basis: Optional[str] = None
+    tool: Optional[str] = Field(None, max_length=200)
+    session_id: Optional[str] = Field(None, max_length=200)
 
 
 # The two agent routes for rooms live with the rest of the /agent/v1 family, below `agent_instance`.
@@ -1918,8 +1924,16 @@ def agent_add_finding(room_id: str, body: FindingBody, inst: str = Depends(agent
     room = store.get_room(room_id)
     if not room:
         raise HTTPException(404, "no such decision room")
+    check = None
+    if body.tool:
+        # checked against what this instance recorded, never taken on the agent's word
+        run = store.get_test_run(body.run_id) if body.run_id else None
+        run = run if run and run.get("instance_id") == inst else None
+        events = store.session_tool_events(inst, body.session_id) if body.session_id and run is None else None
+        check = check_tool(body.tool, run=run, events=events)
     try:
-        finding = new_finding(agent=body.agent, text=body.text, verdict=body.verdict, run_id=body.run_id, at=time.time())
+        finding = new_finding(agent=body.agent, text=body.text, verdict=body.verdict, run_id=body.run_id, at=time.time(),
+                              basis=body.basis, tool=body.tool, session_id=body.session_id, tool_check=check)
     except RoomError as exc:
         raise HTTPException(422, str(exc))
     store.update_room(room_id, lambda r: (r["findings"].append(finding), r.update(updated_at=finding["at"]))[0])

@@ -718,6 +718,14 @@ class Store:
         with self._tx() as c:
             return [r["doc"] for r in reversed(_all(c, q))]
 
+    def session_tool_events(self, instance_id: str, session_id: str, scan: int = 5000) -> list[dict]:
+        """The plugin's tool events (tool.pre, tool.post) of one Hermes session on one instance, oldest first,
+        from the latest ``scan`` tool events of that instance."""
+        q = (select(EVENTS.c.doc).where(EVENTS.c.instance_id == instance_id, EVENTS.c.kind.in_(("tool.pre", "tool.post")))
+             .order_by(EVENTS.c.seq.desc()).limit(scan))
+        with self._tx() as c:
+            return [r["doc"] for r in reversed(_all(c, q)) if r["doc"].get("session_id") == session_id]
+
     # ---- workspace settings --------------------------------------------------
     def get_settings(self) -> dict[str, Any]:
         """Stored values only; fleetcontrol_api.settings.effective merges them over the defaults."""

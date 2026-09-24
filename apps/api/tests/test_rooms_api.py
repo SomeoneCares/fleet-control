@@ -119,6 +119,33 @@ class RoomsApiTest(unittest.TestCase):
         self.assertEqual(bare.post(f"/agent/v1/rooms/{room_id}/findings",
                                    json={"agent": "x", "text": "y", "verdict": "Probably"}, headers=agent).status_code, 422)
 
+    def test_an_analytical_finding_is_checked_against_the_session_not_the_agents_word(self):
+        inst = "room-inst-" + os.urandom(3).hex()
+        pair = self.admin.post("/api/v1/instances", json={"id": inst, "environment": "lab", "mode": "agent"}).json()["pairing_token"]
+        tok = self.admin.post("/agent/v1/pair", json={"instance_id": inst, "agent_version": "0.1.0", "report": {}},
+                              headers={"Authorization": f"Bearer {pair}"}).json()["agent_token"]
+        agent = {"Authorization": f"Bearer {tok}", "X-Hermes-Profile": "sas-analyst"}
+        bare = TestClient(app)
+        room_id = bare.post(f"/agent/v1/instances/{inst}/rooms", json={"question": QUESTION, "zone": self.zone, "options": OPTIONS},
+                            headers=agent).json()["id"]
+        store.add_events(inst, [{"kind": "tool.post", "session_id": "s1", "tool": "mcp_sas_viya__run_model"}])
+        file = lambda **kw: bare.post(f"/agent/v1/rooms/{room_id}/findings", json={"agent": "sas-analyst", **kw}, headers=agent)
+        self.assertEqual(file(text="PD is 4.2% under the stressed scenario.", basis="analytical", tool="sas-viya.run_model",
+                              session_id="s1").status_code, 201)
+        self.assertEqual(file(text="The score says low risk.", basis="analytical", tool="sas-viya.score", session_id="s1").status_code, 201)
+        self.assertEqual(file(text="Rates stay flat next year.", basis="assumption").status_code, 201)
+        self.assertEqual(file(text="Approve it.", basis="judgment").status_code, 422)
+        self.assertEqual(file(text="A number.", basis="analytical").status_code, 422)
+        found = self.admin.get(f"/api/v1/rooms/{room_id}").json()["findings"]
+        self.assertEqual([(f["basis"], (f["tool_check"] or {}).get("verdict")) for f in found],
+                         [("analytical", "Evidence found"), ("analytical", "No evidence"), ("assumption", None)])
+
+        r = self.admin.post(f"/api/v1/rooms/{room_id}/evidence", json={"kind": "note", "label": "Rates assumption is ours", "basis": "assumption"})
+        self.assertEqual(r.status_code, 201, r.text)
+        self.assertEqual(r.json()["evidence"][-1]["basis"], "assumption")
+        self.assertEqual(self.admin.post(f"/api/v1/rooms/{room_id}/evidence",
+                                         json={"kind": "note", "label": "x", "basis": "analytical"}).status_code, 422)
+
     def test_cancelling_a_room(self):
         room = self._open().json()
         other_admin = signed_in("admin")

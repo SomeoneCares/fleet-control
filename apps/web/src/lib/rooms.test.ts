@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DecisionRoomRow } from "../api/client";
 import {
-  EVIDENCE_ICON, EVIDENCE_LABEL, casesOf, decisionQueue, dueLabel, matchesQuery, optionLabel, statusChip, waitingLabel,
+  BASIS_LABEL, EVIDENCE_BASES, EVIDENCE_ICON, EVIDENCE_LABEL, basisCounts, casesOf, decisionQueue, dueLabel, matchesQuery, optionLabel, statusChip, waitingLabel,
 } from "./rooms";
 
 const OPTIONS = [
@@ -74,5 +74,14 @@ describe("decision room view logic", () => {
     expect(q.waiting.map((r) => r.id)).toEqual(["a"]);
     expect(q.decided.map((r) => r.id)).toEqual(["b"]);
     expect(q.elsewhere.map((r) => r.id)).toEqual(["c"]);
+  });
+
+  it("says what each item rests on, and never offers a judgment for anything but a person's note", () => {
+    const items = [{ basis: "analytical" as const }, { basis: "source" as const }, { basis: "analytical" as const }, { basis: null }, {}];
+    expect(basisCounts(items)).toEqual([{ basis: "source", count: 1 }, { basis: "analytical", count: 2 }]);
+    expect(BASIS_LABEL.interpretation).toBe("Agent interpretation");
+    const judged = Object.entries(EVIDENCE_BASES).filter(([, bases]) => bases.includes("judgment")).map(([kind]) => kind);
+    expect(judged).toEqual(["note"]);
+    expect(EVIDENCE_BASES.claim).toEqual([]);
   });
 });

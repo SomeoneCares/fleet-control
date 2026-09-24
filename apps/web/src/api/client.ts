@@ -274,8 +274,12 @@ export interface RoomOption {
   label: string;
 }
 
+// What a piece of evidence or a finding rests on (rooms.py BASES). Only people make judgments.
+export type Basis = "source" | "analytical" | "interpretation" | "assumption" | "judgment";
+
 export interface RoomEvidence {
   kind: EvidenceKind;
+  basis?: Basis | null;  // null for a claim (it carries its verdict); absent on items filed before bases existed
   label: string;
   ref: string | null;
   source: string | null;
@@ -290,6 +294,10 @@ export interface RoomFinding {
   verdict: Verdict | null;
   run_id: string | null;
   at: number;
+  basis?: Basis;
+  tool?: string | null;  // the tool an analytical finding says computed it
+  session_id?: string | null;
+  tool_check?: { verdict: Verdict; detail: string } | null;  // Fleet Control's check of that tool against the run
 }
 
 export interface RoomDecision {
@@ -834,7 +842,7 @@ export const api = {
   room: (id: string) => call<DecisionRoom>("GET", `/api/v1/rooms/${enc(id)}`),
   openRoom: (body: { question: string; zone: string; options: string[]; case?: string; due_at?: number; second_approver?: string }) =>
     call<DecisionRoom>("POST", "/api/v1/rooms", body),
-  addEvidence: (id: string, body: { kind: EvidenceKind; label: string; ref?: string; source?: string; verdict?: Verdict }) =>
+  addEvidence: (id: string, body: { kind: EvidenceKind; label: string; ref?: string; source?: string; verdict?: Verdict; basis?: Basis }) =>
     call<DecisionRoom>("POST", `/api/v1/rooms/${enc(id)}/evidence`, body),
   decideRoom: (id: string, body: { option: string; rationale: string }) =>
     call<DecisionRoom>("POST", `/api/v1/rooms/${enc(id)}/decide`, body),

@@ -6,6 +6,12 @@ that worked the case. People decide by choosing an option and writing a rational
 one per person, and a room that needs a second approver stays open until they have decided too. The room's
 content zone decides who may see it, exactly as it does for files and outputs.
 
+Every piece of evidence and every finding says what it rests on (its ``basis``), so a person deciding can tell
+the source data from what an analytical system (SAS, say) computed, from an agent's reading of either, from an
+assumption, from a person's judgment. Only people make judgments. An analytical finding names the tool that
+computed it, and Fleet Control checks that tool against what the run actually called: one of the four verdicts,
+never a guess.
+
 Messaging delivers a room; it never records a decision (build document §8).
 """
 
@@ -15,6 +21,14 @@ import re
 from typing import Any, Iterable, Optional
 
 EVIDENCE_KINDS = ("file", "output", "claim", "note")
+BASES = ("source", "analytical", "interpretation", "assumption", "judgment")
+# what each kind of item may rest on, and what it rests on when nobody says; a claim is Fleet Control's own
+# verification of a run, so it carries its verdict instead of a basis
+_EVIDENCE_BASES = {"file": (("source", "analytical", "assumption"), "source"),
+                   "output": (("analytical", "interpretation", "assumption"), "interpretation"),
+                   "note": (("source", "assumption", "judgment"), "judgment"),
+                   "claim": ((), None)}
+FINDING_BASES = ("source", "analytical", "interpretation", "assumption")  # agents do not judge; people do
 VERDICTS = ("Evidence found", "No evidence", "Not verifiable", "Policy blocked")
 STATUSES = ("open", "decided", "cancelled")
 _OPTION_ID = re.compile(r"^[a-z][a-z0-9-]{1,40}$")
@@ -67,9 +81,13 @@ def new_room(*, room_id: str, question: str, zone: str, options: list[str], open
 
 
 def new_evidence(*, kind: str, label: str, ref: Optional[str] = None, source: Optional[str] = None,
-                 verdict: Optional[str] = None, added_by: str, at: float) -> dict:
+                 verdict: Optional[str] = None, added_by: str, at: float, basis: Optional[str] = None) -> dict:
     if kind not in EVIDENCE_KINDS:
         raise RoomError(f"evidence is one of: {', '.join(EVIDENCE_KINDS)}")
+    allowed, default = _EVIDENCE_BASES[kind]
+    if basis is not None and basis not in allowed:
+        raise RoomError(f"{kind} evidence rests on one of: {', '.join(allowed)}" if allowed
+                        else "a claim carries its verdict, not a basis")
     label = (label or "").strip()
     if not label or len(label) > 300:
         raise RoomError("evidence needs a label of at most 300 characters")
@@ -77,10 +95,13 @@ def new_evidence(*, kind: str, label: str, ref: Optional[str] = None, source: Op
         raise RoomError(f"a verdict is one of: {', '.join(VERDICTS)}")
     if kind in ("file", "output", "claim") and not ref:
         raise RoomError(f"{kind} evidence points at something: give its id")
-    return {"kind": kind, "label": label, "ref": ref, "source": source, "verdict": verdict, "added_by": added_by, "at": at}
+    return {"kind": kind, "label": label, "ref": ref, "source": source, "verdict": verdict, "added_by": added_by, "at": at,
+            "basis": basis or default}
 
 
-def new_finding(*, agent: str, text: str, verdict: Optional[str] = None, at: float, run_id: Optional[str] = None) -> dict:
+def new_finding(*, agent: str, text: str, verdict: Optional[str] = None, at: float, run_id: Optional[str] = None,
+                basis: Optional[str] = None, tool: Optional[str] = None, session_id: Optional[str] = None,
+                tool_check: Optional[dict] = None) -> dict:
     text = (text or "").strip()
     if not text or len(text) > 2000:
         raise RoomError("a finding is between 1 and 2000 characters")
@@ -88,7 +109,39 @@ def new_finding(*, agent: str, text: str, verdict: Optional[str] = None, at: flo
         raise RoomError("a finding says which agent found it")
     if verdict is not None and verdict not in VERDICTS:
         raise RoomError(f"a verdict is one of: {', '.join(VERDICTS)}")
-    return {"agent": agent.strip(), "text": text, "verdict": verdict, "run_id": run_id, "at": at}
+    basis = basis or "interpretation"
+    if basis == "judgment":
+        raise RoomError("agents do not make judgments; people do, when they decide")
+    if basis not in FINDING_BASES:
+        raise RoomError(f"a finding rests on one of: {', '.join(FINDING_BASES)}")
+    tool = (tool or "").strip() or None
+    if basis == "analytical" and not tool:
+        raise RoomError("an analytical finding names the tool that computed it (for example sas-viya.run_model)")
+    return {"agent": agent.strip(), "text": text, "verdict": verdict, "run_id": run_id, "at": at, "basis": basis,
+            "tool": tool, "session_id": session_id, "tool_check": tool_check}
+
+
+def check_tool(tool: str, *, run: Optional[dict] = None, events: Optional[list[dict]] = None) -> dict:
+    """Did the run that produced a finding really call the tool the finding says computed it?
+
+    ``run`` is a Test Lab run (its transcript's tool calls); ``events`` are the fleetcontrol plugin's tool events
+    for the finding's session. Neither = Not verifiable: there is nothing to check against, and that is said."""
+    from .testlab import tool_matches
+
+    if run is not None:
+        calls = run.get("tool_calls")
+        if calls is None:
+            return {"verdict": "Not verifiable", "detail": f"run {run.get('id')} has no transcript"}
+        if any(tool_matches(tool, c.get("name") or "") for c in calls):
+            return {"verdict": "Evidence found", "detail": f"run {run.get('id')} called {tool}"}
+        return {"verdict": "No evidence", "detail": f"run {run.get('id')} never called {tool}"}
+    if events:
+        if any(e.get("kind") == "tool.pre" and e.get("decision") == "block" and tool_matches(tool, e.get("tool") or "") for e in events):
+            return {"verdict": "Policy blocked", "detail": f"a Fleet Control policy blocked {tool} in this session"}
+        if any(e.get("kind") == "tool.post" and tool_matches(tool, e.get("tool") or "") for e in events):
+            return {"verdict": "Evidence found", "detail": f"the session called {tool}"}
+        return {"verdict": "No evidence", "detail": f"the session's recorded tool calls do not include {tool}"}
+    return {"verdict": "Not verifiable", "detail": "no run or session with recorded tool calls to check against"}
 
 
 def decide(room: dict, *, by: str, option_id_: str, rationale: str, at: float) -> dict:

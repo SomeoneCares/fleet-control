@@ -3,7 +3,7 @@
 import unittest
 
 from fleetcontrol_api.rooms import (
-    RoomError, decide, is_complete, may_decide, new_evidence, new_finding, new_room, outcome, room_row, visible, waiting_for,
+    RoomError, check_tool, decide, is_complete, may_decide, new_evidence, new_finding, new_room, outcome, room_row, visible, waiting_for,
 )
 
 OPTIONS = ["File SAR draft for signature", "Request more evidence", "Close as legitimate transfer"]
@@ -92,6 +92,40 @@ class DecisionTest(unittest.TestCase):
         rooms = [room(), room(room_id="room_2", zone="hr")]
         self.assertEqual([r["id"] for r in visible(rooms, ["case-files"])], ["room_1"])
         self.assertEqual(visible(rooms, []), [])
+
+
+
+class BasisTest(unittest.TestCase):
+    """What each piece of evidence and each finding rests on, and who may claim what (Use Case 2)."""
+
+    def test_defaults_say_what_a_kind_of_item_usually_is(self):
+        mk = lambda kind, **kw: new_evidence(kind=kind, label="x", ref="r", added_by="p", at=1.0, **kw)["basis"]
+        self.assertEqual((mk("file"), mk("output"), mk("note"), mk("claim")), ("source", "interpretation", "judgment", None))
+        self.assertEqual(mk("file", basis="analytical"), "analytical")  # a SAS report attached as a file
+        self.assertEqual(mk("note", basis="assumption"), "assumption")
+        for kind, bad in (("note", "analytical"), ("output", "judgment"), ("claim", "source"), ("file", "whatever")):
+            with self.assertRaises(RoomError):
+                mk(kind, basis=bad)
+
+    def test_agents_never_judge_and_analytical_findings_name_their_tool(self):
+        self.assertEqual(new_finding(agent="a", text="t", at=1.0)["basis"], "interpretation")
+        with self.assertRaisesRegex(RoomError, "people do"):
+            new_finding(agent="a", text="t", at=1.0, basis="judgment")
+        with self.assertRaisesRegex(RoomError, "names the tool"):
+            new_finding(agent="a", text="t", at=1.0, basis="analytical")
+        f = new_finding(agent="a", text="PD 4.2%", at=1.0, basis="analytical", tool="sas-viya.run_model")
+        self.assertEqual((f["basis"], f["tool"]), ("analytical", "sas-viya.run_model"))
+
+    def test_the_tool_is_checked_against_what_the_run_called(self):
+        run = {"id": "tr_1", "tool_calls": [{"name": "mcp_sas_viya__run_model"}]}
+        self.assertEqual(check_tool("sas-viya.run_model", run=run)["verdict"], "Evidence found")
+        self.assertEqual(check_tool("sas-viya.score", run=run)["verdict"], "No evidence")
+        self.assertEqual(check_tool("sas-viya.run_model", run={"id": "tr_2", "tool_calls": None})["verdict"], "Not verifiable")
+        events = [{"kind": "tool.pre", "tool": "mcp_sas_viya__export", "decision": "block"},
+                  {"kind": "tool.post", "tool": "mcp_sas_viya__run_model"}]
+        self.assertEqual(check_tool("sas-viya.run_model", events=events)["verdict"], "Evidence found")
+        self.assertEqual(check_tool("sas-viya.export", events=events)["verdict"], "Policy blocked")
+        self.assertEqual(check_tool("sas-viya.run_model")["verdict"], "Not verifiable")  # nothing to check: said, not guessed
 
 
 if __name__ == "__main__":

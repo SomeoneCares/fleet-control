@@ -1,11 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { api, type ContentZone, type DecisionRoom, type EvidenceKind, type RoomStatus, type Verdict } from "../api/client";
+import { api, type Basis, type ContentZone, type DecisionRoom, type EvidenceKind, type RoomStatus, type Verdict } from "../api/client";
 import { useAuth, useMe } from "../lib/auth";
 import { errorText, useLoad } from "../lib/hooks";
-import {
-  EVIDENCE_ICON, EVIDENCE_LABEL, casesOf, dueLabel, matchesQuery, optionLabel, statusChip, waitingLabel,
-} from "../lib/rooms";
+import { EVIDENCE_ICON, EVIDENCE_LABEL, casesOf, dueLabel, matchesQuery, optionLabel, statusChip, waitingLabel, BASIS_LABEL, BASIS_TONE, EVIDENCE_BASES, basisCounts } from "../lib/rooms";
 import { VERDICT_TONE } from "../lib/testlab";
 import { formatDateTime, timeAgo } from "../lib/view";
 import { Banner, Button, Card, Chip, Field, INPUT, Icon, Modal, Mono, PageHeader, Spinner, TEXTAREA } from "../components/ui";
@@ -135,7 +133,12 @@ export function DecisionRoomScreen() {
                 <div className="flex flex-col gap-1.5 min-w-0">
                   <div className="text-[13px] font-medium leading-[18px]">{e.label}</div>
                   <div className="text-small text-text-secondary">{e.source || EVIDENCE_LABEL[e.kind]} · added by {e.added_by}</div>
-                  {e.verdict && <div><Chip tone={VERDICT_TONE[e.verdict]}>{e.verdict}</Chip></div>}
+                  {(e.basis || e.verdict) && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {e.basis && <Chip tone={BASIS_TONE[e.basis]}>{BASIS_LABEL[e.basis]}</Chip>}
+                      {e.verdict && <Chip tone={VERDICT_TONE[e.verdict]}>{e.verdict}</Chip>}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -143,7 +146,16 @@ export function DecisionRoomScreen() {
         </Card>
 
         <Card className="flex-1 min-w-0 p-[18px] flex flex-col gap-3.5">
-          <div className="text-[15px] font-semibold">What the fleet found</div>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="text-[15px] font-semibold">What the fleet found</div>
+            {basisCounts([...room.evidence, ...room.findings]).length > 0 && (
+              <div className="flex flex-wrap gap-1.5" title="What the room's evidence and findings rest on">
+                {basisCounts([...room.evidence, ...room.findings]).map((b) => (
+                  <Chip key={b.basis} tone={BASIS_TONE[b.basis]}>{b.count} {BASIS_LABEL[b.basis].toLowerCase()}</Chip>
+                ))}
+              </div>
+            )}
+          </div>
           {room.findings.length === 0 && (
             <p className="m-0 text-small text-text-secondary">
               No agent has filed a finding yet. Agents post findings through the agent route; they never decide.
@@ -159,7 +171,17 @@ export function DecisionRoomScreen() {
                 </div>
                 <div className="flex-1 min-w-0 flex flex-col gap-2.5">
                   <div className="leading-[22px] whitespace-pre-wrap break-words">{f.text}</div>
-                  {f.verdict && <div><Chip tone={VERDICT_TONE[f.verdict]}>{f.verdict}</Chip></div>}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {f.basis && <Chip tone={BASIS_TONE[f.basis]}>{BASIS_LABEL[f.basis]}</Chip>}
+                    {f.verdict && <Chip tone={VERDICT_TONE[f.verdict]}>{f.verdict}</Chip>}
+                  </div>
+                  {f.tool && (
+                    <div className="text-small text-text-secondary flex flex-wrap items-center gap-1.5">
+                      Computed by <Mono className="text-[12px]">{f.tool}</Mono>
+                      {f.tool_check && <>· checked: <Chip tone={VERDICT_TONE[f.tool_check.verdict]}>{f.tool_check.verdict}</Chip>
+                        <span>{f.tool_check.detail}</span></>}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -262,6 +284,9 @@ function EvidenceModal({ room, onClose, onAdded }: { room: DecisionRoom; onClose
   const [ref, setRef] = useState("");
   const [source, setSource] = useState("");
   const [verdict, setVerdict] = useState<Verdict | "">("");
+  const [basisPick, setBasis] = useState<Basis | "">("");
+  const bases = EVIDENCE_BASES[kind];
+  const basis = basisPick && bases.includes(basisPick) ? basisPick : bases[0];
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const needsRef = kind !== "note";
@@ -273,7 +298,7 @@ function EvidenceModal({ room, onClose, onAdded }: { room: DecisionRoom; onClose
     try {
       await api.addEvidence(room.id, {
         kind, label: label.trim(), ref: ref.trim() || undefined, source: source.trim() || undefined,
-        verdict: verdict || undefined,
+        verdict: verdict || undefined, basis: basis || undefined,
       });
       await onAdded();
     } catch (err) {
@@ -302,6 +327,13 @@ function EvidenceModal({ room, onClose, onAdded }: { room: DecisionRoom; onClose
         {needsRef && (
           <Field label="Reference" hint={kind === "claim" ? "The assurance claim's id." : `The ${kind}'s id, from ${kind === "file" ? "Content" : "Fleet outputs"}.`}>
             <input className={INPUT} value={ref} onChange={(e) => setRef(e.target.value)} placeholder={kind === "output" ? "out_…" : "file_…"} />
+          </Field>
+        )}
+        {bases.length > 0 && (
+          <Field label="Rests on" hint="What kind of statement this is. People judge; agents and systems do not.">
+            <select className={INPUT} value={basis} onChange={(e) => setBasis(e.target.value as Basis)}>
+              {bases.map((b) => <option key={b} value={b}>{BASIS_LABEL[b]}</option>)}
+            </select>
           </Field>
         )}
         <Field label="Source" hint="Where it came from, in words. Optional.">

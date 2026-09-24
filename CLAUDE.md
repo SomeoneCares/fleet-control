@@ -133,6 +133,14 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   callback listens on the host, so forward the port and keep the login's stdin open or it kills its own
   listener; profiles do not inherit root `mcp_servers`, so registration and tokens are per profile (N agents =
   N consents, or `allowRawBearer` + a service account, trading per-agent attribution for one identity).
+- DONE (2026-09-24): the five defects from the SAS week. Test runs can be stopped (`tests.run`) and deleted
+  (`tests.manage`, Admin); a cancelled run never counts. Integrations health is per profile (`degraded` when some
+  fail), `used_by` reads the newest *applied* version (drafts show as `planned_by`), discoveries merge per profile.
+  A blank MCP probe error gets the agent's own diagnosis (`diagnose_endpoint`). Apply reconciles `mcps`:
+  `copy_mcp` copies a registration from another profile on the same host (never env values, header tokens or OAuth
+  tokens; OAuth logins become the plan's `manual_steps`), `remove_mcp` removes. Room evidence and findings carry a
+  `basis` (source / analytical / interpretation / assumption / judgment; only people judge); an analytical finding
+  names its tool and Fleet Control checks it against the run or the plugin's session events (`rooms.check_tool`).
 - PLAN (Basem, 2026-09-16): complete the whole portal before Docker, every screen working end to end (real backend,
   real Hermes runs on the lab host where needed), in build-document order: Slice 2 Fleet Architect → Slice 3 Test
   Lab, Assurance, Integrations (+ Settings → Observability) → Slice 4 Workspace, Decision Rooms, Ask the fleet,

@@ -73,6 +73,33 @@ Both `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE` are set in `~/.fleetctl-agent/dash
 > **Fragile:** a `certifi` upgrade wipes the appended CA. This belongs in the host build, not in a
 > one-off command. A backup of the original bundle is kept at `cacert.pem.orig`.
 
+### Since Hermes 0.21.5: a bundle outside Hermes, named by `SSL_CERT_FILE` everywhere
+
+0.21.5 no longer runs from `~/.hermes/hermes-agent/venv`. The launcher (`~/.local/bin/hermes` →
+`hermes-agent/.hermes/bin/hermes`) starts a managed Python 3.14 whose packages live in a
+content-addressed environment, `~/.hermes/installs/<id>/environments/<id>/venv/`. Every update can
+make a new one, with a fresh `certifi` and no Viya root: after the 2026-09-26 update,
+`hermes mcp login` failed with `CERTIFICATE_VERIFY_FAILED` and the gateway could no longer reach SAS.
+(`hermes --run-module certifi` prints the bundle the runtime uses.)
+
+So the CA no longer goes into `certifi`. There is one bundle Hermes updates never touch:
+
+| File | What |
+|---|---|
+| `~/.hermes/certs/viya-root-ca.pem` | the Viya root alone |
+| `~/.hermes/certs/ca-bundle.pem` | the runtime's `certifi` roots + the Viya root |
+
+and `SSL_CERT_FILE` (plus `REQUESTS_CA_BUNDLE`) names it wherever Hermes runs:
+
+- gateway: drop-in `~/.config/systemd/user/hermes-gateway.service.d/viya-ca.conf` (a drop-in survives
+  Hermes rewriting its unit), then `systemctl --user daemon-reload` and a gateway restart
+- Fleet Control's dashboard: `~/.fleetctl-agent/dashboard.env`
+- interactive shells (`hermes mcp login`): `~/.profile` and `~/.bashrc`
+- the LAN `hermes-dashboard` is a system unit: the same `Environment=` lines need root
+
+Rebuild the bundle when the Viya root changes (it is valid until 2031-09-19):
+`cat "$(hermes --run-module certifi)" ~/.hermes/certs/viya-root-ca.pem > ~/.hermes/certs/ca-bundle.pem`.
+
 ## Trap 2 — device flow is not available; browser PKCE is
 
 `hermes mcp login sas-viya --flow device` fails with *"Server does not advertise device

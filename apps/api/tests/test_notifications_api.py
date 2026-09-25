@@ -100,3 +100,26 @@ class NotificationsApiTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+    def test_an_operator_hears_once_that_a_login_expires_and_once_that_it_has(self):
+        import time
+        sam = signed_in("operator")
+        self.assertEqual(sam.patch("/api/v1/me/notifications", json={"via": "telegram", "address": "555000111"}).status_code, 200)
+        self.lena.patch("/api/v1/me/notifications", json={"via": "telegram", "address": "123456789"})  # not hers to act on
+
+        def beat(expires_at):
+            report = {"mcp_logins": [{"profile": "sas-analyst", "server": "sas-viya", "expires_at": expires_at}]}
+            self.admin.post(f"/agent/v1/instances/{self.inst}/heartbeat", json={"agent_version": "0.1.0", "report": report},
+                            headers=self.agent)
+            return [j["params"] for j in self.queued() if j["params"].get("chat_id") in ("555000111", "123456789")]
+
+        exp = time.time() + 2 * 3600
+        sent = beat(exp)
+        beat(exp)  # the next heartbeat says the same: nothing new
+        self.assertEqual([p["chat_id"] for p in sent], ["555000111"])
+        self.assertEqual(len(beat(exp)), 1)
+        self.assertIn("sas-analyst → sas-viya", sent[0]["text"])
+        self.assertIn("/integrations", sent[0]["text"])
+        self.assertEqual(len(beat(time.time() - 5)), 2)  # it ran out: said once more
+        self.assertEqual(len(beat(time.time() + 30 * 24 * 3600)), 2)  # logged in again for a month: nothing to say

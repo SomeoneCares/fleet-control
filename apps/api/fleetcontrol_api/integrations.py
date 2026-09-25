@@ -7,7 +7,47 @@ allow- and deny-lists in policies). Server configuration lives on the instance, 
 
 from __future__ import annotations
 
+import re
+import time
+from datetime import datetime, timezone
 from typing import Any, Optional
+
+# How long before an OAuth login runs out Fleet Control starts saying so. Renewing one needs a person in a browser
+# on the host, so a warning has to come while there is still time to arrange that.
+LOGIN_WARN_SECONDS = 3 * 24 * 3600
+
+
+def token_file_name(server: str) -> str:
+    """Hermes' name for a server's token file (tools/mcp_oauth.py ``_safe_filename``)."""
+    return re.sub(r"[^\w\-]", "_", server).strip("_")[:128] or "default"
+
+
+def _when(ts: float) -> str:
+    return datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def _span(seconds: float) -> str:
+    hours = seconds / 3600
+    return f"{int(seconds // 60)} min" if hours < 1 else f"{hours:.0f} h" if hours < 48 else f"{hours / 24:.0f} days"
+
+
+def login_status(login: Optional[dict], now: Optional[float] = None) -> Optional[dict]:
+    """How an MCP OAuth login stands, from the times the agent reports (never a token): ``expired``, ``expiring``
+    (within LOGIN_WARN_SECONDS), ``ok``, or ``unknown`` (a refresh token whose lifetime the file does not say).
+    None when the profile has no login for the server."""
+    if not login:
+        return None
+    now = time.time() if now is None else now
+    exp = login.get("expires_at")
+    if not exp:
+        return {"state": "unknown", "expires_at": None,
+                "text": "logged in; when the login runs out is not recorded on the host"}
+    left = exp - now
+    if left <= 0:
+        return {"state": "expired", "expires_at": exp,
+                "text": f"the login expired {_when(exp)}: a person must run the browser login for this profile again"}
+    return {"state": "expiring" if left <= LOGIN_WARN_SECONDS else "ok", "expires_at": exp,
+            "text": f"the login expires in {_span(left)} ({_when(exp)})"}
 
 
 def _entry_health(server: dict) -> str:
@@ -38,7 +78,8 @@ def _health(entries: list[dict]) -> tuple[str, Optional[str]]:
 
 def aggregate(*, instances: list[dict], live: dict[str, dict[str, dict]], discovered: dict[str, dict],
               blueprints: list[dict], drafts: Optional[list[dict]] = None, live_at: Optional[dict[str, float]] = None,
-              discovered_at: Optional[dict[str, dict[str, float]]] = None) -> list[dict]:
+              discovered_at: Optional[dict[str, dict[str, float]]] = None, logins: Optional[dict[str, list[dict]]] = None,
+              now: Optional[float] = None) -> list[dict]:
     """One row per MCP server and per model provider.
 
     ``live`` is {instance: {profile: state}} from the last imports, ``discovered`` {instance: {profile: [server]}}
@@ -48,9 +89,14 @@ def aggregate(*, instances: list[dict], live: dict[str, dict[str, dict]], discov
     removed since the discovery stops too). Without times, the discovery wins where there is one.
 
     ``blueprints`` are the parsed newest *applied* version of each blueprint: they say who uses what (``used_by``)
-    and which policies hold. ``drafts`` are newer unapplied versions: they only show as ``planned_by``."""
+    and which policies hold. ``drafts`` are newer unapplied versions: they only show as ``planned_by``.
+
+    ``logins`` {instance: [{profile, server, expires_at, ...}]} are the OAuth login times each agent reports with its
+    heartbeat. They are newer than any discovery, so a login that has run out makes that profile's entry unreachable
+    even when the last probe passed, and each entry carries ``login`` (see ``login_status``)."""
     environment = {i["id"]: i["environment"] for i in instances}
     live_at, discovered_at = live_at or {}, discovered_at or {}
+    login_of = {(i, l.get("profile"), l.get("server")): l for i, ls in (logins or {}).items() for l in ls or []}
     by_key: dict[tuple[str, str], dict] = {}
     entries: dict[str, list[dict]] = {}
 
@@ -95,9 +141,15 @@ def aggregate(*, instances: list[dict], live: dict[str, dict[str, dict]], discov
                 server = servers.get(name)
                 entry = {"instance": instance_id, "profile": profile, "health": "unknown", "error": None}
                 entries.setdefault(name, []).append(entry)
+                login = login_status(login_of.get((instance_id, profile, token_file_name(name))), now)
+                if login:
+                    entry["login"] = login
+                if server is not None:
+                    entry.update(health=_entry_health(server), error=server.get("error") or None)
+                if login and login["state"] == "expired" and entry["health"] != "disabled":
+                    entry.update(health="unreachable", error=login["text"])
                 if server is None:
                     continue
-                entry.update(health=_entry_health(server), error=server.get("error") or None)
                 for tool in server.get("tools") or []:
                     if tool.get("name") and not any(t["name"] == tool["name"] for t in r["tools"]):
                         r["tools"].append({"name": tool["name"], "description": tool.get("description") or ""})

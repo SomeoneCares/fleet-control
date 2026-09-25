@@ -2,7 +2,7 @@
 
 import unittest
 
-from fleetcontrol_api.integrations import aggregate, mcp_config, merge_discovery
+from fleetcontrol_api.integrations import LOGIN_WARN_SECONDS, aggregate, login_status, mcp_config, merge_discovery
 
 INSTANCES = [{"id": "prod-01", "environment": "production"}, {"id": "lab-01", "environment": "lab"}]
 LIVE = {
@@ -99,6 +99,40 @@ class AggregateTest(unittest.TestCase):
 
     def test_nothing_known_yet(self):
         self.assertEqual(aggregate(instances=[], live={}, discovered={}, blueprints=[]), [])
+
+
+class LoginTest(unittest.TestCase):
+    NOW = 1_790_000_000.0
+
+    def test_states(self):
+        self.assertIsNone(login_status(None, self.NOW))
+        self.assertEqual(login_status({"expires_at": None}, self.NOW)["state"], "unknown")
+        self.assertEqual(login_status({"expires_at": self.NOW + LOGIN_WARN_SECONDS + 60}, self.NOW)["state"], "ok")
+        soon = login_status({"expires_at": self.NOW + 5 * 3600}, self.NOW)
+        self.assertEqual(soon["state"], "expiring")
+        self.assertIn("5 h", soon["text"])
+        gone = login_status({"expires_at": self.NOW - 60}, self.NOW)
+        self.assertEqual(gone["state"], "expired")
+        self.assertIn("browser login", gone["text"])
+
+    def test_a_lapsed_login_outranks_a_probe_that_passed(self):
+        live = {"lab-01": {"analyst": {"mcps": ["sas-viya"]}, "reviewer": {"mcps": ["sas-viya"]}}}
+        found = {"lab-01": {p: [{"name": "sas-viya", "ok": True, "tools": []}] for p in ("analyst", "reviewer")}}
+        logins = {"lab-01": [{"profile": "analyst", "server": "sas-viya", "expires_at": self.NOW - 60},
+                             {"profile": "reviewer", "server": "sas-viya", "expires_at": self.NOW + 3600}]}
+        row = next(r for r in aggregate(instances=INSTANCES, live=live, discovered=found, blueprints=[], logins=logins, now=self.NOW)
+                   if r["name"] == "sas-viya")
+        es = {e["profile"]: e for e in row["profile_health"]}
+        self.assertEqual((es["analyst"]["health"], es["analyst"]["login"]["state"]), ("unreachable", "expired"))
+        self.assertEqual((es["reviewer"]["health"], es["reviewer"]["login"]["state"]), ("healthy", "expiring"))
+        self.assertEqual(row["health"], "degraded")
+        self.assertIn("expired", row["error"])
+
+    def test_the_token_file_name_matches_a_server_name_hermes_sanitises(self):
+        live = {"lab-01": {"analyst": {"mcps": ["sas viya"]}}}
+        logins = {"lab-01": [{"profile": "analyst", "server": "sas_viya", "expires_at": self.NOW - 1}]}
+        row = aggregate(instances=INSTANCES, live=live, discovered={}, blueprints=[], logins=logins, now=self.NOW)[0]
+        self.assertEqual(row["profile_health"][0]["login"]["state"], "expired")
 
 
 class McpConfigTest(unittest.TestCase):

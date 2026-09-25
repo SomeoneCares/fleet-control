@@ -217,6 +217,20 @@ class WorkflowsApiTest(unittest.TestCase):
         self.assertIn("case-store was unreachable from case-orchestrator", mine["warnings"][0])
         self.assertIn("token expired", mine["warnings"][0])
 
+    def test_a_login_that_ran_out_or_runs_out_soon_is_warned_about_before_a_run(self):
+        import time
+        store.heartbeat(self.inst, "0.1.0", {"mcp_logins": [{"profile": "case-orchestrator", "server": "case-store",
+                                                             "expires_at": time.time() - 60}]})
+        wf = next(w for w in self.admin.get("/api/v1/workflows").json() if w["blueprint"] == self.bp)
+        mine = next(r for r in wf["readiness"] if r["instance_id"] == self.inst)
+        self.assertEqual(len(mine["warnings"]), 1)
+        self.assertIn("case-orchestrator's login to case-store", mine["warnings"][0])
+        self.assertIn("browser login", mine["warnings"][0])
+        store.heartbeat(self.inst, "0.1.0", {"mcp_logins": [{"profile": "case-orchestrator", "server": "case-store",
+                                                             "expires_at": time.time() + 3600}]})
+        wf = next(w for w in self.admin.get("/api/v1/workflows").json() if w["blueprint"] == self.bp)
+        self.assertIn("a run that outlasts it", next(r for r in wf["readiness"] if r["instance_id"] == self.inst)["warnings"][0])
+
     def test_kanban_is_chosen_only_where_it_dispatches(self):
         self.assertEqual(self.start(executor="kanban").status_code, 409)  # the agent has not reported Kanban
         self.assertEqual(self.start().json()["executor"], "runs")  # auto falls back to Hermes runs

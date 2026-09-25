@@ -61,7 +61,7 @@ from .drift import DriftResolutionError, accept_into_blueprint, live_state_from_
 from .edits import as_new_version, remove_test, update_agent, upsert_test
 from .testlab import VERDICTS, evaluate
 from .importer import LiveImportError, blueprint_from_live
-from .integrations import aggregate, mcp_config
+from .integrations import aggregate, login_status, mcp_config
 from .outputs import KINDS, OutputError, new_output, output_row, provenance
 from .rooms import RoomError, check_tool, decide, new_evidence, new_finding, new_room, room_row, room_view
 from .planner import compute_plan, mcp_sources, to_agent_job
@@ -1350,6 +1350,7 @@ _PERSONAL_HEAD = {"room.waiting": ("Decision waiting for you", "decision-request
                   "ask.answered": ("The fleet answered your question", "alert"),
                   "apply.failed": ("Apply failed", "alert"), "drift.detected": ("Drift detected", "alert"),
                   "assurance.no_evidence": ("Assurance: No evidence", "alert"),
+                  "mcp.login_expiring": ("An MCP login needs renewing", "alert"),
                   "gate.waiting": ("A workflow waits for your approval", "decision-request"),
                   "gate.escalated": ("An overdue workflow approval was escalated to you", "decision-request")}
 
@@ -1383,6 +1384,19 @@ def _notify_people(event: str, *, key: str, ctx: dict, people: Iterable[dict]) -
             continue
         text = render(event, template, ctx, show_titles=prefs["show_titles"], portal_url=portal, head=head)
         _deliver(ch, event=event, key=f"{key}:to:{person['email']}", text=text, chat_id=reach[1], to=person["email"])
+
+
+def _logins_due(instance_id: str, logins: list[dict]) -> None:
+    """Tell the people who run instances when an MCP login is about to run out, and again when it has: once each
+    (the delivery key carries the expiry, so a new login starts over)."""
+    for login in logins:
+        status = login_status(login)
+        if not status or status["state"] not in ("expiring", "expired"):
+            continue
+        key = f"login:{instance_id}:{login.get('profile')}:{login.get('server')}:{int(status['expires_at'])}:{status['state']}"
+        _notify_people("mcp.login_expiring", key=key, people=_people_with("instances.operate"),
+                       ctx={"instance": instance_id, "link": "/integrations",
+                            "detail": f"{login.get('profile')} → {login.get('server')}: {status['text']}"})
 
 
 def _people_with(permission: str, *, zone: Optional[str] = None, except_: Iterable[str] = ()) -> list[dict]:
@@ -1457,10 +1471,11 @@ def _wf_agents(parsed: dict) -> dict[str, dict]:
                       "content_zones": list(a.get("content_zones") or [])} for a in parsed.get("agents") or []}
 
 
-def _mcp_health() -> dict[tuple[str, str, str], tuple[str, Optional[str]]]:
-    """{(instance, profile, server): (health, error)} from the last MCP discoveries (Integrations)."""
+def _mcp_health() -> dict[tuple[str, str, str], dict]:
+    """{(instance, profile, server): entry} from the last MCP discoveries and the agents' login reports (Integrations):
+    each entry has ``health``, ``error`` and, for an OAuth server, ``login``."""
     rows = list_integrations({"email": "fleetcontrol", "role": "admin"})["integrations"]
-    return {(e["instance"], e["profile"], r["name"]): (e["health"], e.get("error"))
+    return {(e["instance"], e["profile"], r["name"]): e
             for r in rows if r["kind"] == "mcp" for e in r.get("profile_health") or []}
 
 
@@ -1483,10 +1498,16 @@ def _wf_readiness(parsed: dict, steps: list[dict]) -> list[dict]:
         for a in agents_used(steps):
             profile = agents.get(a, {}).get("profile")
             for mcp in agents.get(a, {}).get("mcps", []):
-                state, error = health.get((inst["id"], profile, mcp), (None, None))
-                if state == "unreachable":
+                entry = health.get((inst["id"], profile, mcp)) or {}
+                login = entry.get("login") or {}
+                if login.get("state") == "expired":
+                    warnings.append(f"{profile}'s login to {mcp}: {login['text']}")
+                elif entry.get("health") == "unreachable":
+                    error = entry.get("error")
                     warnings.append(f"{mcp} was unreachable from {profile} at the last discovery"
                                     + (f" ({error[:160]})" if error else "") + ": log the profile in again, then Discover")
+                elif login.get("state") == "expiring":
+                    warnings.append(f"{profile}'s login to {mcp}: {login['text']}; a run that outlasts it loses the tools")
         out.append({"instance_id": inst["id"], "environment": inst["environment"], "ready": not problems, "problems": problems,
                     "warnings": warnings, "kanban": _wf_kanban(inst)})
     return out
@@ -1894,7 +1915,8 @@ def list_integrations(user: dict = Depends(require("instances.read"))) -> dict:
     applied, drafts = _blueprint_versions()
     rows = aggregate(instances=instances, live=live, discovered={k: v["servers"] for k, v in probes.items()},
                      blueprints=applied, drafts=drafts, live_at=store.live_state_at(),
-                     discovered_at={k: v["profile_at"] for k, v in probes.items()})
+                     discovered_at={k: v["profile_at"] for k, v in probes.items()},
+                     logins={i["id"]: (i.get("report") or {}).get("mcp_logins") or [] for i in instances})
     return {"integrations": rows,
             "discovery": [{"instance_id": i["id"], "at": probes.get(i["id"], {}).get("at"),
                            "can_discover": i["mode"] == "agent" and bool(i.get("agent_version")) and bool(live[i["id"]])}
@@ -3102,6 +3124,7 @@ def heartbeat(instance_id: str, body: HeartbeatBody, inst: str = Depends(agent_i
     if inst != instance_id:
         raise HTTPException(403)
     store.heartbeat(instance_id, body.agent_version, body.report)
+    _logins_due(instance_id, (body.report or {}).get("mcp_logins") or [])
     _wf_escalate()  # heartbeats are Fleet Control's clock: an overdue workflow gate escalates within a beat
     _wf_kanban_sync(instance_id)  # and Kanban-run workflows are followed at the same pace
     return {"ok": True}

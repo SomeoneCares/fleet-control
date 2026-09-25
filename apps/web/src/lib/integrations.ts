@@ -1,4 +1,4 @@
-import type { Integration, IntegrationHealth, IntegrationsDoc } from "../api/client";
+import type { Integration, IntegrationHealth, IntegrationsDoc, McpLogin } from "../api/client";
 import type { Tone } from "./view";
 
 export const HEALTH_TONE: Record<IntegrationHealth, Tone> = {
@@ -16,6 +16,20 @@ export const HEALTH_LABEL: Record<IntegrationHealth, string> = {
   disabled: "Disabled",
   unknown: "Not probed",
 };
+
+export const LOGIN_TONE: Record<McpLogin["state"], Tone> = { ok: "neutral", unknown: "neutral", expiring: "warning", expired: "error" };
+
+/** The login that needs a person soonest: an expired one first, then the one expiring first. Null when none needs one. */
+export function loginAlert(row: Integration): { profile: string; login: McpLogin; count: number } | null {
+  const due = row.profile_health.filter((e) => e.login && (e.login.state === "expired" || e.login.state === "expiring"));
+  if (!due.length) return null;
+  const rank = (l: McpLogin) => [l.state === "expired" ? 0 : 1, l.expires_at ?? Infinity] as const;
+  const first = [...due].sort((a, b) => {
+    const [ra, rb] = [rank(a.login!), rank(b.login!)];
+    return ra[0] - rb[0] || ra[1] - rb[1];
+  })[0];
+  return { profile: `${first.instance}/${first.profile}`, login: first.login!, count: due.length };
+}
 
 export const KIND_LABEL: Record<Integration["kind"], string> = { mcp: "MCP", model: "Model provider" };
 

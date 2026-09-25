@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Integration, IntegrationsDoc } from "../api/client";
-import { HEALTH_LABEL, allowedAgents, discoveryState, distinctAgents, matchesQuery, toolRules } from "./integrations";
+import { HEALTH_LABEL, allowedAgents, discoveryState, distinctAgents, loginAlert, matchesQuery, toolRules } from "./integrations";
 
 const row: Integration = {
   kind: "mcp", name: "opensanctions", instances: ["prod-01"], profiles: ["prod-01/screener"], environments: ["production"],
@@ -23,6 +23,18 @@ describe("integrations view logic", () => {
     const twice: Integration = { ...row, used_by: [{ agent: "screener", blueprint: "aml", version: 2 }, { agent: "screener", blueprint: "kyc", version: 1 }] };
     expect(distinctAgents(twice)).toEqual([{ agent: "screener", blueprints: ["aml", "kyc"] }]);
     expect(allowedAgents(twice, "opensanctions.search")).toEqual(["screener"]);
+  });
+
+  it("points at the login that needs a person soonest", () => {
+    expect(loginAlert(row)).toBeNull();
+    const logins: Integration = { ...row, profile_health: [
+      { instance: "lab", profile: "a", health: "healthy", error: null, login: { state: "ok", expires_at: 9e9, text: "" } },
+      { instance: "lab", profile: "b", health: "healthy", error: null, login: { state: "expiring", expires_at: 200, text: "in 2 h" } },
+      { instance: "lab", profile: "c", health: "healthy", error: null, login: { state: "expiring", expires_at: 100, text: "in 1 h" } },
+    ] };
+    expect(loginAlert(logins)).toMatchObject({ profile: "lab/c", count: 2 });
+    logins.profile_health.push({ instance: "lab", profile: "d", health: "unreachable", error: "x", login: { state: "expired", expires_at: 500, text: "expired" } });
+    expect(loginAlert(logins)).toMatchObject({ profile: "lab/d", count: 3 });
   });
 
   it("labels a server some profiles cannot reach as degraded", () => {

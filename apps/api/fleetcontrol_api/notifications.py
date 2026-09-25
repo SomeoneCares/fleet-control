@@ -23,6 +23,8 @@ PERSONAL_EVENTS: dict[str, tuple[str, Optional[str], bool]] = {
     "apply.failed": ("An apply failed", "plans.apply.nonprod", False),
     "drift.detected": ("Drift was detected on an instance", "drift.read", False),
     "assurance.no_evidence": ("An assurance check found No evidence", "assurance.read", False),
+    # renewing an MCP OAuth login takes a person at a browser on the host, so the people who run instances hear first
+    "mcp.login_expiring": ("An agent's login to an MCP server is about to expire, or has", "instances.operate", True),
     # a gate names any role (or escalates to one person), so these are offered to everyone
     "gate.waiting": ("A workflow waits for your approval", None, True),
     "gate.escalated": ("An overdue workflow approval was escalated to you", None, True),

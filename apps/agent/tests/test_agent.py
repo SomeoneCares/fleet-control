@@ -590,6 +590,38 @@ class GatewayRecordTest(unittest.TestCase):
         self.assertNotIn("dashboard_stale", h.capability_report())
 
 
+class McpLoginTest(unittest.TestCase):
+    """When each MCP OAuth login runs out, read from Hermes' token files: times only, never a token."""
+
+    def _write(self, folder, name, doc):
+        os.makedirs(folder, exist_ok=True)
+        with open(os.path.join(folder, name), "w", encoding="utf-8") as f:
+            json.dump(doc, f)
+
+    def test_the_refresh_tokens_own_expiry_is_the_login(self):
+        import base64
+        home = tempfile.mkdtemp()
+        claims = base64.urlsafe_b64encode(json.dumps({"exp": 1790264481, "token_use": "refresh"}).encode()).decode().rstrip("=")
+        secret_refresh = f"eyJhbGciOiJIUzI1NiJ9.{claims}.c2lnbmF0dXJl"
+        analyst = os.path.join(home, "profiles", "sas-analyst", "mcp-tokens")
+        self._write(analyst, "sas-viya.json", {"access_token": "at-secret", "refresh_token": secret_refresh, "expires_at": 1790264514.0})
+        self._write(analyst, "sas-viya.client.json", {"client_id": "abc"})  # the registration, not a login
+        open(os.path.join(analyst, "sas-viya.json.refresh.lock"), "w").close()
+        self._write(os.path.join(home, "mcp-tokens"), "search.json", {"access_token": "x", "expires_at": 100.0})  # no refresh token
+        self._write(os.path.join(home, "profiles", "opaque", "mcp-tokens"), "crm.json",
+                    {"access_token": "x", "refresh_token": "opaque-refresh", "expires_at": 50.0})
+        logins = HermesLocal(HermesLocalConfig(hermes_home=home)).mcp_logins()
+        by = {(l["profile"], l["server"]): l for l in logins}
+        self.assertEqual(set(by), {("default", "search"), ("sas-analyst", "sas-viya"), ("opaque", "crm")})
+        self.assertEqual((by[("sas-analyst", "sas-viya")]["expires_at"], by[("sas-analyst", "sas-viya")]["access_expires_at"]),
+                         (1790264481.0, 1790264514.0))
+        self.assertEqual(by[("default", "search")]["expires_at"], 100.0)  # nothing to refresh with: the access token is the login
+        self.assertIsNone(by[("opaque", "crm")]["expires_at"])  # a refresh token that does not say
+        blob = json.dumps(logins)
+        for secret in ("at-secret", secret_refresh, "opaque-refresh", "c2lnbmF0dXJl"):
+            self.assertNotIn(secret, blob)
+
+
 class KanbanTest(unittest.TestCase):
     """Workflow runs on Hermes Kanban: the agent makes linked tasks, reads where they stand, and archives them."""
 

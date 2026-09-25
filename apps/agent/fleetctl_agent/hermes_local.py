@@ -464,6 +464,7 @@ class HermesLocal:
         # A dashboard started before a Hermes self-update keeps serving the old code (Hermes only warns about it),
         # and its messaging page then calls a healthy gateway stopped. Say so where people look: the Instances page.
         report["kanban"] = self.kanban_state()
+        report["mcp_logins"] = self.mcp_logins()
         installed = self.installed_version()
         report["versions"] = {"dashboard": report["hermes_version"], "installed": installed}
         if installed and report["hermes_version"] and installed != report["hermes_version"]:
@@ -471,6 +472,49 @@ class HermesLocal:
             report["notes"].append(f"Fleet Control's dashboard runs Hermes {report['hermes_version']} but {installed} is installed: "
                                    "restart it (systemctl --user restart fleetctl-dashboard); until then its answers may be out of date")
         return report
+
+    def mcp_logins(self) -> list[dict]:
+        """When each profile's MCP OAuth login runs out, read from Hermes' token files (``<home>/mcp-tokens/<server>.json``,
+        per profile). Only times leave this host, never a token. ``expires_at`` is the refresh token's own ``exp`` when
+        it is a JWT: the SAS MCP server dates it to SAS Logon's absolute refresh lifetime, after which only a person in
+        a browser brings the agent back. ``access_expires_at`` is when Hermes must next refresh."""
+        import base64
+
+        homes = [("default", self.cfg.hermes_home)]
+        try:
+            root = os.path.join(self.cfg.hermes_home, "profiles")
+            homes += [(n, os.path.join(root, n)) for n in sorted(os.listdir(root)) if os.path.isdir(os.path.join(root, n))]
+        except OSError:
+            pass
+        out = []
+        for profile, home in homes:
+            folder = os.path.join(home, "mcp-tokens")
+            try:
+                names = sorted(os.listdir(folder))
+            except OSError:
+                continue
+            for fn in names:
+                stem = fn[:-5] if fn.endswith(".json") else ""
+                if not stem or "." in stem:  # sas-viya.client.json, .meta.json: registration, not the login
+                    continue
+                try:
+                    with open(os.path.join(folder, fn), encoding="utf-8") as f:
+                        tokens = json.load(f)
+                except (OSError, ValueError):
+                    continue
+                row = {"profile": profile, "server": stem, "access_expires_at": tokens.get("expires_at"), "expires_at": None,
+                       "refreshable": bool(tokens.get("refresh_token"))}
+                parts = str(tokens.get("refresh_token") or "").split(".")
+                if len(parts) == 3:
+                    try:
+                        claims = json.loads(base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4)))
+                        row["expires_at"] = float(claims["exp"]) if claims.get("exp") else None
+                    except (ValueError, TypeError, KeyError):
+                        pass
+                elif not row["refreshable"]:
+                    row["expires_at"] = row["access_expires_at"]  # nothing to refresh with: the access token is the login
+                out.append(row)
+        return out
 
     def installed_version(self) -> Optional[str]:
         """The Hermes version on disk (what a restart would run), from the checkout's hermes_cli/__init__.py."""

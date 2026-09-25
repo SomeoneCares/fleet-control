@@ -357,6 +357,7 @@ export interface DecisionRoom extends RoomBase {
 
 export type IntegrationKind = "mcp" | "model";
 // degraded: some profiles reach the server and some do not (each profile has its own registration and tokens)
+export interface McpLogin { state: "ok" | "expiring" | "expired" | "unknown"; expires_at: number | null; text: string }
 export type IntegrationHealth = "healthy" | "degraded" | "unreachable" | "disabled" | "unknown";
 export interface IntegrationUser { agent: string; blueprint: string; version: number | null }
 
@@ -370,7 +371,7 @@ export interface Integration {
   models: string[];
   used_by: IntegrationUser[];  // from each blueprint's newest applied version
   planned_by: IntegrationUser[];  // agents a newer, unapplied draft adds
-  profile_health: { instance: string; profile: string; health: IntegrationHealth; error: string | null }[];
+  profile_health: { instance: string; profile: string; health: IntegrationHealth; error: string | null; login?: McpLogin }[];
   allow: Record<string, { blocked_for: string[]; approval_for: string[] }>;
   health: IntegrationHealth;
   error: string | null;

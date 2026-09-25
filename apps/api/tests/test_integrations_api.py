@@ -54,6 +54,17 @@ class IntegrationsApiTest(unittest.TestCase):
         self.assertEqual((row["health"], [t["name"] for t in row["tools"]], row["endpoint"]), ("healthy", ["search"], "https://os.example/mcp"))
         self.assertEqual(next(d for d in discovery if d["instance_id"] == self.inst)["at"], 1_000_000.0)
 
+    def test_logins_come_with_the_heartbeat_and_warn_the_people_who_run_instances(self):
+        import time
+        soon = time.time() + 3600
+        report = {"mcp_logins": [{"profile": "screener", "server": "opensanctions", "expires_at": soon, "access_expires_at": soon}]}
+        self.assertEqual(self.c.post(f"/agent/v1/instances/{self.inst}/heartbeat", json={"agent_version": "0.1.0", "report": report},
+                                     headers=self.agent).status_code, 200)
+        rows, _ = self._mine()
+        entry = next(e for e in rows[("mcp", "opensanctions")]["profile_health"] if e["instance"] == self.inst)
+        self.assertEqual(entry["login"]["state"], "expiring")
+        self.assertEqual(entry["health"], "unknown")  # expiring is a warning, not a failure
+
     def test_adding_a_server_sends_no_secrets_and_rediscovers(self):
         r = self.c.post("/api/v1/integrations/mcp", json={"instance_id": self.inst, "profile": "screener", "name": "corp-registry",
                                                           "url": "https://registry.example/mcp", "auth": "oauth"})

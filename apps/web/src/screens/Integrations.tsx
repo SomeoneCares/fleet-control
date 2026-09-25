@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { api, type Integration, type IntegrationKind } from "../api/client";
 import { useAuth } from "../lib/auth";
 import { errorText, useLoad, useNow } from "../lib/hooks";
-import { HEALTH_LABEL, HEALTH_TONE, KIND_LABEL, allowedAgents, discoveryState, distinctAgents, matchesQuery, toolRules } from "../lib/integrations";
+import { HEALTH_LABEL, HEALTH_TONE, KIND_LABEL, LOGIN_TONE, allowedAgents, discoveryState, distinctAgents, loginAlert, matchesQuery, toolRules } from "../lib/integrations";
 import { timeAgo, type Tone } from "../lib/view";
 import { Banner, Button, Card, Chip, Field, INPUT, Icon, Modal, Mono, PageHeader, Spinner } from "../components/ui";
 
@@ -103,6 +103,8 @@ export function IntegrationsScreen() {
               <span className="flex flex-col gap-1 items-start">
                 <Chip tone={HEALTH_TONE[r.health]}>{HEALTH_LABEL[r.health]}</Chip>
                 {!r.enabled_everywhere && <span className="text-small text-text-secondary">disabled somewhere</span>}
+                {loginAlert(r) && <span className={`text-small ${loginAlert(r)!.login.state === "expired" ? "text-error" : "text-warning"}`}>
+                  {loginAlert(r)!.count === 1 ? "a login" : `${loginAlert(r)!.count} logins`} {loginAlert(r)!.login.state === "expired" ? "expired" : "expiring"}</span>}
               </span>
             </button>
           ))}
@@ -148,9 +150,13 @@ function DetailRail({ row, busy, onChange }: {
         <Detail label="Instances">{row.instances.join(", ") || "none"}</Detail>
         <Detail label="Profiles">
           {row.kind === "mcp" && row.profile_health.length > 0 ? row.profile_health.map((e) => (
-            <div key={`${e.instance}/${e.profile}`} className="flex items-center justify-between gap-2 py-0.5" title={e.error ?? undefined}>
-              <Mono className="text-[12px] truncate">{e.instance}/{e.profile}</Mono>
-              <Chip tone={HEALTH_TONE[e.health]}>{HEALTH_LABEL[e.health]}</Chip>
+            <div key={`${e.instance}/${e.profile}`} className="py-0.5" title={e.error ?? undefined}>
+              <div className="flex items-center justify-between gap-2">
+                <Mono className="text-[12px] truncate">{e.instance}/{e.profile}</Mono>
+                <Chip tone={HEALTH_TONE[e.health]}>{HEALTH_LABEL[e.health]}</Chip>
+              </div>
+              {e.login && <div className={`text-small ${LOGIN_TONE[e.login.state] === "error" ? "text-error" : LOGIN_TONE[e.login.state] === "warning" ? "text-warning" : "text-text-secondary"}`}>
+                {e.login.text}</div>}
             </div>
           )) : row.profiles.map((p) => <div key={p}><Mono className="text-[12px]">{p}</Mono></div>)}
         </Detail>

@@ -32,6 +32,7 @@ export function WorkflowRunScreen() {
         </>} />
       {msg && <Banner tone="error" className="mb-4">{msg}</Banner>}
       {run.error && <Banner tone={run.status === "cancelled" ? "info" : "error"} className="mb-4">{run.error}</Banner>}
+      {run.test_run && <Banner tone="info" className="mb-4">A Test Lab rehearsal: gates approve themselves and no Decision Room is opened. <Link to={`/testlab?run=${run.test_run}`}>The test's verdict</Link></Banner>}
       {run.input && <Card className="p-4 mb-4"><div className="text-label uppercase text-text-secondary mb-1">Request</div><div className="whitespace-pre-wrap text-[13px]">{run.input}</div></Card>}
       {run.room_id && <Banner tone="success" className="mb-4">The run ended in a Decision Room: <Link to={`/rooms/${run.room_id}`}>open it</Link>. The decision is made there.</Banner>}
       <div className="flex flex-col gap-3">

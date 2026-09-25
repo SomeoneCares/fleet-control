@@ -196,6 +196,16 @@ def _gateway_record(root):
     return (not missing, f"missing: {missing}" if missing else "ok")
 
 
+@check("MCP OAuth tokens still live in <home>/mcp-tokens/<safe name>.json with an absolute expires_at (login expiry)")
+def _mcp_tokens(root):
+    # HermesLocal.mcp_logins reads these files for times only; integrations.token_file_name mirrors _safe_filename
+    src = read(root, "tools/mcp_oauth.py")
+    needles = ['/ "mcp-tokens"', r're.sub(r"[^\w\-]", "_", name).strip("_")[:128] or "default"',
+               'payload["expires_at"] = time.time() + int(payload["expires_in"])']
+    missing = [n for n in needles if n not in src]
+    return (not missing, f"missing: {missing}" if missing else "ok")
+
+
 @check("Kanban still takes the task fields fleetctl-agent sends, and reports what it reads back")
 def _kanban(root):
     src = read(root, "plugins/kanban/dashboard/plugin_api.py")

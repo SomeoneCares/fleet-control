@@ -19,6 +19,10 @@ except ImportError:  # pragma: no cover
 EXAMPLE = os.path.join(os.path.dirname(__file__), "..", "..", "..", "packages", "blueprint_schema", "examples", "aml-investigation.yaml")
 STATE = {"description": "", "model": {"provider": "local", "name": "llama-4-70b-q4"}, "soul_sha256": "sha256:0", "soul_text": "",
          "skills": [], "toolsets": [], "mcps": []}
+# every profile of the example's workflow, with the MCP servers its agents need: a workflow test can rehearse there
+WHOLE_FLEET = {p: {**STATE, "mcps": m} for p, m in {
+    "case-orchestrator": ["case-store"], "sanctions-screener": ["opensanctions"], "ownership-tracer": ["corporate-registry"],
+    "challenger": [], "sar-drafter": ["document-store"]}.items()}
 GOOD_OUTPUT = json.dumps({"match_count": 0, "matches": [], "list_versions": {"OFAC": "2026-09-15"}, "screened_at": "2026-09-16",
                           "note": "That claim is unsupported."})
 
@@ -137,7 +141,7 @@ class TestLabApiTest(unittest.TestCase):
         out = self._run()
         self.assertEqual(len(out["runs"]), 4)  # the screener's three tests and the challenger's one
         reasons = {s["test_id"]: s["reason"] for s in out["skipped"]}
-        self.assertIn("Workflows", reasons["workflow-smoke"])
+        self.assertIn("cannot run case-to-sar-draft", reasons["workflow-smoke"])  # staging lacks the orchestrator and others
         runs = {r["test_id"]: r for r in self.c.get("/api/v1/testlab/runs", params={"blueprint": self.bp}).json()}
         self.assertEqual({t: r["status"] for t, r in runs.items()},
                          {"sanctions-evidence": "passed", "alias-match": "passed", "no-web-fetch": "passed", "objects-to-unsupported-claim": "passed"})
@@ -184,16 +188,74 @@ class TestLabApiTest(unittest.TestCase):
         for _ in range(2):
             self.assertEqual(signed_in("approver").post(f"/api/v1/plans/{plan['id']}/approve").status_code, 200)
         pre = self.c.get(f"/api/v1/plans/{plan['id']}/preflight").json()
-        self.assertEqual((pre["required"], pre["satisfied"], pre["total"], pre["deferred"]), (True, False, 4, ["workflow-smoke"]))
+        self.assertEqual((pre["required"], pre["satisfied"], pre["total"], pre["deferred"]), (True, False, 5, []))
+        self.assertEqual({t["test_id"]: t["kind"] for t in pre["tests"]}["workflow-smoke"], "workflow")
         r = self.c.post(f"/api/v1/plans/{plan['id']}/apply")
         self.assertEqual(r.status_code, 409)
         self.assertIn("Test Lab", r.json()["detail"])
 
         self._run(["sanctions-evidence"], answer=lambda p: evidence_for(p, skip=("opensanctions.search",)))  # a failing run
-        self._run()  # then the whole suite, passing
+        self._run()  # then the whole suite, passing; the workflow test could not rehearse on this staging
         pre = self.c.get(f"/api/v1/plans/{plan['id']}/preflight").json()
-        self.assertEqual((pre["passed"], pre["satisfied"]), (4, True))
+        self.assertEqual((pre["passed"], pre["satisfied"]), (4, False))
+        fleet, fleet_agent = self._instance("staging", WHOLE_FLEET)
+        self._rehearse(fleet, fleet_agent)
+        pre = self.c.get(f"/api/v1/plans/{plan['id']}/preflight").json()
+        self.assertEqual((pre["passed"], pre["satisfied"]), (5, True))
         self.assertEqual(self.c.post(f"/api/v1/plans/{plan['id']}/apply").status_code, 200)
+
+    def _rehearse(self, instance, agent, answer=None, test_id="workflow-smoke"):
+        """Run a workflow test and play every agent step it queues; returns the test run."""
+        r = self.c.post("/api/v1/testlab/runs", json={"blueprint": self.bp, "version": 3, "instance_id": instance, "test_ids": [test_id]})
+        self.assertEqual(r.status_code, 201, r.text)
+        self.assertEqual(r.json()["skipped"], [])
+        run_id = r.json()["runs"][0]
+        answer = answer or (lambda params: {"ok": True, "status": "completed", "output": f"done by {params['profile']}", "run_id": "r1",
+                                            "session_id": "s1", "tool_calls": [{"name": "read_file"}], "usage": {"total_tokens": 1000}})
+        for _ in range(10):
+            if self.c.get(f"/api/v1/testlab/runs/{run_id}").json()["status"] != "running":
+                break  # judged: nothing more is queued (and asking would wait out the agents' long poll)
+            job = self.c.get(f"/agent/v1/instances/{instance}/jobs/next", headers=agent).json()
+            self.assertEqual(job["kind"], "hermes_run", job)
+            self.c.post(f"/agent/v1/jobs/{job['id']}/result", json=answer(job["params"]), headers=agent)
+        return self.c.get(f"/api/v1/testlab/runs/{run_id}").json()
+
+    def test_a_workflow_test_rehearses_the_workflow_and_is_judged_on_what_the_run_produced(self):
+        fleet, agent = self._instance("staging", WHOLE_FLEET)
+        rooms_before = {r["id"] for r in self.c.get("/api/v1/rooms").json()}
+        run = self._rehearse(fleet, agent)
+        self.assertEqual(run["status"], "passed", run["checks"])
+        self.assertEqual({c["id"]: c["outcome"] for c in run["checks"]}, {"artifact": "pass", "limit:time": "pass", "limit:tokens": "pass"})
+        self.assertEqual(run["usage"], {"total_tokens": 5000})  # five agent runs
+        self.assertEqual({c["agent"] for c in run["tool_calls"]}, {"case-orchestrator", "sanctions-screener", "ownership-tracer",
+                                                                   "challenger", "sar-drafter"})
+        wf = self.c.get(f"/api/v1/workflows/runs/{run['workflow_run']}").json()
+        self.assertEqual((wf["status"], wf["test_run"], wf["room_id"]), ("done", run["id"], None))
+        gate = wf["steps"][3]["gate"]
+        self.assertEqual((gate["approved"], gate["automatic"], gate["by"]), (True, True, "fleetcontrol"))
+        self.assertEqual({r["id"] for r in self.c.get("/api/v1/rooms").json()}, rooms_before)  # nobody is asked to decide a test
+        self.assertEqual([o for o in self.c.get("/api/v1/outputs").json() if (o.get("source") or {}).get("workflow_run") == wf["id"]], [])
+
+    def test_a_workflow_test_fails_when_a_step_fails_or_the_artifact_is_missing(self):
+        fleet, agent = self._instance("staging", WHOLE_FLEET)
+        broken = self._rehearse(fleet, agent, answer=lambda p: {"ok": p["profile"] != "challenger", "status": "completed",
+                                                                "output": "x" if p["profile"] != "challenger" else None,
+                                                                "error": "provider down", "tool_calls": []})
+        self.assertEqual(broken["status"], "error")
+        self.assertIn("challenger did not finish", broken["checks"][0]["detail"])
+        blind = self._rehearse(fleet, agent, answer=lambda p: {"ok": True, "status": "completed", "output": "x", "run_id": "r"})
+        self.assertEqual(blind["tool_calls"], None)  # no transcript on any step: tool checks would be Not verifiable, never guessed
+
+    def test_stopping_a_workflow_test_stops_its_workflow(self):
+        fleet, agent = self._instance("staging", WHOLE_FLEET)
+        r = self.c.post("/api/v1/testlab/runs", json={"blueprint": self.bp, "version": 3, "instance_id": fleet, "test_ids": ["workflow-smoke"]})
+        run_id = r.json()["runs"][0]
+        wf_id = self.c.get(f"/api/v1/testlab/runs/{run_id}").json()["workflow_run"]
+        self.assertEqual(self.c.post(f"/api/v1/testlab/runs/{run_id}/cancel").json()["status"], "cancelled")
+        self.assertEqual(self.c.get(f"/api/v1/workflows/runs/{wf_id}").json()["status"], "cancelled")
+        wf = self.c.get(f"/api/v1/workflows/runs/{wf_id}").json()
+        job = store.get_job(wf["steps"][0]["jobs"]["case-orchestrator"])
+        self.assertEqual(job["status"], "failed")  # its step job was closed, so the agent never picks it up
 
     def test_the_gate_can_be_turned_off(self):
         prod, _ = self._instance("production", {})

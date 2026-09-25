@@ -31,7 +31,7 @@ from .workflows import (
     WorkflowError, agents_used, compose_input, current_step, decide_gate, escalate_due, finish_room_step, kanban_outcome,
     kanban_tasks, segment,
     instructions as wf_instructions, may_decide_gate, missing_requirements, new_run, normalize_steps, pending_members,
-    question_for, record_result, run_row as wf_run_row, settle, start_step,
+    question_for, record_result, rehearse, run_row as wf_run_row, settle, start_step, test_result as wf_test_result,
 )
 from .access import (
     agent_grants, combined_zones, person_permissions, person_zones, summary as access_summary, tool_verdict, why_apply, why_room,
@@ -1562,7 +1562,15 @@ def _wf_escalate() -> None:
 
 
 def _wf_advance(run_id: str) -> Optional[dict]:
-    """Move a run forward as far as it can go: start the next step, queue its agents, open its room."""
+    """Move a run forward as far as it can go: start the next step, queue its agents, open its room. A test's run
+    that has ended is judged here, whichever way it ended."""
+    run = _wf_advance_steps(run_id)
+    if run and run.get("test_run") and run["status"] in ("done", "failed", "cancelled"):
+        _wf_test_finished(run)
+    return run
+
+
+def _wf_advance_steps(run_id: str) -> Optional[dict]:
     for _ in range(len((store.get_workflow_run(run_id) or {}).get("steps") or []) + 1):
         todo: dict[str, Any] = {}
 
@@ -1576,6 +1584,11 @@ def _wf_advance(run_id: str) -> Optional[dict]:
             if cur["status"] == "pending":
                 start_step(cur, time.time())
                 todo["started"] = cur["index"]
+            if d.get("test_run") and cur["kind"] in ("human_gate", "decision_room"):
+                rehearse(d, cur["index"])  # a test run has nobody to ask
+                d["status"] = "running"
+                todo["rehearsed"] = cur["index"]
+                return
             d["status"] = "waiting" if cur["kind"] == "human_gate" else "running"
             if cur["kind"] in ("agent", "parallel") and d.get("executor") == "kanban":
                 # Kanban runs the whole stretch up to the next gate: submit it once, as linked tasks
@@ -1599,6 +1612,8 @@ def _wf_advance(run_id: str) -> Optional[dict]:
         run = store.update_workflow_run(run_id, step_forward)
         if not run or not todo:
             return run
+        if "rehearsed" in todo:
+            continue
         parsed = (store.get_blueprint(run["blueprint"], run["version"]) or {}).get("parsed") or {}
         agents = _wf_agents(parsed)
         if todo.get("kanban"):
@@ -1677,13 +1692,13 @@ def _wf_result(job: dict) -> None:
     ok = job["status"] == "done" and bool(result.get("output"))
     tools = [c.get("name") for c in (result.get("tool_calls") or [])] if "tool_calls" in result else None
     _wf_record(run, index, agent, ok=ok, output=result.get("output") if ok else None, error=result.get("error") or "no answer",
-               run_ref=result.get("run_id"), tools=tools, session_id=result.get("session_id"))
+               run_ref=result.get("run_id"), tools=tools, session_id=result.get("session_id"), usage=result.get("usage"))
     _wf_advance(run["id"])
 
 
 def _wf_record(run: dict, index: int, agent: str, *, ok: bool, output: Optional[str], error: Optional[str],
                run_ref: Optional[str] = None, tools: Optional[list] = None, session_id: Optional[str] = None,
-               task_id: Optional[str] = None) -> None:
+               task_id: Optional[str] = None, usage: Optional[dict] = None) -> None:
     """One agent's result, from either executor: keep the artifact as a fleet output, file it in the run."""
     step = run["steps"][index]
     artifact_id = None
@@ -1701,7 +1716,7 @@ def _wf_record(run: dict, index: int, agent: str, *, ok: bool, output: Optional[
         if agent in d["steps"][index]["results"]:
             return  # already filed (a second read of the same Kanban task)
         record_result(d, index, agent, ok=ok, output=output, artifact_id=artifact_id, run_ref=run_ref, error=None if ok else error)
-        d["steps"][index]["results"][agent].update(tools=tools, session_id=session_id, kanban_task=task_id)
+        d["steps"][index]["results"][agent].update(tools=tools, session_id=session_id, kanban_task=task_id, usage=usage)
 
     store.update_workflow_run(run["id"], file)
     store.record("fleetcontrol", "workflow.step_done" if ok else "workflow.step_failed", run["id"],
@@ -1890,16 +1905,23 @@ def cancel_workflow_run(run_id: str, user: dict = Depends(require("workflows.run
         raise HTTPException(404, "no such run")
     if run["status"] not in ("running", "waiting"):
         raise HTTPException(409, f"this run is {run['status']}")
+    run = _wf_stop(run, f"cancelled by {user['email']}")
+    store.record(user["email"], "workflow.cancelled", run_id)
+    if run.get("test_run"):
+        _wf_test_finished(run)
+    return _wf_run_out(run, user)
+
+
+def _wf_stop(run: dict, why: str) -> dict:
+    """End a run that is still going: close its agents' jobs, take its Kanban cards off the board, mark it cancelled."""
     for s in run["steps"]:
         for job_id in (s.get("jobs") or {}).values():
             job = store.get_job(job_id) if job_id and job_id != "queued" else None
             if job and job["status"] in ("queued", "running"):
-                store.complete_job(job["id"], {"ok": False, "error": f"run cancelled by {user['email']}"}, instance_id=job["instance_id"])
-    _wf_kanban_clear(run, f"run cancelled by {user['email']}")  # stop the workers and take the cards off the board
-    run = store.update_workflow_run(run_id, lambda d: d.update(status="cancelled", finished_at=time.time(), updated_at=time.time(),
-                                                                error=f"cancelled by {user['email']}"))
-    store.record(user["email"], "workflow.cancelled", run_id)
-    return _wf_run_out(run, user)
+                store.complete_job(job["id"], {"ok": False, "error": f"run {why}"}, instance_id=job["instance_id"])
+    _wf_kanban_clear(run, f"run {why}")  # stop the workers and take the cards off the board
+    return store.update_workflow_run(run["id"], lambda d: d.update(status="cancelled", finished_at=time.time(), updated_at=time.time(),
+                                                                   error=why) if d["status"] in ("running", "waiting") else None)
 
 
 # ----------------------------------------------------------------------------- Integrations (Slice 3)
@@ -2008,7 +2030,8 @@ def _discovery_result(job: dict, instance_id: str) -> None:
 
 
 def _test_rows(bp: Blueprint) -> list[dict]:
-    """A blueprint's tests with what they target: agent tests run on that agent's profile; workflow tests wait for Workflows."""
+    """A blueprint's tests with what they target: agent tests run on that agent's profile, workflow tests rehearse the
+    workflow (every agent step a Hermes run with its transcript; gates approve themselves, no room is opened)."""
     agents = {a.id: a for a in bp.agents}
     return [{"test": t.model_dump(mode="json"), "target_kind": "agent" if t.target in agents else "workflow",
              "profile": agents[t.target].profile_name if t.target in agents else None} for t in bp.tests]
@@ -2045,9 +2068,82 @@ def testlab_suites(user: dict = Depends(require("blueprints.read"))) -> list[dic
         out.append({"blueprint": name, "version": version, "status": versions[version]["status"],
                     "agents": [{"id": a.id, "profile": a.profile_name, "role": a.role} for a in bp.agents],
                     "workflows": [w.id for w in bp.workflows], "tests": tests,
-                    "gates_production": gate and any(t["target_kind"] == "agent" for t in tests),
+                    "gates_production": gate and bool(tests),
                     "applied_on": sorted(iid for iid, a in applied.items() if a["name"] == name)})
     return out
+
+
+def _new_test_run(bp: Blueprint, t: dict, inst: dict, user: dict, *, profile: Optional[str]) -> dict:
+    # Strictly after this test's previous run: Windows' clock ticks every ~16 ms, and two runs with the same
+    # created_at would make "the newest run" (the test's result, and the production gate) a coin toss.
+    prev = store.list_test_runs(blueprint=bp.metadata.name, version=bp.metadata.version, test_id=t["id"], limit=1)
+    created_at = max(time.time(), prev[0]["created_at"] + 1e-6) if prev else time.time()
+    return {"id": "tr_" + uuid.uuid4().hex[:10], "blueprint": bp.metadata.name, "version": bp.metadata.version, "test_id": t["id"],
+            "target": t["target"], "profile": profile, "instance_id": inst["id"], "environment": inst["environment"],
+            "status": "running", "created_at": created_at, "created_by": user["email"], "finished_at": None, "job_id": None,
+            "checks": [], "claims": [], "output": None, "tool_calls": None, "usage": None, "duration_s": None, "error": None,
+            "evidence": None, "evidence_error": None, "session_id": None, "run_id": None, "notes": [], "workflow_run": None}
+
+
+def _start_workflow_test(bp: Blueprint, t: dict, inst: dict, user: dict) -> str:
+    """Rehearse a test's workflow on a lab or staging instance: the new test run's id, or why it cannot run there."""
+    parsed = bp.model_dump(mode="json")
+    wf = next((w for w in parsed.get("workflows") or [] if w["id"] == t["target"]), None)
+    if not wf:
+        return f"{t['target']} is neither an agent nor a workflow of this blueprint"
+    try:
+        steps = normalize_steps(wf["steps"])
+    except WorkflowError as exc:
+        return f"the workflow cannot run: {exc}"
+    ready = next((r for r in _wf_readiness(parsed, steps) if r["instance_id"] == inst["id"]), None)
+    if not ready or not ready["ready"]:
+        return f"cannot run {t['target']} on {inst['id']}: " + "; ".join((ready or {}).get("problems") or ["no paired agent"])
+    doc = _new_test_run(bp, t, inst, user, profile=None)
+    run = new_run(run_id="wfr_" + uuid.uuid4().hex[:10], blueprint=bp.metadata.name, version=bp.metadata.version,
+                  workflow_id=wf["id"], instance_id=inst["id"], steps=wf["steps"], started_by=user["email"], at=time.time(),
+                  case=f"test {t['id']}", input_text=t["scenario"], executor="runs", test_run=doc["id"])
+    doc["workflow_run"] = run["id"]
+    doc["notes"] = [f"rehearsal of {wf['id']}: gates approve themselves, no Decision Room is opened, nothing is filed as a fleet output"]
+    store.save_test_run(doc)
+    store.save_workflow_run(run)
+    store.record(user["email"], "workflow.started", run["id"], f"{bp.metadata.name} {wf['id']} on {inst['id']} (test {t['id']})")
+    _wf_advance(run["id"])
+    return doc["id"]
+
+
+def _wf_test_finished(run: dict) -> None:
+    """A test's workflow run ended: judge it like any test run, once."""
+    doc = store.get_test_run(run["test_run"])
+    if not doc or doc.get("status") != "running":
+        return  # already judged, or the test run was cancelled (which cancels its workflow)
+    rec = store.get_blueprint(run["blueprint"], run["version"])
+    bp = Blueprint.model_validate(rec["parsed"]) if rec else None
+    test = next((t.model_dump(mode="json") for t in bp.tests if t.id == doc["test_id"]), None) if bp else None
+    result = wf_test_result(run)
+    if run["status"] == "cancelled":
+        verdict = {"status": "cancelled", "checks": [], "claims": []}
+    elif not test:
+        verdict = {"status": "error", "claims": [],
+                   "checks": [{"id": "run", "kind": "run", "subject": "the test", "outcome": "fail", "detail": "the test is no longer in the blueprint"}]}
+    else:
+        final = next((a.model_dump(mode="json") for a in bp.agents if a.id == result.get("final_agent")), None)
+        verdict = evaluate(test, final, result)
+    calls = result.get("tool_calls")
+    filed: list[bool] = []
+
+    def file(d: dict) -> None:
+        if d.get("status") != "running":
+            return
+        filed.append(True)
+        d.update(status=verdict["status"], checks=verdict["checks"], claims=verdict["claims"], finished_at=time.time(),
+                 output=(result.get("output") or "")[:4000] or None, tool_calls=None if calls is None else calls[:100],
+                 usage=result.get("usage"), duration_s=result.get("duration_s"),
+                 error=result.get("error") if run["status"] != "done" else None)
+
+    store.update_test_run(doc["id"], file)
+    if filed and verdict["status"] != "cancelled":
+        store.record("fleetcontrol", f"test.{verdict['status']}", doc["id"],
+                     f"{doc['blueprint']} v{doc['version']} {doc['test_id']} on {doc['instance_id']} (workflow run {run['id']})")
 
 
 class TestRunStart(BaseModel):
@@ -2078,20 +2174,16 @@ def start_test_runs(body: TestRunStart, user: dict = Depends(require("tests.run"
     for row in rows:
         t = row["test"]
         if row["target_kind"] != "agent":
-            skipped.append({"test_id": t["id"], "reason": "workflow tests run with Workflows (Slice 5)"})
+            outcome = _start_workflow_test(bp, t, inst, user)
+            if outcome.startswith("tr_"):
+                started.append(outcome)
+            else:
+                skipped.append({"test_id": t["id"], "reason": outcome})
             continue
         if row["profile"] not in live:
             skipped.append({"test_id": t["id"], "reason": f"profile {row['profile']} is not on {inst['id']}: apply the blueprint there, then import"})
             continue
-        # Strictly after this test's previous run: Windows' clock ticks every ~16 ms, and two runs with the same
-        # created_at would make "the newest run" (the test's result, and the production gate) a coin toss.
-        prev = store.list_test_runs(blueprint=bp.metadata.name, version=bp.metadata.version, test_id=t["id"], limit=1)
-        created_at = max(time.time(), prev[0]["created_at"] + 1e-6) if prev else time.time()
-        doc = {"id": "tr_" + uuid.uuid4().hex[:10], "blueprint": bp.metadata.name, "version": bp.metadata.version, "test_id": t["id"],
-               "target": t["target"], "profile": row["profile"], "instance_id": inst["id"], "environment": inst["environment"],
-               "status": "running", "created_at": created_at, "created_by": user["email"], "finished_at": None, "job_id": None,
-               "checks": [], "claims": [], "output": None, "tool_calls": None, "usage": None, "duration_s": None, "error": None,
-               "evidence": None, "evidence_error": None, "session_id": None, "run_id": None, "notes": []}
+        doc = _new_test_run(bp, t, inst, user, profile=row["profile"])
         store.save_test_run(doc)
         timeout = min(max(float((t.get("limits") or {}).get("max_seconds") or 60) * 3, 120.0), 900.0)
         # hints: what the test looks for. The real agent ignores them; the demo's simulated agent acts on them.
@@ -2137,6 +2229,9 @@ def cancel_test_run(run_id: str, user: dict = Depends(require("tests.run"))) -> 
         d.update(status="cancelled", error=reason, finished_at=now, checks=[], claims=[])
 
     updated = store.update_test_run(run_id, change)
+    wf_run = store.get_workflow_run(doc["workflow_run"]) if doc.get("workflow_run") else None
+    if wf_run and wf_run["status"] in ("running", "waiting"):
+        _wf_stop(wf_run, reason)
     job = store.get_job(doc["job_id"]) if doc.get("job_id") else None
     if job and job.get("status") in ("queued", "running"):
         store.complete_job(job["id"], {"ok": False, "error": reason}, instance_id=job["instance_id"])
@@ -2248,23 +2343,21 @@ def delete_test(name: str, version: int, test_id: str, user: dict = Depends(requ
 
 
 def _preflight(plan: dict) -> dict:
-    """The test gate for a plan: every agent test of the blueprint version, with its latest result on lab or staging.
-    Production applies need them all passed (Settings → Approvals); workflow tests wait for Workflows."""
+    """The test gate for a plan: every test of the blueprint version (agent and workflow), with its latest result on
+    lab or staging. Production applies need them all passed (Settings → Approvals)."""
     name, version = plan["blueprint"]["name"], plan["blueprint"]["version"]
     rec = store.get_blueprint(name, version)
     rows = _test_rows(Blueprint.model_validate(rec["parsed"])) if rec else []
     latest = _latest_runs(name, version)
     tests = []
     for row in rows:
-        if row["target_kind"] != "agent":
-            continue
         r = latest.get(row["test"]["id"])
-        tests.append({"test_id": row["test"]["id"], "status": r["status"] if r else "not_run",
+        tests.append({"test_id": row["test"]["id"], "kind": row["target_kind"], "status": r["status"] if r else "not_run",
                       "instance_id": r["instance_id"] if r else None, "at": (r.get("finished_at") or r["created_at"]) if r else None})
     passed = sum(1 for t in tests if t["status"] == "passed")
     required = plan["environment"] == "production" and bool(tests) and bool(_settings()["require_tests_for_production"])
     return {"total": len(tests), "passed": passed, "tests": tests,
-            "deferred": [row["test"]["id"] for row in rows if row["target_kind"] != "agent"],
+            "deferred": [],
             "required": required, "satisfied": (not required) or passed == len(tests)}
 
 

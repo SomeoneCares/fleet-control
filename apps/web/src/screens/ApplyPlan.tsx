@@ -163,8 +163,7 @@ function TestsCheck({ plan }: { plan: Plan }) {
   const { data: pre } = useLoad(() => api.planPreflight(plan.id), [plan.id, plan.status]);
   if (!pre) return <Check icon="flask" tone="neutral" title="Tests" detail="Checking the suite…" />;
   if (!pre.total) {
-    return <Check icon="flask" tone="neutral" title="Tests"
-      detail={pre.deferred.length ? `Only workflow tests (${pre.deferred.length}); they run with Workflows` : "This blueprint version has no tests"} />;
+    return <Check icon="flask" tone="neutral" title="Tests" detail="This blueprint version has no tests" />;
   }
   const all = pre.passed === pre.total;
   const detail = `${pre.passed} of ${pre.total} passed on lab or staging`

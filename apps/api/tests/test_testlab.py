@@ -38,6 +38,16 @@ class MatchingTest(unittest.TestCase):
                          ["opensanctions.search"])
 
 
+class WorkflowArtifactTest(unittest.TestCase):
+    def test_a_workflow_run_is_judged_on_the_artifacts_its_steps_produced(self):
+        test = {"expected_artifact": "sar-draft.docx", "evaluator": "artifact-exists"}
+        ok = evaluate(test, None, {"status": "completed", "output": "x", "tool_calls": [], "artifacts": ["case-brief.md", "sar-draft.docx"]})
+        self.assertEqual((ok["status"], ok["checks"][0]["outcome"]), ("passed", "pass"))
+        short = evaluate(test, None, {"status": "completed", "output": "x", "tool_calls": [], "artifacts": ["case-brief.md"]})
+        self.assertEqual(short["status"], "failed")
+        self.assertIn("case-brief.md", short["checks"][0]["detail"])
+
+
 class EvaluateTest(unittest.TestCase):
     def test_a_run_that_did_what_the_test_asks_passes(self):
         r = evaluate(TEST, SCREENER, run())

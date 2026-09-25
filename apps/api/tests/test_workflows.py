@@ -8,7 +8,7 @@ from fleetcontrol_blueprint import load_blueprint
 from fleetcontrol_api.workflows import (
     WorkflowError, compose_input, current_step, decide_gate, escalate_due, finish_room_step, instructions,
     may_decide_gate, missing_requirements, new_run, pending_members, progress, question_for, record_result, run_row,
-    kanban_outcome, kanban_tasks, segment, settle, start_step,
+    kanban_outcome, kanban_tasks, rehearse, segment, settle, start_step, test_result,
 )
 
 EXAMPLE = os.path.join(os.path.dirname(__file__), "..", "..", "..", "packages", "blueprint_schema", "examples", "aml-investigation.yaml")
@@ -94,6 +94,44 @@ class RunTest(unittest.TestCase):
         problems = missing_requirements(run["steps"], agents, available_mcps=["opensanctions"])
         self.assertIn("case-orchestrator needs the MCP server 'case-store', which this instance does not have", problems)
         self.assertIn("ownership-tracer is not an agent in this blueprint", problems)
+
+
+class RehearsalTest(unittest.TestCase):
+    """A workflow test's run: people steps pass by themselves, and the finished run reads as a test result."""
+
+    def finish(self, run, *, tools=(), at=1000.0):
+        for s in run["steps"]:
+            if s["kind"] in ("human_gate", "decision_room"):
+                rehearse(run, s["index"], at=at)
+                continue
+            for m in s["members"]:
+                record_result(run, s["index"], m["agent"], ok=True, output=f"out of {m['agent']}", at=at + 60)
+                s["results"][m["agent"]].update(tools=list(tools), usage={"total_tokens": 100})
+        return settle(run, at=at + 90)
+
+    def test_a_gate_approves_itself_and_says_so_and_no_room_is_opened(self):
+        run = self.finish(example_run(), tools=["mcp_opensanctions__search"])
+        gate, room = run["steps"][3], run["steps"][5]
+        self.assertEqual((gate["status"], gate["gate"]["automatic"], gate["gate"]["by"]), ("done", True, "fleetcontrol"))
+        self.assertEqual((room["status"], room.get("room_id"), run["room_id"]), ("done", None, None))
+        self.assertEqual(run["status"], "done")
+        with self.assertRaises(WorkflowError):
+            rehearse(run, 0)  # an agent step is never passed without its agent
+
+    def test_the_result_is_the_last_agents_output_every_tool_call_and_the_artifacts(self):
+        result = test_result(self.finish(example_run(), tools=["read_file"]))
+        self.assertEqual((result["status"], result["output"], result["final_agent"]), ("completed", "out of sar-drafter", "sar-drafter"))
+        self.assertEqual(len(result["tool_calls"]), 5)  # one per agent run
+        self.assertIn("sar-draft.docx", result["artifacts"])
+        self.assertEqual((result["duration_s"], result["usage"]), (90.0, {"total_tokens": 500}))
+
+    def test_a_step_without_a_transcript_makes_the_tool_calls_unknown_not_empty(self):
+        run = self.finish(example_run())
+        run["steps"][0]["results"]["case-orchestrator"]["tools"] = None
+        self.assertIsNone(test_result(run)["tool_calls"])
+        failed = example_run()
+        failed.update(status="failed", error="challenger did not finish")
+        self.assertEqual(test_result(failed), {"status": "failed", "error": "challenger did not finish"})
 
 
 class KanbanTest(unittest.TestCase):

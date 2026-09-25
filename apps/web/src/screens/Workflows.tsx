@@ -58,7 +58,7 @@ export function WorkflowsScreen() {
                     <span className="block text-[13px] font-medium truncate">{r.case || r.id}</span>
                     <span className="text-small text-text-secondary">{r.started_by} · {timeAgo(r.started_at)} · on <Mono>{r.instance_id}</Mono></span>
                   </span>
-                  <span><Chip tone={RUN_STATUS[r.status].tone}>{RUN_STATUS[r.status].label}</Chip></span>
+                  <span className="flex gap-1 flex-wrap"><Chip tone={RUN_STATUS[r.status].tone}>{RUN_STATUS[r.status].label}</Chip>{r.test_run && <Chip tone="neutral">Test</Chip>}</span>
                   <span className="text-small text-text-secondary truncate">
                     step {Math.min(r.progress.done + 1, r.progress.total)} of {r.progress.total}{r.progress.current_label ? `: ${r.progress.current_label}` : ""}
                     {r.overdue && <span className="text-error"> · overdue</span>}

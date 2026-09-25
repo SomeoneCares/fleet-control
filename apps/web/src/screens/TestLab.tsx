@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { api, type BlueprintTest, type Suite, type TestRun } from "../api/client";
 import { useAuth } from "../lib/auth";
 import { errorText, useLoad, useNow } from "../lib/hooks";
@@ -21,7 +21,7 @@ export function TestLabScreen() {
   const [naming, setNaming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: Tone; text: string } | null>(null);
-  const [openRun, setOpenRun] = useState<string | null>(null);
+  const [openRun, setOpenRun] = useState<string | null>(() => search.get("run"));  // ?run= opens one (from a workflow rehearsal)
   const [runsKey, setRunsKey] = useState(0);
 
   const all = suites ?? [];
@@ -226,8 +226,9 @@ function TestEditor({ suite, test, isNew, runOn, busy, onRun, onSaved, onDeleted
           <div className="text-small text-text-secondary">{target} · <Mono>{test.id}</Mono> · {suite.blueprint} v{suite.version}</div>
         </div>
         {!isNew && can("tests.run") && (
-          <Button icon="flask" disabled={!runOn || busy || isWorkflow} onClick={onRun}
-            title={isWorkflow ? "Workflow tests run with Workflows (Slice 5)" : runOn ? `Run on ${runOn}` : "No lab or staging instance"}>Run now</Button>
+          <Button icon="flask" disabled={!runOn || busy} onClick={onRun}
+            title={!runOn ? "No lab or staging instance" : isWorkflow ? `Rehearse the workflow on ${runOn}: gates approve themselves, no room is opened`
+              : `Run on ${runOn}`}>Run now</Button>
         )}
       </div>
 
@@ -389,7 +390,9 @@ export function RunDetail({ run: r }: { run: TestRun }) {
         {r.usage?.total_tokens !== undefined && <span className="text-text-secondary">· {r.usage.total_tokens.toLocaleString("en-GB")} tokens</span>}
         <span className="text-text-secondary">· evidence: {r.evidence === "transcript" ? "Hermes session transcript" : "none"}</span>
       </div>
-      {r.status === "running" && <Banner tone="info"><span className="flex items-center gap-2"><Spinner />Running on {r.profile} ({r.instance_id}); this updates by itself.</span></Banner>}
+      {r.status === "running" && <Banner tone="info"><span className="flex items-center gap-2"><Spinner />
+        {r.workflow_run ? `Rehearsing ${r.target} on ${r.instance_id}` : `Running on ${r.profile} (${r.instance_id})`}; this updates by itself.</span></Banner>}
+      {r.workflow_run && <div className="text-small">Each step, what it produced and the gate record: <Link to={`/workflow-runs/${r.workflow_run}`}>open the workflow run</Link></div>}
       {r.status === "cancelled" && <Banner tone="info">Stopped before it finished{r.error ? ` (${r.error})` : ""}. A cancelled run says nothing about the test and does not count as its result.</Banner>}
       {r.evidence_error && <Banner tone="warning">No transcript: {r.evidence_error}</Banner>}
       {r.notes.map((n) => <Banner key={n} tone="info">{n}</Banner>)}

@@ -416,7 +416,7 @@ export interface WorkflowRunRow {
   id: string; blueprint: string; version: number; workflow_id: string; instance_id: string; status: WorkflowRunStatus;
   case: string | null; started_by: string; started_at: number; updated_at: number; finished_at: number | null; error: string | null;
   room_id: string | null; progress: { done: number; total: number; current: number | null; current_label: string | null };
-  awaiting_role: string | null; overdue: boolean;
+  awaiting_role: string | null; overdue: boolean; test_run?: string | null;
   gate?: { index: number; role: string; timeout: string; started_at: number; escalated_at: number | null };
 }
 export interface WorkflowRun {
@@ -424,7 +424,7 @@ export interface WorkflowRun {
   executor: "runs" | "kanban"; board: string | null;
   input: string | null; status: WorkflowRunStatus; started_by: string; started_at: number; updated_at: number; finished_at: number | null;
   steps: WorkflowStep[]; artifacts: Record<string, { agent: string; step: number; artifact_id: string | null; at: number }>;
-  room_id: string | null; error: string | null; row: WorkflowRunRow;
+  room_id: string | null; error: string | null; row: WorkflowRunRow; test_run?: string | null;
   may_decide: Record<string, { allowed: boolean; why: string | null }>;
 }
 
@@ -665,7 +665,7 @@ export interface TestRun {
   version: number;
   test_id: string;
   target: string;
-  profile: string;
+  profile: string | null;
   instance_id: string;
   environment: Environment;
   status: TestStatus;
@@ -682,6 +682,7 @@ export interface TestRun {
   evidence: string | null;
   evidence_error: string | null;
   notes: string[];
+  workflow_run?: string | null;  // a workflow test's rehearsal run
 }
 
 export interface ClaimRow {

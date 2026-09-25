@@ -99,7 +99,8 @@ EXECUTORS = ("runs", "kanban")  # one Hermes run per agent step, or linked tasks
 
 def new_run(*, run_id: str, blueprint: str, version: int, workflow_id: str, instance_id: str, steps: list[dict],
             started_by: str, at: float, zone: Optional[str] = None, case: Optional[str] = None,
-            input_text: Optional[str] = None, executor: str = "runs") -> dict:
+            input_text: Optional[str] = None, executor: str = "runs", test_run: Optional[str] = None) -> dict:
+    """``test_run`` makes the run a test's rehearsal: gates approve themselves and no room is opened (``rehearse``)."""
     if executor not in EXECUTORS:
         raise WorkflowError(f"a run executes as one of: {', '.join(EXECUTORS)}")
     return {
@@ -107,8 +108,53 @@ def new_run(*, run_id: str, blueprint: str, version: int, workflow_id: str, inst
         "board": "fleetcontrol" if executor == "kanban" else None, "sync_job": None,
         "instance_id": instance_id, "zone": zone, "case": case, "input": (input_text or "").strip() or None,
         "status": "running", "started_by": started_by, "started_at": at, "updated_at": at, "finished_at": None,
-        "steps": normalize_steps(steps), "artifacts": {}, "room_id": None, "error": None,
+        "steps": normalize_steps(steps), "artifacts": {}, "room_id": None, "error": None, "test_run": test_run,
     }
+
+
+REHEARSAL_NOTE = "approved automatically: a test run has no reviewer"
+
+
+def rehearse(run: dict, index: int, at: Optional[float] = None) -> dict:
+    """A test run passes a people step without people: a gate approves itself (said so in the gate record) and a
+    Decision Room is not opened. What a test checks is what the agents did, and nobody is asked to decide a test."""
+    at = at if at is not None else time.time()
+    step = run["steps"][index]
+    if step["kind"] == "human_gate":
+        step["gate"] = {"by": "fleetcontrol", "approved": True, "note": REHEARSAL_NOTE, "at": at, "automatic": True}
+    elif step["kind"] == "decision_room":
+        step["note"] = "not opened: a test run opens no Decision Room"
+    else:
+        raise WorkflowError("only a gate or a room step is rehearsed")
+    step.update(status="done", finished_at=at)
+    run["updated_at"] = at
+    return run
+
+
+def test_result(run: dict, final_agent: Optional[str] = None) -> dict:
+    """A finished test run in the shape the Test Lab judges (``testlab.evaluate``): the last agent step's output, every
+    tool call of every step (None when any step has no transcript: then tool checks are Not verifiable, never guessed),
+    the artifacts the run produced and how long it took."""
+    if run["status"] != "done":
+        return {"status": run["status"], "error": run.get("error") or f"the workflow run {run['status']}"}
+    agent_steps = [s for s in run["steps"] if s["kind"] in ("agent", "parallel")]
+    calls: Optional[list[dict]] = []
+    tokens: Optional[int] = 0
+    for s in agent_steps:
+        for agent, r in (s.get("results") or {}).items():
+            used = (r.get("usage") or {}).get("total_tokens")
+            tokens = None if used is None or tokens is None else tokens + int(used)
+            if r.get("tools") is None:
+                calls = None
+            elif calls is not None:
+                calls += [{"name": n, "agent": agent, "step": s["index"] + 1} for n in r["tools"] if n]
+    last = agent_steps[-1] if agent_steps else None
+    outputs = [(a, (r.get("output") or "")) for a, r in ((last or {}).get("results") or {}).items() if r.get("ok")]
+    output = outputs[0][1] if len(outputs) == 1 else "\n\n".join(f"## {a}\n{o}" for a, o in outputs)
+    return {"status": "completed", "output": output, "tool_calls": calls, "artifacts": sorted(run["artifacts"]),
+            "usage": {"total_tokens": tokens} if tokens is not None and agent_steps else None,
+            "duration_s": round((run.get("finished_at") or run["started_at"]) - run["started_at"], 1),
+            "final_agent": (last or {}).get("members", [{}])[0].get("agent") if last and len(last["members"]) == 1 else None}
 
 
 def segment(run: dict, start: int) -> list[dict]:
@@ -371,6 +417,6 @@ def run_row(run: dict, now: Optional[float] = None) -> dict[str, Any]:
             "workflow_id": run["workflow_id"], "instance_id": run["instance_id"], "status": run["status"],
             "case": run.get("case"), "started_by": run["started_by"], "started_at": run["started_at"],
             "updated_at": run["updated_at"], "finished_at": run.get("finished_at"), "error": run.get("error"),
-            "room_id": run.get("room_id"), "progress": progress(run),
+            "room_id": run.get("room_id"), "progress": progress(run), "test_run": run.get("test_run"),
             "awaiting_role": cur["role"] if cur and cur["kind"] == "human_gate" else None,
             "overdue": any(gate_overdue(s, now) for s in run["steps"])}

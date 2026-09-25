@@ -115,7 +115,13 @@ def evaluate(test: dict, agent: Optional[dict], result: dict) -> dict:
                claim=f"Did not call {tool}", verdict="Policy blocked" if was_blocked else None)
 
     artifact = test.get("expected_artifact")
-    if artifact:
+    if artifact and result.get("artifacts") is not None:
+        # a workflow run names what it produced: each agent step's artifact, kept only when the step succeeded
+        ok = artifact in result["artifacts"]
+        _check(checks, claims, cid="artifact", kind="artifact", subject=artifact, outcome="pass" if ok else "fail",
+               detail="a step produced it" if ok else f"the run produced {', '.join(result['artifacts']) or 'no artifacts'}",
+               claim=f"Produced {artifact}")
+    elif artifact:
         where = next((c.get("name") for c in calls or [] if artifact in (c.get("arguments") or "") or artifact in (c.get("result") or "")), None)
         if not evidence:
             outcome, detail = "not_verifiable", missing

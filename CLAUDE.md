@@ -167,6 +167,12 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   defaults to port 9129, which `fleetctl-dashboard` now holds: run it as `CAPTURE_PORT=9139 bash run_capture.sh`.
   After a Hermes self-update, restart `fleetctl-dashboard` too: until then it serves the old code and reports every
   messaging platform as `gateway_stopped` while the gateway is fine.
+- DONE (2026-09-26): lab host updated to Hermes 0.21.5 (`main` @ f8123d24). Since 0.21.5 the checkout has no
+  `__version__` literal; the version is `baseVersion` in the git-ignored `hermes-agent/install-stamp.json` written by
+  `hermes update` (what the dashboard reports). `installed_version()` reads the stamp first, the compat check pins
+  the reader; all 16 checks pass. `hermes update` kills `git fetch` after 300 s: on a far-behind install run
+  `git fetch origin main` in the checkout first. The LAN `hermes-dashboard.service` is a system unit: restarting it
+  needs root.
 - DONE (2026-09-25): Slice 4 Access inspector (`access.py`, `GET /api/v1/access/subjects|inspect`, top of Govern →
   Access; `users.read` = Admin). Person ∩ agent ∩ system, every line with its rule, read from what the API enforces
   (auth.PERMISSIONS, content.may_read, the agent's applied blueprint grants and policies, rooms.may_decide). One-question
@@ -201,6 +207,14 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   note (both executors). Cancel archives open tasks (reclaiming running workers). Compat check pins the Kanban
   routes, `CreateTaskBody` and the Task/Run fields read back; all 16 checks pass on the host's 0.21.4 source.
   Evidence on Kanban is Kanban's own run records (tool calls are not reported through it).
+- DONE (2026-10-01): goAML reports for the FIU (Egypt: EMLCU), `goaml.py`, `/api/v1/goaml/*`, screens `/goaml`, a
+  room panel and Settings → goAML (`docs/goaml.md`). A decided room's `fleetcontrol.goaml-draft/v1` draft (goAML's own
+  element names) becomes the XML in the UNODC order (checked against a published FIU XSD); **the FIU's own XSD, loaded
+  by an Admin, decides** (`xmlschema`, XSD 1.1 so asserts count). Admins/Approvers prepare (named as reporting person),
+  download, re-check, and record the FIU reference after a person files in goAML; only a report that passed can be
+  recorded as filed. Never files, holds no goAML credential. EMLCU's real XSD is not public: load the bank's copy and
+  run an acceptance case before calling a bank "EMLCU-ready". Customer guide: `~/Documents/Fleet Control - Product
+  Overview and Deployment Guide (goAML Egypt).docx`.
 - PLAN (Basem, 2026-09-16): complete the whole portal before Docker, every screen working end to end (real backend,
   real Hermes runs on the lab host where needed), in build-document order: Slice 2 Fleet Architect → Slice 3 Test
   Lab, Assurance, Integrations (+ Settings → Observability) → Slice 4 Workspace, Decision Rooms, Ask the fleet,

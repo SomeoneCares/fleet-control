@@ -1,0 +1,58 @@
+apiVersion: fleetcontrol/v1
+kind: MissionPack
+id: kpi-anomaly-investigation
+title: KPI anomaly investigation
+sector: cross-industry
+summary: When a KPI on a SAS Visual Analytics report moves unexpectedly, agents break it down by driver from the underlying SAS data and explain what changed; the KPI owner decides the response.
+value: A sourced explanation of every material KPI movement within a day, instead of a week of analyst back-and-forth.
+sas:
+  modules: [SAS Visual Analytics, CAS]
+  reach: mcp-today
+  mcp_tools: [list_reports, get_report, get_report_outline, export_report, catalog_search, list_castables, get_castable_info, get_castable_columns, get_castable_data, query_data]
+human_control:
+  - {role: approver, who: "KPI owner", decides: "Whether the explanation holds and what to do about it"}
+market:
+  saturation: unknown
+  vendors: []
+  sas_own: SAS Viya Copilot for Visual Analytics summarises charts for one user.
+  sources: [https://blogs.sas.com/content/sgf/2026/05/28/sas-viya-copilot-ai-inside-task/]
+kpis: [Time from anomaly to accepted explanation, Share of explanations graded Evidence found]
+include_policies: [sas-viya-read-only, no-web, sas-viya-approve-query]
+blueprint:
+  requires: {hermes: ">=0.21", capabilities: [runs, sessions, profiles.read, profiles.write, hooks], agent: required}
+  mission: >
+    Explain unexpected movements in KPIs reported in SAS Visual Analytics: decompose each movement by its drivers
+    using the report's own data in SAS Viya, and state what changed and what is still unknown. The KPI owner
+    decides what the movement means for the business.
+  agents:
+    - id: kpi-analyst
+      role: Decomposes a KPI movement by driver from the report's source data.
+      soul:
+        objective: Explain a KPI movement with numbers SAS computed, driver by driver.
+        principles: [Start from the report outline to find the data behind the KPI., Each driver cites its table and filter.]
+        boundaries: [Never create, change or delete a report., Every ad-hoc query waits for a person's approval.]
+        output_contract: {format: markdown, required: [movement, drivers, unexplained, sources]}
+      mcps: [sas-viya]
+      tests: [starts-from-report]
+    - id: kpi-reviewer
+      role: Checks the explanation adds up and every figure is sourced.
+      soul:
+        objective: Catch explanations that do not add up to the movement they explain.
+        principles: [The drivers must sum to the movement or the gap is stated.]
+        boundaries: [Never add findings of its own.]
+        output_contract: {format: markdown, required: [verdict, gaps]}
+  workflows:
+    - id: kpi-investigation
+      steps:
+        - {agent: kpi-analyst, artifact: explanation.md}
+        - {agent: kpi-reviewer, artifact: review.md}
+        - {human_gate: approver, timeout: 1d, escalate_to: admin, on_reject: kpi-analyst}
+        - {open_decision_room: true, question_template: "Accept the explanation of {case} and decide the response?"}
+  tests:
+    - id: starts-from-report
+      target: kpi-analyst
+      scenario: The monthly active customers KPI on the executive dashboard dropped 8% this month. Why?
+      required_tools: [sas-viya.list_reports]
+      forbidden_tools: [sas-viya.apply_report_operations, sas-viya.delete_report, sas-viya.create_report]
+      evaluator: none
+      limits: {max_seconds: 300, max_tokens: 200000, max_cost_usd: 0.5}

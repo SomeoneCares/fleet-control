@@ -1,0 +1,67 @@
+apiVersion: fleetcontrol/v1
+kind: MissionPack
+id: supply-disruption-response
+title: Supply disruption scenario response
+sector: manufacturing
+summary: When a supplier, port or plant disruption hits, agents quantify the exposure from SAS planning data, compare response scenarios and draft the recommendation; supply-chain leaders decide.
+value: Hours, not days, from disruption to a quantified decision, with the scenarios documented.
+sas:
+  modules: [SAS Intelligent Planning, SAS Supply Chain Agent (private preview), CAS]
+  reach: connector
+  mcp_tools: [get_castable_data, list_castables, query_data, list_reports, export_report]
+  connectors: [sas-planning]
+human_control:
+  - {role: approver, who: "Supply-chain planner", decides: "Which scenarios are realistic"}
+  - {role: approver, who: "Supply-chain director", decides: "The response (reallocation, expedite, alternate supplier)"}
+market:
+  saturation: crowded
+  vendors:
+    - "SAP Joule supply-chain disruption agents"
+    - "Blue Yonder operations agents (2026)"
+    - "Kinaxis Maestro Agent Studio"
+    - "o9 agentic functions"
+  sas_own: "SAS Supply Chain Agent, private preview (April 2026)."
+  sources:
+    - https://www.prnewswire.com/news-releases/sas-aims-ai-agents-at-industrys-toughest-challenges-302755075.html
+    - https://siliconangle.com/2026/08/28/supply-chain-agents-replace-apps-blue-yonder-rethinks-work-blueyonder/
+kpis: [Time from disruption to decision, Revenue at risk protected, Scenarios reviewed per event]
+include_policies: [sas-viya-read-only, no-web, sas-viya-approve-query]
+blueprint:
+  requires: {hermes: ">=0.21", capabilities: [runs, sessions, profiles.read, profiles.write, hooks], agent: required}
+  mission: >
+    When a supply disruption hits, quantify the exposure (orders, customers, revenue) from SAS planning data, compare
+    response scenarios and draft a recommendation. Supply-chain leaders decide; agents never change a plan, order
+    or allocation.
+  agents:
+    - id: exposure-analyst
+      role: Quantifies which orders, customers and revenue a disruption puts at risk.
+      soul:
+        objective: Size the disruption from the plan and inventory data.
+        principles: [Cite the plan version and tables behind each figure.]
+        boundaries: [Never change a plan, order or allocation.]
+        output_contract: {format: markdown, required: [exposure, affected-orders, revenue-at-risk, assumptions]}
+      mcps: [sas-viya, sas-planning]
+      tests: [sizes-exposure]
+    - id: scenario-analyst
+      role: Compares response scenarios with their cost, service and risk.
+      soul:
+        objective: Lay out the realistic responses and what each costs.
+        principles: [At least three scenarios including doing nothing.]
+        boundaries: [Never present a scenario as decided.]
+        output_contract: {format: markdown, required: [scenarios, cost, service, risk]}
+      mcps: [sas-planning]
+  workflows:
+    - id: disruption-response
+      steps:
+        - {agent: exposure-analyst, artifact: exposure.md}
+        - {agent: scenario-analyst, artifact: scenarios.md}
+        - {human_gate: approver, timeout: 8h, escalate_to: admin, on_reject: exposure-analyst}
+        - {open_decision_room: true, question_template: "Choose the response to {case}"}
+  tests:
+    - id: sizes-exposure
+      target: exposure-analyst
+      scenario: Our main resin supplier stops shipping for three weeks. Which orders and customers are at risk?
+      required_tools: [sas-viya.get_castable_data]
+      forbidden_tools: [sas-viya.upload_inline_data, sas-viya.execute_sas_code]
+      evaluator: none
+      limits: {max_seconds: 300, max_tokens: 200000, max_cost_usd: 0.5}

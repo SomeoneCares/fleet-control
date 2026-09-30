@@ -1,0 +1,60 @@
+apiVersion: fleetcontrol/v1
+kind: MissionPack
+id: promotion-post-mortem
+title: Promotion post-event analysis
+sector: retail-consumer
+summary: After a promotion ends, agents measure its uplift, cannibalisation, halo and margin from SAS data and draft the post-mortem; the category manager decides what to repeat.
+value: Every promotion evaluated the same way, so next year's calendar is built on evidence.
+sas:
+  modules: [CAS, SAS Visual Analytics, SAS Visual Forecasting]
+  reach: mcp-today
+  mcp_tools: [get_castable_data, list_castables, query_data, list_reports, get_report_outline, export_report]
+human_control:
+  - {role: approver, who: "Category manager", decides: "Repeat, change or drop the promotion"}
+market:
+  saturation: contested
+  vendors:
+    - "RELEX Promotion Diagnostics agent (live)"
+    - "Anaplan role-based agents"
+  sas_own: "Nothing specific to this task."
+  sources:
+    - https://www.relexsolutions.com/meet-the-agents/
+    - https://www.anaplan.com/news/anaplan-introduces-new-suite-role-based-ai-agents/
+kpis: [Promotions evaluated, Share of promotions repeated with positive margin, Analyst hours per post-mortem]
+include_policies: [sas-viya-read-only, no-web, sas-viya-approve-query]
+blueprint:
+  requires: {hermes: ">=0.21", capabilities: [runs, sessions, profiles.read, profiles.write, hooks], agent: required}
+  mission: >
+    After a promotion ends, measure its incremental sales, cannibalisation, halo and margin from SAS data and draft a
+    post-mortem. The category manager decides what to repeat; agents never change prices or the promotion calendar.
+  agents:
+    - id: promotion-analyst
+      role: Measures uplift, cannibalisation, halo and margin against a baseline.
+      soul:
+        objective: Say what the promotion really earned, net of what it took from elsewhere.
+        principles: [State the baseline method., Cite tables and periods.]
+        boundaries: [Never change prices or the promotion calendar.]
+        output_contract: {format: markdown, required: [uplift, cannibalisation, halo, margin, baseline]}
+      mcps: [sas-viya]
+      tests: [measures-uplift]
+    - id: post-mortem-drafter
+      role: Drafts the post-mortem with a recommendation.
+      soul:
+        objective: Draft a one-page post-mortem a category manager can act on.
+        principles: [Recommendation with the evidence that supports it.]
+        boundaries: [Never present a recommendation as decided.]
+        output_contract: {format: markdown, required: [summary, recommendation, evidence]}
+  workflows:
+    - id: post-mortem
+      steps:
+        - {agent: promotion-analyst, artifact: measurement.md}
+        - {agent: post-mortem-drafter, artifact: post-mortem.md}
+        - {human_gate: approver, timeout: 3d, escalate_to: admin, on_reject: promotion-analyst}
+  tests:
+    - id: measures-uplift
+      target: promotion-analyst
+      scenario: Evaluate last month's buy-two-get-one on breakfast cereals.
+      required_tools: [sas-viya.get_castable_data]
+      forbidden_tools: [sas-viya.upload_inline_data, sas-viya.execute_sas_code]
+      evaluator: none
+      limits: {max_seconds: 300, max_tokens: 200000, max_cost_usd: 0.5}

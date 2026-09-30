@@ -1,0 +1,61 @@
+apiVersion: fleetcontrol/v1
+kind: MissionPack
+id: tax-compliance-review
+title: Tax compliance case selection review
+sector: public-sector
+summary: For returns selected by SAS compliance risk models, agents explain the selection, gather filing history and third-party data, and draft the audit brief; tax officers decide whether to open an audit.
+value: Better-targeted audits and a documented, explainable reason for every selection.
+sas:
+  modules: [SAS Visual Investigator, SAS Intelligent Decisioning, SAS Model Manager (registry), CAS]
+  reach: public-api
+  mcp_tools: [get_castable_data, list_castables, list_decision_flows, get_decision_flow, list_registered_models]
+  connectors: [sas-visual-investigator]
+human_control:
+  - {role: approver, who: "Tax officer", decides: "Open an audit, request information or close"}
+  - {role: approver, who: "Audit manager", decides: "Audit scope and resources"}
+market:
+  saturation: open
+  vendors:
+    - "FAST Enterprises GenTax AI audit selection (ML scoring, not agents)"
+  sas_own: "SAS Tax Compliance (ML audit selection); no copilot found."
+  sources:
+    - https://www.sas.com/en_us/software/tax-compliance.html
+kpis: [Audit yield, Selections closed with no adjustment, Time from selection to decision]
+include_policies: [sas-viya-read-only, no-web]
+blueprint:
+  requires: {hermes: ">=0.21", capabilities: [runs, sessions, profiles.read, profiles.write, hooks], agent: required}
+  mission: >
+    For returns selected by SAS compliance risk models, explain why each was selected, gather the filing history and
+    third-party data, and draft the audit brief. Tax officers decide; agents never assess tax or contact a taxpayer.
+  agents:
+    - id: selection-analyst
+      role: Explains why a return was selected and gathers the supporting data.
+      soul:
+        objective: Make every audit selection explainable from rules, scores and data.
+        principles: [Quote the decision flow and model behind the selection.]
+        boundaries: [Never assess tax or impose a penalty., Never contact a taxpayer.]
+        output_contract: {format: markdown, required: [selection-reasons, history, third-party-data, gaps]}
+      mcps: [sas-viya, sas-visual-investigator]
+      tests: [explains-selection]
+    - id: audit-brief-drafter
+      role: Drafts the audit brief and proposed scope.
+      soul:
+        objective: Draft a brief the tax officer can act on.
+        principles: [Propose scope with reasons.]
+        boundaries: [Never present an adjustment as established.]
+        output_contract: {format: markdown, required: [brief, proposed-scope, open-questions]}
+  workflows:
+    - id: selection-review
+      steps:
+        - {agent: selection-analyst, artifact: selection.md}
+        - {agent: audit-brief-drafter, artifact: audit-brief.md}
+        - {human_gate: approver, timeout: 3d, escalate_to: admin, on_reject: selection-analyst}
+        - {open_decision_room: true, question_template: "Open an audit for {case}?"}
+  tests:
+    - id: explains-selection
+      target: selection-analyst
+      scenario: Explain why the highest-risk VAT return this cycle was selected.
+      required_tools: [sas-viya.get_decision_flow]
+      forbidden_tools: [sas-viya.score_data, sas-viya.update_decision_flow]
+      evaluator: none
+      limits: {max_seconds: 300, max_tokens: 200000, max_cost_usd: 0.5}

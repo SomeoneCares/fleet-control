@@ -1,0 +1,48 @@
+# SAS Viya MCP Server v1.18.0 (released 2026-09-29): the 92 tools by tier and access class, as SAS classifies them
+# in src/sas_mcp_server/tools/_access.py (read-only = exposed with MCP_READ_ONLY=true; destructive = can remove or
+# overwrite state; write = everything else that changes state or starts server-side work). execute_sas_code is
+# listed in Tier 0 and Tier 8; it is one tool. Refresh on each SAS MCP Server release.
+server_version: 1.18.0
+tiers:
+  - tier: 0
+    name: "Compute Contexts & Code Execution"
+    read-only: [list_compute_contexts]
+    destructive: [execute_sas_code, reset_compute_session]
+  - tier: 1
+    name: "Data Discovery"
+    read-only: [catalog_search, catalog_search_helper, catalog_find_instance, catalog_get_adhoc_analysis, catalog_download_table_profile, catalog_list_agents, catalog_get_agent_history, list_cas_servers, list_caslibs, list_castables, list_source_tables, get_castable_info, get_castable_columns, get_castable_data, list_compute_libraries, list_compute_tables, list_compute_columns, get_compute_table_data]
+    write: [catalog_run_adhoc_analysis, catalog_run_agent, query_data]
+  - tier: 2
+    name: "Data Operations & Files"
+    read-only: [list_files, download_file]
+    write: [upload_data, upload_inline_data, promote_table_to_memory, upload_file]
+  - tier: 3
+    name: "Reports & Visualization"
+    read-only: [list_reports, get_report, export_report, describe_report_objects, get_report_outline]
+    destructive: [create_report, apply_report_operations, copy_report, delete_report]
+  - tier: 4
+    name: "Batch Jobs & Async Execution"
+    read-only: [get_job_status, list_jobs, get_job_log]
+    destructive: [submit_batch_job, cancel_job]
+  - tier: 5
+    name: "Automated Machine Learning"
+    read-only: [list_ml_projects]
+    write: [create_ml_project, run_ml_project, register_ml_champion_model]
+    destructive: [publish_ml_champion_model]
+  - tier: 6
+    name: "Model Management & Scoring"
+    read-only: [list_registered_models, list_publishing_destinations, list_mas_modules, get_mas_module_step_signature]
+    write: [score_data]
+  - tier: 7
+    name: "Decisioning (SAS Intelligent Decisioning)"
+    read-only: [get_business_ruleset, list_business_rulesets, list_business_ruleset_revisions, get_business_rule, list_business_rules, get_decision_flow, list_decision_flows, get_decision_flow_code, list_decision_flow_revisions, get_decision_flow_revision]
+    write: [create_business_ruleset, lock_business_ruleset_revision, create_business_rule, create_decision_flow, lock_decision_flow_revision, publish_decision_flow]
+    destructive: [update_business_ruleset, delete_business_ruleset, update_business_rule, delete_business_rule, update_decision_flow, delete_decision_flow]
+  - tier: 8
+    name: "Workbench (Execute Code Only)"
+    destructive: [execute_sas_code]
+  - tier: 9
+    name: "Business Glossary (SAS Data Governance)"
+    read-only: [search_glossary_terms, list_glossary_terms, get_glossary_term, list_glossary_term_types, get_glossary_term_type, list_term_assets, list_table_terms]
+    write: [create_glossary_term, assign_glossary_term, create_glossary_term_type]
+    destructive: [import_glossary_terms, update_glossary_term, delete_glossary_term, unassign_glossary_term, update_glossary_term_type, delete_glossary_term_type]

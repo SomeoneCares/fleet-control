@@ -1,0 +1,66 @@
+apiVersion: fleetcontrol/v1
+kind: MissionPack
+id: asset-failure-investigation
+title: Asset failure investigation and work-order drafting
+sector: manufacturing
+summary: When SAS IoT analytics predict or detect an asset failure, agents gather sensor history, maintenance records and failure models, explain the likely failure mode and draft the work order; maintenance planners decide.
+value: Fewer unplanned stops, and work orders that tell the technician what to check first.
+sas:
+  modules: [SAS Analytics for IoT, SAS Event Stream Processing, CAS]
+  reach: public-api
+  mcp_tools: [get_castable_data, list_castables, list_registered_models, list_mas_modules, list_reports, export_report]
+  connectors: [sas-iot]
+human_control:
+  - {role: approver, who: "Maintenance planner", decides: "Whether and when to raise the work order"}
+  - {role: approver, who: "Plant manager", decides: "Planned stops that affect production"}
+market:
+  saturation: crowded
+  vendors:
+    - "IBM Maximo Assistant agentic workflows (MAS 9.2, MCP server)"
+    - "SAP Joule Maintenance Planner Agent"
+    - "Siemens Industrial Copilot maintenance"
+    - "AspenTech V15"
+  sas_own: "SAS Asset Performance Analytics and Analytics for IoT; an IoT copilot is listed on the Viya Copilot page."
+  sources:
+    - https://www.ibm.com/think/perspectives/working-smarter-agentic-workflows-maximo-assistant
+    - https://press.siemens.com/global/en/pressrelease/siemens-expands-industrial-copilot-new-generative-ai-powered-maintenance-offering
+kpis: [Unplanned downtime, Work orders accepted unchanged, First-time fix rate]
+include_policies: [sas-viya-read-only, no-web]
+blueprint:
+  requires: {hermes: ">=0.21", capabilities: [runs, sessions, profiles.read, profiles.write, hooks], agent: required}
+  mission: >
+    When SAS IoT analytics predict or detect an asset failure, gather the sensor history, maintenance records and
+    the model output, explain the likely failure mode and draft a work order. Maintenance planners decide; agents
+    never stop equipment or change setpoints.
+  agents:
+    - id: reliability-analyst
+      role: Explains a predicted or detected failure from sensor, model and maintenance data.
+      soul:
+        objective: Tell the planner what is failing, how sure SAS is, and what to check first.
+        principles: [Quote the model, score and sensor window behind the alert.]
+        boundaries: [Never stop equipment or change a setpoint.]
+        output_contract: {format: markdown, required: [asset, failure-mode, confidence, evidence, checks]}
+      mcps: [sas-viya, sas-iot]
+      tests: [reads-sensor-history]
+    - id: work-order-drafter
+      role: Drafts the work order for the maintenance planner.
+      soul:
+        objective: Draft a work order a technician can execute.
+        principles: [Checks in order of likelihood; parts and safety notes.]
+        boundaries: [Never raise the work order in the maintenance system.]
+        output_contract: {format: markdown, required: [work-order, parts, safety]}
+  workflows:
+    - id: failure-response
+      steps:
+        - {agent: reliability-analyst, artifact: diagnosis.md}
+        - {agent: work-order-drafter, artifact: work-order.md}
+        - {human_gate: approver, timeout: 8h, escalate_to: admin, on_reject: reliability-analyst}
+        - {open_decision_room: true, question_template: "Raise the work order and schedule the stop for {case}?"}
+  tests:
+    - id: reads-sensor-history
+      target: reliability-analyst
+      scenario: Compressor 7 has a rising vibration alert. What is the likely failure mode?
+      required_tools: [sas-viya.get_castable_data]
+      forbidden_tools: [sas-viya.score_data, sas-viya.execute_sas_code]
+      evaluator: none
+      limits: {max_seconds: 300, max_tokens: 200000, max_cost_usd: 0.5}

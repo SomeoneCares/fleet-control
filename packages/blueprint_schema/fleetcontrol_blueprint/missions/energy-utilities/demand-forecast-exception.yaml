@@ -1,0 +1,59 @@
+apiVersion: fleetcontrol/v1
+kind: MissionPack
+id: demand-forecast-exception
+title: Load and demand forecast exception review
+sector: energy-utilities
+summary: When SAS load forecasts miss or diverge from expectations, agents explain the error by driver (weather, calendar, customer changes, data issues) and draft the override proposal; forecasters decide.
+value: Fewer costly forecast misses and overrides that are justified and recorded.
+sas:
+  modules: [SAS Visual Forecasting, CAS, SAS Visual Analytics]
+  reach: mcp-today
+  mcp_tools: [get_castable_data, list_castables, list_registered_models, list_jobs, get_job_log, list_reports, export_report]
+human_control:
+  - {role: approver, who: "Forecaster", decides: "Accept, override or escalate the forecast"}
+market:
+  saturation: thin
+  vendors:
+    - "Enverus Power Analyst (governed AI assistant; scope unverified)"
+    - "Amperon, Hitachi Nostradamus AI (ML forecasting, not agents)"
+  sas_own: "SAS Energy Forecasting; no copilot found."
+  sources:
+    - https://www.sas.com/en_us/industry/utilities/solution/energy-forecasting.html
+kpis: [Forecast error on exception days, Overrides that improved accuracy, Time to explain an exception]
+include_policies: [sas-viya-read-only, no-web]
+blueprint:
+  requires: {hermes: ">=0.21", capabilities: [runs, sessions, profiles.read, profiles.write, hooks], agent: required}
+  mission: >
+    When a SAS load or demand forecast misses or diverges from expectations, explain the error by driver and propose
+    whether to override. Forecasters decide; agents never change a forecast or a model.
+  agents:
+    - id: forecast-analyst
+      role: Explains a forecast exception by driver.
+      soul:
+        objective: Say why the forecast diverged and whether the cause will persist.
+        principles: [Check data and job logs before blaming the model., Cite the forecast run and inputs.]
+        boundaries: [Never change a forecast, model or schedule.]
+        output_contract: {format: markdown, required: [exception, drivers, data-issues, persistence]}
+      mcps: [sas-viya]
+      tests: [checks-run-log]
+    - id: override-drafter
+      role: Drafts the override proposal with its justification.
+      soul:
+        objective: Propose an override only when the evidence supports it.
+        principles: [State the size and duration of the override and why.]
+        boundaries: [Never apply an override.]
+        output_contract: {format: markdown, required: [proposal, justification]}
+  workflows:
+    - id: forecast-exception
+      steps:
+        - {agent: forecast-analyst, artifact: exception.md}
+        - {agent: override-drafter, artifact: override.md}
+        - {human_gate: approver, timeout: 4h, escalate_to: admin, on_reject: forecast-analyst}
+  tests:
+    - id: checks-run-log
+      target: forecast-analyst
+      scenario: Yesterday's day-ahead load forecast was 9% too low in the northern region. Why?
+      required_tools: [sas-viya.list_jobs]
+      forbidden_tools: [sas-viya.submit_batch_job, sas-viya.cancel_job]
+      evaluator: none
+      limits: {max_seconds: 300, max_tokens: 200000, max_cost_usd: 0.5}

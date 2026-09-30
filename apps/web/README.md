@@ -23,6 +23,10 @@ From the repo root, three terminals (the API keeps its data in `.fleetcontrol-de
 cd apps/web && npm install && npm run dev      # http://localhost:5173, proxies /api to :8080
 ```
 
+To run two checkouts side by side (the current `main` and a feature branch in a git worktree), use
+`start-dev.cmd` at the repo root: it asks which to start and gives each its own ports (8080/5173 and
+8081/5174); `FLEETCONTROL_WEB_PORT` and `FLEETCONTROL_API_PORT` move the web dev server.
+
 Sign in with the admin email and password from `.fleetcontrol-dev-credentials.json` at the repo root (git-ignored;
 created by `dev_api.py`). `dev_seed.py` adds one person per role to the same file (Dana is the Fleet Architect, Marcus
 and Lena are Approvers, Sam is an Operator, Riya a Viewer), so you can try the approval rules. It also creates three instances (two with a simulated Fleet Control Agent that answers import, drift-scan,

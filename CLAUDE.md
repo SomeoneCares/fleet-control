@@ -201,6 +201,22 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   note (both executors). Cancel archives open tasks (reclaiming running workers). Compat check pins the Kanban
   routes, `CreateTaskBody` and the Task/Run fields read back; all 16 checks pass on the host's 0.21.4 source.
   Evidence on Kanban is Kanban's own run records (tool calls are not reported through it).
+- DONE (2026-10-01, branch feature/mission-library): the mission library for Fleet Studio. 24 mission packs, three
+  per sector (cross-industry, banking, insurance, health and life sciences, public sector, manufacturing, energy and
+  utilities, retail), under `packages/blueprint_schema/fleetcontrol_blueprint/missions/<sector>/<id>.yaml`. A pack
+  (`missions.py`, `MissionPack`) wraps a Blueprint body (agents carry no model) plus its SAS reach (mcp-today,
+  public-api, connector), human gates, market (with sources; `unknown` when not researched) and KPIs. Shared policy
+  sets (`_policy_sets.yaml`) keep SAS rules in one place: `sas-viya-read-only` denies every write/destructive tool
+  of the SAS Viya MCP catalogue (`_sas_viya_tools.yaml`, v1.18.0: 92 tools, 51 read-only); approve sets
+  (query, scoring, profiling, sandbox rules) move named tools out of the deny-list automatically. Tests enforce that
+  every SAS agent is read-only except approved tools, never-tools (publish, lock, delete, code) are never merely
+  approved, and every workflow has a human gate with `on_reject`. API: `GET /api/v1/missions`,
+  `GET /api/v1/missions/{id}`, `POST /api/v1/missions/{id}/blueprint {instance_id, name?}` (a draft on the
+  instance's default model, targeting it; `connectors_needed` lists MCP servers still to build). Plugin fix: policy
+  tool names are matched in canonical form (`canonical_tool`), so `sas-viya.x` in a blueprint now blocks Hermes'
+  `mcp_sas-viya__x`; before this a dotted MCP deny rule never matched. Still open: `tool-allowlist` policies compile
+  to deny-lists in `planner.py` (allow_tools is never written). Run both versions side by side with
+  `start-dev.cmd` (current = main on 8080/5173, updated = this worktree on 8081/5174, own dev database).
 - PLAN (Basem, 2026-09-16): complete the whole portal before Docker, every screen working end to end (real backend,
   real Hermes runs on the lab host where needed), in build-document order: Slice 2 Fleet Architect → Slice 3 Test
   Lab, Assurance, Integrations (+ Settings → Observability) → Slice 4 Workspace, Decision Rooms, Ask the fleet,

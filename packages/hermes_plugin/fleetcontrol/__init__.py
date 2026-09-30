@@ -52,6 +52,17 @@ _SECRET_PATTERNS = [
 # ----------------------------------------------------------------------------- transport
 
 
+def canonical_tool(name: Any) -> str:
+    """One spelling for a tool name. Blueprints write MCP tools ``<server>.<tool>``; Hermes calls them
+    ``mcp_<server>__<tool>`` (with the server's ``-`` sometimes turned into ``_``), and built-ins ``web.fetch`` or
+    ``web_fetch``. All of them reduce to lowercase words joined by ``_``, so a policy matches the call it means."""
+    low = str(name or "").strip().lower()
+    if low.startswith("mcp_") and "__" in low[4:].lstrip("_"):
+        server, tool = low[4:].lstrip("_").split("__", 1)
+        low = f"{server}.{tool}"
+    return re.sub(r"[^a-z0-9]+", "_", low).strip("_")
+
+
 def _default_socket_path() -> str:
     if os.name == "nt":
         return "tcp://127.0.0.1:47831"
@@ -205,12 +216,13 @@ class _Policy:
         d = self._data
         if not d:
             return None
+        name = canonical_tool(tool_name)
         allow = d.get("allow_tools")
-        if allow is not None and tool_name not in allow:
+        if allow is not None and name not in {canonical_tool(t) for t in allow}:
             return {"action": "block", "message": f"Fleet Control policy: tool '{tool_name}' is not in this profile's allow-list.", "rule": "allow-list"}
-        if tool_name in d.get("deny_tools", []):
+        if name in {canonical_tool(t) for t in d.get("deny_tools", [])}:
             return {"action": "block", "message": f"Fleet Control policy: tool '{tool_name}' is denied for this profile.", "rule": "deny-list"}
-        if tool_name in d.get("approve_tools", []):
+        if name in {canonical_tool(t) for t in d.get("approve_tools", [])}:
             return {"action": "approve", "message": f"Fleet Control policy: '{tool_name}' requires human approval.", "rule_key": f"fleetcontrol:{tool_name}", "rule": "approve-list"}
         for rid, pat, action, message in self._compiled:
             if pat.search(tool_name):

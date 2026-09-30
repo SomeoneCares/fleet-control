@@ -1,0 +1,72 @@
+apiVersion: fleetcontrol/v1
+kind: MissionPack
+id: model-validation
+title: Model monitoring and validation workforce
+sector: banking
+summary: Agents read model performance and drift, run the validation test plan, draft the validation report and findings; validators and the head of model validation decide.
+value: Validation cycles in weeks instead of months, with validators spending their time on judgment, not assembly.
+sas:
+  modules: [SAS Model Manager, SAS Model Risk Management, CAS]
+  reach: public-api
+  mcp_tools: [list_registered_models, list_mas_modules, get_mas_module_step_signature, get_castable_data, get_job_log, list_jobs, export_report]
+  connectors: [sas-model-manager, sas-risk-cirrus]
+human_control:
+  - {role: approver, who: "Model validator", decides: "Each test result and finding"}
+  - {role: approver, who: "Head of model validation", decides: "The validation opinion and finding severities"}
+market:
+  saturation: thin
+  vendors: [ValidMind (GenAI-assisted documentation), Yields Chiron (automated testing), Solytics]
+  sas_own: SAS Viya Copilot for Model Manager (performs tasks since 2026.08, single user); no MRM copilot found.
+  sources:
+    - https://validmind.com/wp-content/uploads/2026/03/ValidMind-Product-Brief.pdf
+    - https://communities.sas.com/t5/SAS-Communities-Library/SAS-Viya-Copilot-for-SAS-Model-Manager-First-Set-of-Skills/ta-p/992269
+kpis: [Validation cycle time, Validator hours per model, Report statements graded Evidence found, Overdue validations]
+include_policies: [sas-viya-read-only, no-web]
+blueprint:
+  requires: {hermes: ">=0.21", capabilities: [runs, sessions, profiles.read, profiles.write, hooks], agent: required}
+  mission: >
+    Monitor models registered in SAS Model Manager, and prepare periodic validations for SAS Model Risk Management:
+    explain performance and drift, run the validation test plan, draft the validation report and findings.
+    Validators decide each finding; the head of model validation signs the opinion.
+  agents:
+    - id: monitoring-analyst
+      role: Reads model performance and drift results and explains what moved.
+      soul:
+        objective: Tell validators which models deteriorated, how much, and why it probably happened.
+        principles: [Cite the monitoring job and period for each metric.]
+        boundaries: [Never retrain, register, publish or retire a model.]
+        output_contract: {format: markdown, required: [models, metrics, drift, likely-causes]}
+      mcps: [sas-viya, sas-model-manager]
+      tests: [reads-registry]
+    - id: validation-analyst
+      role: Runs the validation test plan and drafts the validation report section by section.
+      soul:
+        objective: Produce a validation report draft whose every statement cites a test result.
+        principles: [Follow the institution's validation standard section order., Mark untested areas explicitly.]
+        boundaries: [Never state the validation opinion as decided.]
+        output_contract: {format: markdown, required: [scope, tests, results, limitations, proposed-opinion]}
+      mcps: [sas-viya, sas-model-manager]
+    - id: findings-drafter
+      role: Drafts findings and remediation actions for Model Risk Management.
+      soul:
+        objective: Turn test results into findings a validator can accept or reject.
+        principles: [One finding per issue, with its evidence and proposed severity.]
+        boundaries: [Findings are created in MRM only after approval.]
+        output_contract: {format: markdown, required: [findings, severity, remediation, evidence]}
+      mcps: [sas-risk-cirrus]
+  workflows:
+    - id: periodic-validation
+      steps:
+        - {agent: monitoring-analyst, artifact: monitoring.md}
+        - {agent: validation-analyst, artifact: validation-report.md}
+        - {agent: findings-drafter, artifact: findings.md}
+        - {human_gate: approver, timeout: 5d, escalate_to: admin, on_reject: validation-analyst}
+        - {open_decision_room: true, question_template: "Sign the validation opinion for {case}?"}
+  tests:
+    - id: reads-registry
+      target: monitoring-analyst
+      scenario: Which registered credit models have not been monitored in the last 90 days?
+      required_tools: [sas-viya.list_registered_models]
+      forbidden_tools: [sas-viya.publish_ml_champion_model, sas-viya.register_ml_champion_model, sas-viya.run_ml_project]
+      evaluator: none
+      limits: {max_seconds: 300, max_tokens: 200000, max_cost_usd: 0.5}

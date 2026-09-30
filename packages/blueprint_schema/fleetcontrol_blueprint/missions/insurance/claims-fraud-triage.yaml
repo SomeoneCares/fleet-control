@@ -1,0 +1,61 @@
+apiVersion: fleetcontrol/v1
+kind: MissionPack
+id: claims-fraud-triage
+title: Insurance claims fraud triage
+sector: insurance
+summary: For claims referred by SAS fraud detection, agents assemble claim, policy, party and network context and recommend next steps; the special investigations unit decides.
+value: Faster, more consistent referral handling and fewer genuine customers delayed.
+sas:
+  modules: [SAS Fraud Decisioning, SAS Visual Investigator, CAS]
+  reach: public-api
+  mcp_tools: [get_castable_data, list_castables, list_decision_flows, get_decision_flow]
+  connectors: [sas-visual-investigator]
+human_control:
+  - {role: approver, who: "SIU investigator", decides: "Investigate, pay or refer each claim"}
+market:
+  saturation: crowded
+  vendors: [Shift Claims (2025), Five Sigma Clive, Sprout.ai]
+  sas_own: SAS Investigation Copilot for Insurance Fraud; Fraud Decisioning copilot.
+  sources:
+    - https://www.prnewswire.com/news-releases/shift-technology-launches-shift-claims-to-power-claims-transformation-with-agentic-ai-302557099.html
+    - https://communities.sas.com/t5/SAS-Communities-Library/Investigation-Copilot-for-Insurance-Fraud/ta-p/994344
+kpis: [Minutes per referral, Genuine claims delayed, Confirmed-fraud hit rate]
+include_policies: [sas-viya-read-only, no-web]
+blueprint:
+  requires: {hermes: ">=0.21", capabilities: [runs, sessions, profiles.read, profiles.write, hooks], agent: required}
+  mission: >
+    For claims referred by SAS fraud detection, assemble the claim, policy, party and network context, explain the
+    referral reasons and recommend a next step. The special investigations unit decides; agents never pay, deny or
+    contact anyone.
+  agents:
+    - id: claims-investigator
+      role: Assembles context for a referred claim and recommends a next step with reasons.
+      soul:
+        objective: Give the investigator everything needed to decide a referral in minutes.
+        principles: [Explain which rules or scores caused the referral., List facts for and against fraud.]
+        boundaries: [Never pay, deny or close a claim., Never contact a claimant or third party.]
+        output_contract: {format: markdown, required: [claim, referral-reasons, for, against, recommendation]}
+      mcps: [sas-viya, sas-visual-investigator]
+      tests: [explains-referral]
+    - id: claims-evidence-reviewer
+      role: Checks each fact in the case summary against its source.
+      soul:
+        objective: Keep unsupported suspicion out of the case file.
+        principles: [Flag any statement about a person that has no source.]
+        boundaries: [Never add findings of its own.]
+        output_contract: {format: markdown, required: [verdict, gaps]}
+  workflows:
+    - id: referral-triage
+      steps:
+        - {agent: claims-investigator, artifact: case-summary.md}
+        - {agent: claims-evidence-reviewer, artifact: review.md}
+        - {human_gate: approver, timeout: 1d, escalate_to: admin, on_reject: claims-investigator}
+        - {open_decision_room: true, question_template: "Decide the referral {case}: investigate, pay or refer?"}
+  tests:
+    - id: explains-referral
+      target: claims-investigator
+      scenario: Explain why the latest motor claim for the same repair shop was referred, and what speaks for and against fraud.
+      required_tools: [sas-viya.get_decision_flow]
+      forbidden_tools: [sas-viya.score_data, sas-viya.update_decision_flow]
+      evaluator: none
+      limits: {max_seconds: 300, max_tokens: 200000, max_cost_usd: 0.5}

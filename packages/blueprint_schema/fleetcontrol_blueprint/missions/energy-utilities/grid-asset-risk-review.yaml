@@ -1,0 +1,62 @@
+apiVersion: fleetcontrol/v1
+kind: MissionPack
+id: grid-asset-risk-review
+title: Grid asset risk review and outage root cause
+sector: energy-utilities
+summary: Agents review asset health scores and outage records in SAS, explain the highest-risk assets and the likely causes of recent outages, and draft the investment and maintenance proposals; asset managers decide.
+value: Maintenance and replacement budgets aimed at the riskiest assets, with the reasoning documented for the regulator.
+sas:
+  modules: [CAS, SAS Visual Analytics, SAS Model Manager (registry)]
+  reach: mcp-today
+  mcp_tools: [get_castable_data, list_castables, get_castable_columns, list_registered_models, list_reports, export_report]
+human_control:
+  - {role: approver, who: "Asset manager", decides: "Which assets go into the maintenance or replacement plan"}
+  - {role: approver, who: "Network investment committee", decides: "Capital allocation"}
+market:
+  saturation: thin
+  vendors:
+    - "GE Vernova GridOS human-in-the-loop agents (stated vision)"
+    - "Itron IEE Cloud AI agent-assisted workflows (GA Jan 2027)"
+  sas_own: "SAS utilities analytics; no copilot found."
+  sources:
+    - https://www.globenewswire.com/news-release/2026/09/16/3363187/0/en/itron-introduces-iee-cloud-ai-enabling-grid-edge-use-cases-from-a-trusted-data-foundation.html
+kpis: [Outages on assets flagged in advance, Plan items accepted unchanged, Customer minutes lost]
+include_policies: [sas-viya-read-only, no-web]
+blueprint:
+  requires: {hermes: ">=0.21", capabilities: [runs, sessions, profiles.read, profiles.write, hooks], agent: required}
+  mission: >
+    Review grid asset health and outage data in SAS, explain which assets carry the most risk and what probably
+    caused recent outages, and draft maintenance and investment proposals. Asset managers and the investment
+    committee decide; agents never operate the network.
+  agents:
+    - id: asset-risk-analyst
+      role: Explains the riskiest assets and recent outage causes from SAS data and models.
+      soul:
+        objective: Rank asset risk and explain it in terms an asset manager can check.
+        principles: [Quote the health model, score date and outage records used.]
+        boundaries: [Never operate, switch or reconfigure network equipment.]
+        output_contract: {format: markdown, required: [ranking, drivers, outage-causes, evidence]}
+      mcps: [sas-viya]
+      tests: [ranks-assets]
+    - id: plan-drafter
+      role: Drafts maintenance and replacement proposals with cost and risk reduction.
+      soul:
+        objective: Turn the risk ranking into a proposal the committee can weigh.
+        principles: [Show risk reduced per unit of cost.]
+        boundaries: [Never present an item as approved.]
+        output_contract: {format: markdown, required: [proposals, cost, risk-reduction]}
+  workflows:
+    - id: asset-review
+      steps:
+        - {agent: asset-risk-analyst, artifact: risk.md}
+        - {agent: plan-drafter, artifact: proposals.md}
+        - {human_gate: approver, timeout: 3d, escalate_to: admin, on_reject: asset-risk-analyst}
+        - {open_decision_room: true, question_template: "Approve the asset plan for {case}?"}
+  tests:
+    - id: ranks-assets
+      target: asset-risk-analyst
+      scenario: Which ten distribution transformers carry the highest failure risk this winter, and why?
+      required_tools: [sas-viya.get_castable_data]
+      forbidden_tools: [sas-viya.score_data, sas-viya.execute_sas_code]
+      evaluator: none
+      limits: {max_seconds: 300, max_tokens: 200000, max_cost_usd: 0.5}

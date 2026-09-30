@@ -1,0 +1,63 @@
+apiVersion: fleetcontrol/v1
+kind: MissionPack
+id: benefits-payment-integrity
+title: Public benefits payment integrity lead review
+sector: public-sector
+summary: For leads ranked by SAS payment integrity analytics, agents assemble the eligibility facts, the linked cases and the rules at issue, and draft the caseworker brief; caseworkers decide every action on a claimant.
+value: Caseworkers spend their time on the right leads, with a fair, sourced brief for each.
+sas:
+  modules: [SAS Payment Integrity (food assistance), SAS Visual Investigator, CAS]
+  reach: public-api
+  mcp_tools: [get_castable_data, list_castables, list_decision_flows, get_decision_flow, list_business_rules]
+  connectors: [sas-visual-investigator]
+human_control:
+  - {role: approver, who: "Caseworker", decides: "Contact, verify or close the lead"}
+  - {role: approver, who: "Program integrity supervisor", decides: "Overpayment determination or referral"}
+market:
+  saturation: open
+  vendors:
+    - "Thomson Reuters / Pondera FraudCaster (ML scoring, not agents)"
+  sas_own: "SAS Payment Integrity for Food Assistance ranks leads for caseworkers (ML scoring); no copilot announced."
+  sources:
+    - https://www.sas.com/en_hk/news/press-releases/2026/june/nevada-snap-payment-integrity.html
+    - https://www.govtech.com/biz/Thomson-Reuters-Uses-Pondera-in-New-Anti-Fraud-Tool.html
+kpis: [Leads reviewed per caseworker, Improper payments prevented, Leads closed with no issue]
+include_policies: [sas-viya-read-only, no-web]
+blueprint:
+  requires: {hermes: ">=0.21", capabilities: [runs, sessions, profiles.read, profiles.write, hooks], agent: required}
+  mission: >
+    For payment-integrity leads ranked in SAS, assemble the eligibility facts, the linked cases and the program
+    rules at issue, and draft a brief for the caseworker. Caseworkers decide every action; agents never change a
+    benefit, contact a claimant or make a determination.
+  agents:
+    - id: lead-analyst
+      role: Assembles the facts behind a lead and the program rules at issue.
+      soul:
+        objective: Show a caseworker why a lead was raised and what would clear it.
+        principles: [Quote the rule and data behind each concern., List what would clear the lead.]
+        boundaries: [Never change, suspend or reduce a benefit., Never contact a claimant.]
+        output_contract: {format: markdown, required: [lead, facts, rules, what-would-clear-it]}
+      mcps: [sas-viya, sas-visual-investigator]
+      tests: [explains-lead]
+    - id: caseworker-brief-drafter
+      role: Drafts a fair, plain-language brief for the caseworker.
+      soul:
+        objective: Draft a brief that is fair to the claimant and useful to the caseworker.
+        principles: [Plain language., Innocent explanations next to concerns.]
+        boundaries: [Never recommend a determination as decided.]
+        output_contract: {format: markdown, required: [brief, next-steps]}
+  workflows:
+    - id: lead-review
+      steps:
+        - {agent: lead-analyst, artifact: lead-facts.md}
+        - {agent: caseworker-brief-drafter, artifact: brief.md}
+        - {human_gate: approver, timeout: 3d, escalate_to: admin, on_reject: lead-analyst}
+        - {open_decision_room: true, question_template: "Decide the next step on lead {case}"}
+  tests:
+    - id: explains-lead
+      target: lead-analyst
+      scenario: Explain why the top-ranked lead this week was raised and what would clear it.
+      required_tools: [sas-viya.get_castable_data]
+      forbidden_tools: [sas-viya.score_data, sas-viya.update_business_rule]
+      evaluator: none
+      limits: {max_seconds: 300, max_tokens: 200000, max_cost_usd: 0.5}

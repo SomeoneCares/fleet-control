@@ -1,0 +1,63 @@
+apiVersion: fleetcontrol/v1
+kind: MissionPack
+id: procurement-integrity-review
+title: Public procurement integrity review
+sector: public-sector
+summary: For tenders and contracts flagged by SAS analytics (bid patterns, split purchases, supplier links), agents assemble the evidence and draft the review; integrity officers decide whether to investigate.
+value: Earlier detection of collusion and conflicts of interest with a documented basis for every review.
+sas:
+  modules: [SAS Visual Investigator, CAS, SAS Visual Analytics]
+  reach: public-api
+  mcp_tools: [get_castable_data, list_castables, query_data, list_reports, export_report]
+  connectors: [sas-visual-investigator]
+human_control:
+  - {role: approver, who: "Integrity officer", decides: "Investigate, monitor or close"}
+  - {role: approver, who: "Head of internal audit", decides: "Referral to investigators or authorities"}
+market:
+  saturation: open
+  vendors:
+    - "Oversight Systems (agentic spend review for enterprises, not public sector)"
+  sas_own: "SAS Detection and Investigation for Government; no copilot for this task."
+  sources:
+    - https://www.sas.com/en_us/software/detection-investigation-for-government.html
+    - https://www.open-contracting.org/2026/07/09/ai-in-public-procurement-between-experimentation-and-impact/
+kpis: [Flags reviewed per officer, Reviews leading to action, Time from flag to decision]
+include_policies: [sas-viya-read-only, no-web, sas-viya-approve-query]
+blueprint:
+  requires: {hermes: ">=0.21", capabilities: [runs, sessions, profiles.read, profiles.write, hooks], agent: required}
+  mission: >
+    For tenders and contracts flagged by SAS analytics, assemble the bid history, supplier relationships and
+    purchase patterns behind each flag and draft the review. Integrity officers decide; agents never contact
+    suppliers or suspend a contract.
+  agents:
+    - id: procurement-analyst
+      role: Assembles bid patterns, supplier links and purchase history behind a flag.
+      soul:
+        objective: Show what is unusual about a tender or contract and the evidence for it.
+        principles: [Name the tender, suppliers and period behind each observation.]
+        boundaries: [Never contact a supplier or official., Never suspend or change a contract.]
+        output_contract: {format: markdown, required: [flag, observations, relationships, innocent-explanations]}
+      mcps: [sas-viya, sas-visual-investigator]
+      tests: [assembles-bid-history]
+    - id: integrity-review-drafter
+      role: Drafts the integrity review for the officer.
+      soul:
+        objective: Draft a review that is fair and complete.
+        principles: [Innocent explanations next to concerns.]
+        boundaries: [Never state wrongdoing as fact.]
+        output_contract: {format: markdown, required: [review, next-steps]}
+  workflows:
+    - id: flag-review
+      steps:
+        - {agent: procurement-analyst, artifact: observations.md}
+        - {agent: integrity-review-drafter, artifact: review.md}
+        - {human_gate: approver, timeout: 3d, escalate_to: admin, on_reject: procurement-analyst}
+        - {open_decision_room: true, question_template: "Investigate, monitor or close {case}?"}
+  tests:
+    - id: assembles-bid-history
+      target: procurement-analyst
+      scenario: The IT services framework shows the same three bidders rotating as winners. Assemble the bid history.
+      required_tools: [sas-viya.get_castable_data]
+      forbidden_tools: [sas-viya.execute_sas_code, sas-viya.upload_inline_data]
+      evaluator: none
+      limits: {max_seconds: 300, max_tokens: 200000, max_cost_usd: 0.5}

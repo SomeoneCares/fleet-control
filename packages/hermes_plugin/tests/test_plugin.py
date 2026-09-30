@@ -107,6 +107,17 @@ class PluginTest(unittest.TestCase):
         self.assertTrue(out["rule_key"].startswith("fleetcontrol:"))
         self.assertIsNone(self.ctx.hooks["pre_tool_call"](tool_name="read_file", args={}, task_id="s"))
 
+    def test_policy_matches_hermes_mcp_tool_names(self):
+        # blueprints name MCP tools server.tool; Hermes calls them mcp_<server>__<tool>
+        with open(os.path.join(self.tmp, "fleetcontrol", "policy.json"), "w") as f:
+            json.dump({"version": 1, "deny_tools": ["sas-viya.execute_sas_code", "web.fetch"],
+                       "approve_tools": ["sas-viya.score_data"]}, f)
+        pre = self.ctx.hooks["pre_tool_call"]
+        for called in ("mcp_sas-viya__execute_sas_code", "mcp__sas_viya__execute_sas_code", "sas-viya.execute_sas_code", "web_fetch"):
+            self.assertEqual(pre(tool_name=called, args={}, task_id="s")["action"], "block", called)
+        self.assertEqual(pre(tool_name="mcp_sas-viya__score_data", args={}, task_id="s")["action"], "approve")
+        self.assertIsNone(pre(tool_name="mcp_sas-viya__list_caslibs", args={}, task_id="s"))
+
     def test_no_policy_file_means_no_decisions(self):
         self.assertIsNone(self.ctx.hooks["pre_tool_call"](tool_name="terminal", args={}, task_id="s"))
 

@@ -26,6 +26,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field, ValidationError
 
 from fleetcontrol_blueprint import Blueprint, dump_blueprint, json_schema, load_blueprint
+from fleetcontrol_blueprint.missions import SECTORS, expand as expand_mission, get_pack, instantiate as instantiate_mission, library as mission_library
 
 from .workflows import (
     WorkflowError, agents_used, compose_input, current_step, decide_gate, escalate_due, finish_room_step, kanban_outcome,
@@ -2826,6 +2827,57 @@ def _require_instance(instance_id: str) -> dict:
     if not inst:
         raise HTTPException(404, "unknown instance")
     return inst
+
+
+# ----------------------------------------------------------------------------- web: mission library
+
+
+@app.get("/api/v1/missions")
+def list_missions(user: dict = Depends(require("blueprints.read"))) -> dict:
+    """The mission library: ready-made fleets by sector, each with its SAS reach and its market."""
+    return {"sectors": SECTORS, "missions": [p.summary_row() for p in mission_library()]}
+
+
+@app.get("/api/v1/missions/{mission_id}")
+def get_mission(mission_id: str, user: dict = Depends(require("blueprints.read"))) -> dict:
+    pack = get_pack(mission_id)
+    if not pack:
+        raise HTTPException(404, "unknown mission")
+    bp = expand_mission(pack)
+    return {**pack.model_dump(mode="json", exclude={"blueprint"}), "sector_label": SECTORS[pack.sector],
+            "blueprint_yaml": dump_blueprint(bp), "blueprint": bp.model_dump(mode="json", exclude_none=True)}
+
+
+class MissionProvision(BaseModel):
+    instance_id: str
+    name: Optional[str] = None
+
+
+@app.post("/api/v1/missions/{mission_id}/blueprint", status_code=201)
+def provision_mission(mission_id: str, body: MissionProvision, user: dict = Depends(require("blueprints.write"))) -> dict:
+    """A draft blueprint from a mission, for one instance: every agent runs on the instance's default model and the
+    draft targets that instance. It is planned, approved and applied like any other blueprint."""
+    pack = get_pack(mission_id)
+    if not pack:
+        raise HTTPException(404, "unknown mission")
+    inst = _require_instance(body.instance_id)
+    live = store.live_state_for(body.instance_id) or {}
+    source = live.get("default") or next(iter(live.values()), None)
+    model = (source or {}).get("model") or {}
+    if not (model.get("provider") and model.get("name")):
+        raise HTTPException(409, f"import live profiles from {body.instance_id} first: the mission's agents use its default model")
+    name = body.name or pack.id
+    version = store.next_blueprint_version(name)
+    try:
+        bp = instantiate_mission(pack, owner=user["email"], model={"provider": model["provider"], "name": model["name"]},
+                                 name=name, version=version, target={"instance": body.instance_id, "environment": inst["environment"]})
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    rec = store.save_blueprint(name, version, dump_blueprint(bp), bp.model_dump(mode="json"), user["email"])
+    store.record(user["email"], "blueprint.saved", f"{name} v{version}", f"provisioned from mission {pack.id} for {body.instance_id}")
+    missing = sorted(set(pack.sas.connectors))
+    return {"name": rec["name"], "version": rec["version"], "status": rec["status"], "mission": pack.id,
+            "connectors_needed": missing}
 
 
 # ----------------------------------------------------------------------------- web: drift

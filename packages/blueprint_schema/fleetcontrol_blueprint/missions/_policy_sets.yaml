@@ -1,0 +1,45 @@
+# Policy sets shared by mission packs. A pack includes a set by name (include_policies) and may exclude tools it
+# handles differently, usually by moving them to one of the approve sets. Tools are named <server>.<tool>; the
+# Hermes plugin matches them against Hermes' own names (mcp_<server>__<tool>).
+sets:
+  sas-viya-read-only:
+    kind: tool-denylist
+    description: Agents read from SAS Viya. Every SAS MCP tool that changes state or starts server-side work is denied, as SAS classifies them.
+    enforcement: block
+    sas_viya_access: [write, destructive]
+
+  no-web:
+    kind: tool-denylist
+    description: Evidence comes from governed sources, never from an ad-hoc web fetch or search.
+    enforcement: block
+    tools: [web.fetch, web.search]
+
+  sas-viya-approve-query:
+    kind: external-action-approval
+    description: Ad-hoc SQL against SAS data runs a compute job (SAS classes it as a write); a person approves each query.
+    enforcement: approve
+    tools: [sas-viya.query_data]
+
+  sas-viya-approve-scoring:
+    kind: external-action-approval
+    description: Scoring runs a published model or decision and may persist output; a person approves each call.
+    enforcement: approve
+    tools: [sas-viya.score_data]
+
+  sas-viya-approve-profiling:
+    kind: external-action-approval
+    description: Profiling a table starts a SAS job; a person approves each one.
+    enforcement: approve
+    tools: [sas-viya.catalog_run_adhoc_analysis]
+
+  sas-viya-approve-sandbox-rules:
+    kind: external-action-approval
+    description: Draft rule sets and decision flows may be written only in a non-production Viya, and each write needs a person's approval. Locking, publishing and deleting stay denied.
+    enforcement: approve
+    tools:
+      - sas-viya.create_business_ruleset
+      - sas-viya.update_business_ruleset
+      - sas-viya.create_business_rule
+      - sas-viya.update_business_rule
+      - sas-viya.create_decision_flow
+      - sas-viya.update_decision_flow

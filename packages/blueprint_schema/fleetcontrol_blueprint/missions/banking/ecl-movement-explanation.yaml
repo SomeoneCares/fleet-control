@@ -1,0 +1,71 @@
+apiVersion: fleetcontrol/v1
+kind: MissionPack
+id: ecl-movement-explanation
+title: IFRS 9 / CECL expected-credit-loss explanation and commentary
+sector: banking
+summary: After each ECL run, agents explain the movement by driver and stage, draft overlay rationales and disclosure commentary; the impairment committee decides overlays and finance signs the text.
+value: The quarter-end ECL pack in days, not weeks, with every statement traceable to a run result.
+sas:
+  modules: [SAS Risk Cirrus Allowance for Credit Loss (IFRS 9 / CECL), SAS Visual Analytics, CAS]
+  reach: connector
+  mcp_tools: [get_castable_data, list_castables, export_report, list_reports]
+  connectors: [sas-risk-cirrus]
+human_control:
+  - {role: approver, who: "Credit risk reviewer", decides: "Whether the drivers and draft overlays are right"}
+  - {role: approver, who: "Impairment committee member", decides: "Every overlay and the final ECL"}
+  - {role: approver, who: "Finance", decides: "Disclosure wording"}
+market:
+  saturation: open
+  vendors: [No named ECL-explanation agent found; Regnology moving toward agentic reporting]
+  sas_own: None found.
+  sources:
+    - https://a-teaminsight.com/blog/regnology-moves-from-platform-integration-to-agentic-reporting/?brand=ati
+kpis: [Days from run to committee pack, Audit queries on ECL movement, Commentary statements with cited evidence]
+include_policies: [sas-viya-read-only, no-web]
+blueprint:
+  requires: {hermes: ">=0.21", capabilities: [runs, sessions, profiles.read, profiles.write, hooks], agent: required}
+  mission: >
+    After each expected-credit-loss run, explain the movement in the allowance by driver (volume, staging, PD, LGD,
+    scenarios, overlays), explain stage transfers, draft overlay rationales and disclosure commentary. The
+    impairment committee decides overlays and the final ECL; finance signs the disclosure text.
+  agents:
+    - id: ecl-movement-analyst
+      role: Builds the ECL movement waterfall and the staging analysis from run results.
+      soul:
+        objective: Explain why the allowance moved, driver by driver, from the run's own results.
+        principles: [Reconcile the waterfall to the opening and closing allowance., Name the run, scenario set and table for each figure.]
+        boundaries: [Never start, change or approve a run., Never estimate a figure the run produced.]
+        output_contract: {format: markdown, required: [waterfall, staging, reconciliation, sources]}
+      mcps: [sas-viya, sas-risk-cirrus]
+      tests: [reads-run-results]
+    - id: overlay-drafter
+      role: Drafts the rationale for proposed management overlays from the evidence.
+      soul:
+        objective: Give the committee a clear case for or against each overlay.
+        principles: [State what the model misses and the evidence for it., Separate evidence from judgment.]
+        boundaries: [Never decide an overlay or its amount.]
+        output_contract: {format: markdown, required: [overlays, rationale, evidence, alternatives]}
+      mcps: [sas-risk-cirrus]
+    - id: disclosure-drafter
+      role: Drafts committee and disclosure commentary from the approved analysis.
+      soul:
+        objective: Draft commentary finance can sign with few edits.
+        principles: [Use only approved figures.]
+        boundaries: [Never publish or file commentary.]
+        output_contract: {format: markdown, required: [commentary, figures-used]}
+  workflows:
+    - id: ecl-quarter-close
+      steps:
+        - {agent: ecl-movement-analyst, artifact: movement.md}
+        - {agent: overlay-drafter, artifact: overlays.md}
+        - {human_gate: approver, timeout: 2d, escalate_to: admin, on_reject: ecl-movement-analyst}
+        - {open_decision_room: true, question_template: "Decide overlays and the final ECL for {case}"}
+        - {agent: disclosure-drafter, artifact: commentary.md}
+        - {human_gate: approver, timeout: 2d, escalate_to: admin, on_reject: disclosure-drafter}
+  tests:
+    - id: reads-run-results
+      target: ecl-movement-analyst
+      scenario: Explain the change in the Stage 2 allowance between the last two quarter-end runs.
+      forbidden_tools: [sas-viya.execute_sas_code, sas-viya.submit_batch_job]
+      evaluator: none
+      limits: {max_seconds: 600, max_tokens: 300000, max_cost_usd: 1.0}

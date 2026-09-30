@@ -1,0 +1,66 @@
+apiVersion: fleetcontrol/v1
+kind: MissionPack
+id: clinical-data-review
+title: Clinical trial data review and query drafting
+sector: health-life-sciences
+summary: Agents review incoming trial data in SAS for inconsistencies, protocol deviations and missing values, and draft data queries to sites; data managers decide which queries are raised.
+value: Cleaner data sooner and faster database lock, with every query traceable to the record and the check that raised it.
+sas:
+  modules: [SAS Clinical Acceleration, CAS]
+  reach: public-api
+  mcp_tools: [list_castables, get_castable_columns, get_castable_data, list_compute_tables, get_compute_table_data, search_glossary_terms]
+  connectors: [sas-clinical]
+human_control:
+  - {role: approver, who: "Clinical data manager", decides: "Which draft queries are raised to sites"}
+  - {role: approver, who: "Medical monitor", decides: "Whether a finding is a protocol deviation or a safety matter"}
+market:
+  saturation: crowded
+  vendors:
+    - "IQVIA Clinical Data Review agent (Jun 2025)"
+    - "Saama Smart Data Quality (drafts queries)"
+    - "Medidata Plus (Jul 2026)"
+  sas_own: "SAS Clinical Acceleration lists AI agents and copilots as a future enhancement; the Clinical Data Discovery Copilot covers discovery and cohorts, not query drafting."
+  sources:
+    - https://www.iqvia.com/newsroom/2025/06/iqvia-launches-new-ai-agents-for-life-sciences-and-healthcare
+    - https://www.saama.com/platform/products/smart-data-quality/
+    - https://www.sas.com/en_us/news/press-releases/2025/november/clinical-acceleration-debuts-modernize-clinical-trials.html
+kpis: [Days from data entry to query, Queries accepted unchanged, Time to database lock]
+include_policies: [sas-viya-read-only, no-web]
+blueprint:
+  requires: {hermes: ">=0.21", capabilities: [runs, sessions, profiles.read, profiles.write, hooks], agent: required}
+  mission: >
+    Review clinical trial data held in SAS for inconsistencies, protocol deviations and missing values, and draft
+    data queries to sites. Data managers decide which queries are raised; medical questions go to the medical
+    monitor. Agents never change trial data.
+  agents:
+    - id: clinical-data-reviewer
+      role: Checks trial datasets for inconsistencies, deviations and missing values.
+      soul:
+        objective: Find data issues a site must clarify, each tied to a subject, visit and variable.
+        principles: [Cite dataset, subject, visit and variable for each issue., Separate data issues from possible medical findings.]
+        boundaries: [Never change or delete trial data., Never unblind or report treatment arms.]
+        output_contract: {format: markdown, required: [issues, deviations, possible-medical-findings]}
+      mcps: [sas-viya, sas-clinical]
+      tests: [reads-trial-data]
+    - id: query-drafter
+      role: Drafts neutral, site-ready data queries from the reviewed issues.
+      soul:
+        objective: Draft queries a site can answer without guessing what is asked.
+        principles: [One question per query., Neutral wording that does not lead the site.]
+        boundaries: [Never send a query; people raise them.]
+        output_contract: {format: markdown, required: [queries]}
+  workflows:
+    - id: data-review-cycle
+      steps:
+        - {agent: clinical-data-reviewer, artifact: issues.md}
+        - {agent: query-drafter, artifact: queries.md}
+        - {human_gate: approver, timeout: 2d, escalate_to: admin, on_reject: clinical-data-reviewer}
+        - {open_decision_room: true, question_template: "Raise the draft queries for {case}?"}
+  tests:
+    - id: reads-trial-data
+      target: clinical-data-reviewer
+      scenario: Check the latest vital-signs dataset for out-of-range values and missing visits.
+      required_tools: [sas-viya.get_castable_data]
+      forbidden_tools: [sas-viya.upload_data, sas-viya.upload_inline_data, sas-viya.execute_sas_code]
+      evaluator: none
+      limits: {max_seconds: 300, max_tokens: 200000, max_cost_usd: 0.5}

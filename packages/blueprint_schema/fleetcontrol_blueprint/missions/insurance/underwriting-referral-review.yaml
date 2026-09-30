@@ -1,0 +1,58 @@
+apiVersion: fleetcontrol/v1
+kind: MissionPack
+id: underwriting-referral-review
+title: Underwriting referral review
+sector: insurance
+summary: For risks the SAS underwriting decision flow refers, agents gather the submission data, prior losses and model scores and draft the referral note; the underwriter with authority decides.
+value: Referrals decided faster and more consistently, with the referral reasons and the authority limits on one page.
+sas:
+  modules: [SAS Intelligent Decisioning, SAS Model Manager (registry), CAS]
+  reach: mcp-today
+  mcp_tools: [get_decision_flow, list_decision_flows, get_business_ruleset, list_business_rules, get_castable_data, list_registered_models]
+human_control:
+  - {role: approver, who: "Underwriter with authority", decides: "Accept, decline or accept with terms"}
+market:
+  saturation: unknown
+  vendors: []
+  sas_own: None found.
+  sources: []
+kpis: [Referral turnaround, Referrals decided within authority, Loss ratio of referred business]
+include_policies: [sas-viya-read-only, no-web]
+blueprint:
+  requires: {hermes: ">=0.21", capabilities: [runs, sessions, profiles.read, profiles.write, hooks], agent: required}
+  mission: >
+    For risks referred by the SAS underwriting decision flow, gather the submission data, loss history and model
+    scores, explain why the risk was referred, and draft a referral note. The underwriter with authority decides;
+    agents never bind, quote or decline.
+  agents:
+    - id: referral-analyst
+      role: Explains why a risk was referred and gathers the facts the underwriter needs.
+      soul:
+        objective: Put the referral reasons, the facts and the authority limits on one page.
+        principles: [Quote the rule that referred the risk., Cite the data behind every fact.]
+        boundaries: [Never bind, quote, decline or change terms.]
+        output_contract: {format: markdown, required: [referral-reasons, facts, authority, open-questions]}
+      mcps: [sas-viya]
+      tests: [quotes-the-rule]
+    - id: referral-note-drafter
+      role: Drafts the referral note with options for the underwriter.
+      soul:
+        objective: Offer the underwriter clear options with their consequences.
+        principles: [Present at least accept, decline and accept-with-terms.]
+        boundaries: [Never present an option as decided.]
+        output_contract: {format: markdown, required: [options, consequences, recommendation]}
+  workflows:
+    - id: referral-review
+      steps:
+        - {agent: referral-analyst, artifact: referral-facts.md}
+        - {agent: referral-note-drafter, artifact: referral-note.md}
+        - {human_gate: approver, timeout: 1d, escalate_to: admin, on_reject: referral-analyst}
+        - {open_decision_room: true, question_template: "Decide the referral {case}"}
+  tests:
+    - id: quotes-the-rule
+      target: referral-analyst
+      scenario: Why was the latest commercial property submission referred, and what is the underwriter's authority for it?
+      required_tools: [sas-viya.get_decision_flow]
+      forbidden_tools: [sas-viya.score_data, sas-viya.update_business_rule]
+      evaluator: none
+      limits: {max_seconds: 300, max_tokens: 200000, max_cost_usd: 0.5}

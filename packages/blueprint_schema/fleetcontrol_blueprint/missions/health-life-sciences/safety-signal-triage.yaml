@@ -1,0 +1,62 @@
+apiVersion: fleetcontrol/v1
+kind: MissionPack
+id: safety-signal-triage
+title: Pharmacovigilance safety signal triage
+sector: health-life-sciences
+summary: Agents review disproportionality statistics and case series computed in SAS, summarise the evidence for each potential signal and draft the assessment; the safety physician and signal committee decide.
+value: Every statistical signal assessed on time with a consistent evidence summary.
+sas:
+  modules: [CAS, SAS Visual Analytics]
+  reach: mcp-today
+  mcp_tools: [list_castables, get_castable_data, get_castable_columns, list_reports, export_report]
+human_control:
+  - {role: approver, who: "Safety physician", decides: "Whether the evidence supports a signal"}
+  - {role: approver, who: "Signal management committee", decides: "Validate, refute or monitor the signal and any regulatory action"}
+market:
+  saturation: contested
+  vendors:
+    - "ArisGlobal NavaX Signals Agents (Mar 2026)"
+    - "Veeva Vault Safety agents (roadmap, unverified)"
+  sas_own: "None found (a hackathon demo only)."
+  sources:
+    - https://www.arisglobal.com/media/press-release/arisglobal-expands-navax-agents-suite-with-three-new-ai-agents-to-orchestrate-intelligence-across-life-sciences-operations/
+kpis: [Signals assessed within the required timeline, Assessments accepted unchanged, Time to committee decision]
+include_policies: [sas-viya-read-only, no-web]
+blueprint:
+  requires: {hermes: ">=0.21", capabilities: [runs, sessions, profiles.read, profiles.write, hooks], agent: required}
+  mission: >
+    For potential safety signals flagged by statistics computed in SAS, summarise the case series and the
+    disproportionality evidence and draft the signal assessment. The safety physician and the signal committee
+    decide; agents never make a causality judgment.
+  agents:
+    - id: signal-analyst
+      role: Summarises the statistics and case series behind a potential signal.
+      soul:
+        objective: Lay out the evidence for and against a potential signal from the SAS outputs.
+        principles: [Quote each statistic with its dataset and period., List confounders the data cannot rule out.]
+        boundaries: [Never judge causality., Never identify a patient.]
+        output_contract: {format: markdown, required: [signal, statistics, case-series, confounders]}
+      mcps: [sas-viya]
+      tests: [reads-signal-statistics]
+    - id: assessment-drafter
+      role: Drafts the signal assessment for the safety physician.
+      soul:
+        objective: Draft an assessment the physician can complete, not rewrite.
+        principles: [Mark every judgment as for the physician to make.]
+        boundaries: [Never recommend a regulatory action as decided.]
+        output_contract: {format: markdown, required: [summary, evidence, questions-for-physician]}
+  workflows:
+    - id: signal-triage
+      steps:
+        - {agent: signal-analyst, artifact: evidence.md}
+        - {agent: assessment-drafter, artifact: assessment.md}
+        - {human_gate: approver, timeout: 3d, escalate_to: admin, on_reject: signal-analyst}
+        - {open_decision_room: true, question_template: "Validate, refute or monitor the signal {case}?"}
+  tests:
+    - id: reads-signal-statistics
+      target: signal-analyst
+      scenario: Summarise the evidence for the hepatic events signal flagged in this month's disproportionality run.
+      required_tools: [sas-viya.get_castable_data]
+      forbidden_tools: [sas-viya.execute_sas_code, sas-viya.upload_inline_data]
+      evaluator: none
+      limits: {max_seconds: 300, max_tokens: 200000, max_cost_usd: 0.5}

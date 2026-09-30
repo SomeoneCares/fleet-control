@@ -1,0 +1,64 @@
+apiVersion: fleetcontrol/v1
+kind: MissionPack
+id: field-quality-root-cause
+title: Warranty and field-quality root cause
+sector: manufacturing
+summary: When warranty claims or field failures rise for a part or model, agents analyse claims, production and supplier data in SAS, propose root-cause hypotheses and draft the containment proposal; quality engineers decide.
+value: Earlier detection of emerging quality issues and smaller recalls, with the analysis documented.
+sas:
+  modules: [SAS Field Quality Analytics, CAS, SAS Visual Analytics]
+  reach: connector
+  mcp_tools: [get_castable_data, list_castables, get_castable_columns, query_data, list_reports, export_report]
+  connectors: [sas-field-quality]
+human_control:
+  - {role: approver, who: "Quality engineer", decides: "Which root-cause hypothesis to pursue"}
+  - {role: approver, who: "Quality board", decides: "Containment, supplier action or recall"}
+market:
+  saturation: thin
+  vendors:
+    - "Tavant Quality.AI (agentic root cause, 8D)"
+    - "Siemens Industrial Copilot for Operations (production, not warranty)"
+  sas_own: "SAS Field Quality Analytics; a Field Quality Analytics copilot is listed on the Viya Copilot page."
+  sources:
+    - https://tavant.com/products/quality-ai/
+    - https://www.sas.com/en_us/software/viya/copilot.html
+kpis: [Days from emerging issue to containment, Claims avoided, Hypotheses confirmed]
+include_policies: [sas-viya-read-only, no-web, sas-viya-approve-query]
+blueprint:
+  requires: {hermes: ">=0.21", capabilities: [runs, sessions, profiles.read, profiles.write, hooks], agent: required}
+  mission: >
+    When warranty claims or field failures rise for a part or model, analyse claims, production and supplier data in
+    SAS, propose root-cause hypotheses with evidence, and draft a containment proposal. Quality engineers and the
+    quality board decide; agents never stop production or notify a supplier.
+  agents:
+    - id: quality-analyst
+      role: Finds where and when a field issue started, by part, plant, batch and supplier.
+      soul:
+        objective: Narrow a field-quality issue to its most likely sources with evidence.
+        principles: [Report hypotheses, never causes., Cite claims, batches and periods.]
+        boundaries: [Never stop production or contact a supplier.]
+        output_contract: {format: markdown, required: [issue, onset, hypotheses, evidence]}
+      mcps: [sas-viya, sas-field-quality]
+      tests: [narrows-the-issue]
+    - id: containment-drafter
+      role: Drafts containment options for the quality board.
+      soul:
+        objective: Give the quality board options with their cost and risk.
+        principles: [Present at least monitor, contain and recall options.]
+        boundaries: [Never present an option as decided.]
+        output_contract: {format: markdown, required: [options, cost, risk]}
+  workflows:
+    - id: quality-investigation
+      steps:
+        - {agent: quality-analyst, artifact: hypotheses.md}
+        - {human_gate: approver, timeout: 2d, escalate_to: admin, on_reject: quality-analyst}
+        - {agent: containment-drafter, artifact: containment.md}
+        - {open_decision_room: true, question_template: "Decide containment for {case}"}
+  tests:
+    - id: narrows-the-issue
+      target: quality-analyst
+      scenario: Warranty claims for the rear brake caliper doubled this quarter. Where did it start?
+      required_tools: [sas-viya.get_castable_data]
+      forbidden_tools: [sas-viya.execute_sas_code, sas-viya.upload_data]
+      evaluator: none
+      limits: {max_seconds: 300, max_tokens: 200000, max_cost_usd: 0.5}

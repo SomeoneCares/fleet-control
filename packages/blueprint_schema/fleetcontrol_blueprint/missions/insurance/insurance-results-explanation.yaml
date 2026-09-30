@@ -1,0 +1,60 @@
+apiVersion: fleetcontrol/v1
+kind: MissionPack
+id: insurance-results-explanation
+title: IFRS 17 and Solvency II results explanation
+sector: insurance
+summary: After each valuation and capital run, agents explain the movement in CSM, risk adjustment, SCR and own funds by driver and draft the actuarial and board commentary; the actuarial function and finance decide.
+value: Faster close with explanations that reconcile, and commentary traceable to run results.
+sas:
+  modules: [SAS Insurance Capital Management, SAS Risk Cirrus, SAS Visual Analytics, CAS]
+  reach: connector
+  mcp_tools: [get_castable_data, list_castables, export_report, list_reports]
+  connectors: [sas-risk-cirrus]
+human_control:
+  - {role: approver, who: "Actuarial function reviewer", decides: "Whether the movement analysis is right"}
+  - {role: approver, who: "Chief actuary or CFO delegate", decides: "Adjustments and the commentary for the board and supervisor"}
+market:
+  saturation: thin
+  vendors: [No named IFRS 17 or Solvency II explanation agent found in our scans]
+  sas_own: SAS Viya Copilot for Insurance Capital Management (single user).
+  sources: [https://www.sas.com/en_us/software/viya/copilot.html]
+kpis: [Days from run to board pack, Unreconciled movements found in review, Supervisor follow-up questions]
+include_policies: [sas-viya-read-only, no-web]
+blueprint:
+  requires: {hermes: ">=0.21", capabilities: [runs, sessions, profiles.read, profiles.write, hooks], agent: required}
+  mission: >
+    After each IFRS 17 and Solvency II run, explain the movement in contractual service margin, risk adjustment,
+    solvency capital requirement and own funds by driver, and draft actuarial and board commentary. The actuarial
+    function and finance decide adjustments and sign the text.
+  agents:
+    - id: results-analyst
+      role: Builds the analysis of movement from run results and reconciles it.
+      soul:
+        objective: Explain each movement from the runs' own results, reconciled to opening and closing positions.
+        principles: [Name the run and table behind each figure.]
+        boundaries: [Never start, change or approve a run.]
+        output_contract: {format: markdown, required: [analysis-of-movement, reconciliation, sources]}
+      mcps: [sas-viya, sas-risk-cirrus]
+      tests: [reads-results]
+    - id: actuarial-commentary-drafter
+      role: Drafts actuarial function and board commentary from the approved analysis.
+      soul:
+        objective: Draft commentary the chief actuary can sign with few edits.
+        principles: [Use only approved figures.]
+        boundaries: [Never file anything with a supervisor.]
+        output_contract: {format: markdown, required: [commentary, figures-used]}
+  workflows:
+    - id: results-close
+      steps:
+        - {agent: results-analyst, artifact: movement.md}
+        - {human_gate: approver, timeout: 2d, escalate_to: admin, on_reject: results-analyst}
+        - {agent: actuarial-commentary-drafter, artifact: commentary.md}
+        - {human_gate: approver, timeout: 2d, escalate_to: admin, on_reject: actuarial-commentary-drafter}
+        - {open_decision_room: true, question_template: "Approve the results and commentary for {case}?"}
+  tests:
+    - id: reads-results
+      target: results-analyst
+      scenario: Explain the change in the solvency ratio between the last two quarters.
+      forbidden_tools: [sas-viya.execute_sas_code, sas-viya.submit_batch_job]
+      evaluator: none
+      limits: {max_seconds: 600, max_tokens: 300000, max_cost_usd: 1.0}

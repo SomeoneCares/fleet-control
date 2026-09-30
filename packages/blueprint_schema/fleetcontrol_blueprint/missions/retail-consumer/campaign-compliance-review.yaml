@@ -1,0 +1,65 @@
+apiVersion: fleetcontrol/v1
+kind: MissionPack
+id: campaign-compliance-review
+title: Marketing campaign compliance review
+sector: retail-consumer
+summary: Before a campaign built in SAS Customer Intelligence 360 launches, agents check audience, consent, suppressions, offer terms and copy against the rules; compliance signs off, and the author cannot approve their own campaign.
+value: Faster campaign approval with fewer compliance breaches, and a maker-checker between campaign builders (people or SAS 360 agents) and compliance.
+sas:
+  modules: [SAS Customer Intelligence 360, SAS Business Glossary, CAS]
+  reach: public-api
+  mcp_tools: [search_glossary_terms, get_glossary_term, get_castable_data]
+  connectors: [sas-ci360]
+human_control:
+  - {role: approver, who: "Compliance reviewer (not the campaign author)", decides: "Approve, approve with changes or block the campaign"}
+market:
+  saturation: crowded
+  vendors:
+    - "Adobe GenStudio brand compliance and Brand Intelligence (Apr 2026)"
+    - "Salesforce Campaign Agent (human approval before launch)"
+    - "Saifr SaifrReview"
+    - "Red Marker"
+  sas_own: "SAS 360 agents build journeys, audiences and emails (announced April 2026, coming); none reviews compliance."
+  sources:
+    - https://news.adobe.com/news/2026/04/adobe-introduces-brand-intelligence
+    - https://saifr.ai/saifrreview-insurance
+    - https://www.sas.com/en_us/news/press-releases/2026/april/expanded-agentic-ai-capabilities-coming-to-sas-customer-intellig.html
+kpis: [Time from campaign ready to approval, Campaigns blocked or changed, Compliance breaches after launch]
+include_policies: [sas-viya-read-only, no-web]
+blueprint:
+  requires: {hermes: ">=0.21", capabilities: [runs, sessions, profiles.read, profiles.write, hooks], agent: required}
+  mission: >
+    Before a campaign in SAS Customer Intelligence 360 launches, check its audience rules, consent and suppression
+    lists, offer terms, disclosures and copy against the organisation's marketing rules, and draft the review.
+    Compliance decides; agents never change or launch a campaign.
+  agents:
+    - id: campaign-checker
+      role: Checks a campaign's audience, consent, suppressions, terms and copy against the rules.
+      soul:
+        objective: Find every compliance issue in a campaign before it launches.
+        principles: [Quote the rule and the campaign element for each issue., Check vulnerable-customer and consent exclusions first.]
+        boundaries: [Never change, schedule or launch a campaign.]
+        output_contract: {format: markdown, required: [issues, rules, elements, severity]}
+      mcps: [sas-viya, sas-ci360]
+      tests: [checks-against-rules]
+    - id: compliance-review-drafter
+      role: Drafts the compliance review with required changes.
+      soul:
+        objective: Draft a review the compliance officer can sign.
+        principles: [Required changes separate from suggestions.]
+        boundaries: [Never approve a campaign.]
+        output_contract: {format: markdown, required: [verdict-proposal, required-changes, suggestions]}
+  workflows:
+    - id: campaign-review
+      steps:
+        - {agent: campaign-checker, artifact: issues.md}
+        - {agent: compliance-review-drafter, artifact: review.md}
+        - {human_gate: approver, timeout: 1d, escalate_to: admin, on_reject: campaign-checker}
+        - {open_decision_room: true, question_template: "Approve campaign {case} for launch?"}
+  tests:
+    - id: checks-against-rules
+      target: campaign-checker
+      scenario: Review the spring credit-card balance-transfer email campaign before launch.
+      forbidden_tools: [sas-viya.execute_sas_code, sas-viya.upload_inline_data]
+      evaluator: none
+      limits: {max_seconds: 300, max_tokens: 200000, max_cost_usd: 0.5}

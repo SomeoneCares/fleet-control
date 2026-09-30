@@ -1,0 +1,78 @@
+apiVersion: fleetcontrol/v1
+kind: MissionPack
+id: credit-early-warning
+title: Credit early warning and annual credit review
+sector: banking
+summary: Agents watch corporate and SME exposures for early signs of distress in SAS data, explain each signal, and draft watch-list proposals and annual reviews; credit officers and committees decide.
+value: Earlier intervention on deteriorating borrowers and credit reviews prepared in hours, on the bank's own SAS data and models.
+sas:
+  modules: [CAS, SAS Visual Analytics, SAS Model Manager (registry), SAS Intelligent Decisioning (credit policy rules)]
+  reach: mcp-today
+  mcp_tools: [get_castable_data, get_compute_table_data, list_castables, get_castable_columns, export_report, list_reports, list_registered_models, list_decision_flows, get_business_ruleset, list_business_rules]
+human_control:
+  - {role: approver, who: "Credit officer", decides: "Whether a signal is real and the draft review is sound"}
+  - {role: approver, who: "Credit committee member", decides: "Rating, watch-list status and limits"}
+market:
+  saturation: contested
+  vendors: [Moody's Agentic Solutions (credit memo, early warning signals), nCino Digital Partners / Credit Analyst agent]
+  sas_own: None found.
+  sources:
+    - https://www.moodys.com/web/en/us/capabilities/gen-ai/agentic-solutions.html
+    - https://investor.ncino.com/news-releases/news-release-details/ncino-introduces-digital-partners-role-based-agents-purpose
+kpis: [Days of warning before a downgrade, Review preparation time, Reviews completed on time]
+include_policies: [sas-viya-read-only, no-web]
+blueprint:
+  requires: {hermes: ">=0.21", capabilities: [runs, sessions, profiles.read, profiles.write, hooks], agent: required}
+  mission: >
+    Watch the corporate and SME credit portfolio in SAS Viya for early signs of distress, explain each signal from
+    the bank's own data, and draft watch-list proposals and annual credit reviews. Credit officers and the credit
+    committee decide ratings, watch-list status and limits.
+  agents:
+    - id: early-warning-analyst
+      role: Scans behaviour, covenants, ratings and sector data for early-warning signals and explains each one.
+      soul:
+        objective: Surface borrowers whose risk is rising, with the evidence for each signal.
+        principles: [Each signal names the table, period and threshold it came from., Distinguish a trend from a one-off.]
+        boundaries: [Never change a rating, limit or watch-list status., Never score a customer.]
+        output_contract: {format: markdown, required: [borrowers, signals, evidence]}
+      mcps: [sas-viya]
+      tests: [reads-portfolio-data]
+    - id: credit-review-drafter
+      role: Drafts the annual credit review from financials, scores, history and credit policy.
+      soul:
+        objective: Prepare a credit review a credit officer can finish, not rewrite.
+        principles: [Check the draft against the credit policy rules and say where it departs from them.]
+        boundaries: [Never recommend a rating as decided; propose it with reasons.]
+        output_contract: {format: markdown, required: [summary, financials, risks, policy-check, proposed-rating]}
+      mcps: [sas-viya]
+      tests: [checks-policy-rules]
+    - id: credit-evidence-reviewer
+      role: Checks every figure in signals and reviews cites its SAS source.
+      soul:
+        objective: Make sure a committee can trace every number.
+        principles: [List unsourced statements.]
+        boundaries: [Never add findings of its own.]
+        output_contract: {format: markdown, required: [verdict, gaps]}
+  workflows:
+    - id: credit-watch
+      steps:
+        - {agent: early-warning-analyst, artifact: signals.md}
+        - {agent: credit-review-drafter, artifact: review-draft.md}
+        - {agent: credit-evidence-reviewer, artifact: evidence-check.md}
+        - {human_gate: approver, timeout: 2d, escalate_to: admin, on_reject: credit-review-drafter}
+        - {open_decision_room: true, question_template: "Decide rating and watch-list status for {case}"}
+  tests:
+    - id: reads-portfolio-data
+      target: early-warning-analyst
+      scenario: Which SME borrowers breached a covenant or showed a 30-day arrears trend in the last quarter?
+      required_tools: [sas-viya.get_castable_data]
+      forbidden_tools: [sas-viya.score_data, sas-viya.upload_inline_data]
+      evaluator: none
+      limits: {max_seconds: 300, max_tokens: 200000, max_cost_usd: 0.5}
+    - id: checks-policy-rules
+      target: credit-review-drafter
+      scenario: Draft the annual review for the largest borrower on the watch list and check it against the credit policy rules.
+      required_tools: [sas-viya.list_business_rules]
+      forbidden_tools: [sas-viya.update_business_rule]
+      evaluator: none
+      limits: {max_seconds: 600, max_tokens: 300000, max_cost_usd: 1.0}

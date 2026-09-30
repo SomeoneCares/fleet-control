@@ -1,0 +1,62 @@
+apiVersion: fleetcontrol/v1
+kind: MissionPack
+id: revenue-protection
+title: Revenue protection and energy theft investigation
+sector: energy-utilities
+summary: For meters and accounts flagged by SAS analytics (consumption drops, tamper events, neighbour comparisons), agents assemble the evidence and draft the field-visit request; revenue protection officers decide.
+value: More confirmed theft per field visit and fewer visits to honest customers.
+sas:
+  modules: [SAS Visual Investigator, CAS, SAS Visual Analytics]
+  reach: public-api
+  mcp_tools: [get_castable_data, list_castables, query_data, list_reports, export_report]
+  connectors: [sas-visual-investigator]
+human_control:
+  - {role: approver, who: "Revenue protection officer", decides: "Send a field visit or close"}
+  - {role: approver, who: "Revenue protection manager", decides: "Back-billing, disconnection or referral"}
+market:
+  saturation: open
+  vendors:
+    - "Itron Revenue Assurance, Oracle Utilities loss detection, Siemens EnergyIP (ML analytics, not agents)"
+  sas_own: "SAS utilities analytics; no product or copilot for this task found."
+  sources:
+    - https://na.itron.com/what-we-offer/revenue-assurance
+kpis: [Confirmation rate per field visit, Revenue recovered, Visits to customers with no issue]
+include_policies: [sas-viya-read-only, no-web, sas-viya-approve-query]
+blueprint:
+  requires: {hermes: ">=0.21", capabilities: [runs, sessions, profiles.read, profiles.write, hooks], agent: required}
+  mission: >
+    For meters and accounts flagged by SAS analytics, assemble the consumption history, tamper events and neighbour
+    comparison, and draft the field-visit request. Revenue protection officers decide; agents never disconnect,
+    back-bill or contact a customer.
+  agents:
+    - id: meter-analyst
+      role: Assembles the evidence behind a flagged meter or account.
+      soul:
+        objective: Show whether a flag looks like theft, a fault or a genuine change in use.
+        principles: [List innocent explanations (vacancy, new appliance, meter fault).]
+        boundaries: [Never disconnect, back-bill or contact a customer.]
+        output_contract: {format: markdown, required: [flag, consumption, events, comparison, innocent-explanations]}
+      mcps: [sas-viya, sas-visual-investigator]
+      tests: [reads-consumption]
+    - id: visit-request-drafter
+      role: Drafts the field-visit request with what to check.
+      soul:
+        objective: Tell the field team what to look for and why.
+        principles: [Checks in order of likelihood; safety notes.]
+        boundaries: [Never schedule the visit.]
+        output_contract: {format: markdown, required: [request, checks, safety]}
+  workflows:
+    - id: flag-investigation
+      steps:
+        - {agent: meter-analyst, artifact: evidence.md}
+        - {agent: visit-request-drafter, artifact: visit-request.md}
+        - {human_gate: approver, timeout: 2d, escalate_to: admin, on_reject: meter-analyst}
+        - {open_decision_room: true, question_template: "Send a field visit for {case}?"}
+  tests:
+    - id: reads-consumption
+      target: meter-analyst
+      scenario: The meter at account 4471 dropped 70% while neighbours stayed flat. Assemble the evidence.
+      required_tools: [sas-viya.get_castable_data]
+      forbidden_tools: [sas-viya.execute_sas_code, sas-viya.upload_inline_data]
+      evaluator: none
+      limits: {max_seconds: 300, max_tokens: 200000, max_cost_usd: 0.5}

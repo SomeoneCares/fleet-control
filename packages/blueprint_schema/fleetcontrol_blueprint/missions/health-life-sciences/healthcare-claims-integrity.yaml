@@ -1,0 +1,65 @@
+apiVersion: fleetcontrol/v1
+kind: MissionPack
+id: healthcare-claims-integrity
+title: Healthcare claims payment integrity
+sector: health-life-sciences
+summary: For providers and claims flagged by SAS fraud, waste and abuse analytics, agents assemble billing patterns, peer comparisons and policy rules and draft the review case; the special investigations unit decides.
+value: More recoveries and fewer false accusations of providers, each case with its evidence.
+sas:
+  modules: [SAS Visual Investigator, SAS Fraud Decisioning, CAS]
+  reach: public-api
+  mcp_tools: [get_castable_data, list_castables, list_decision_flows, get_decision_flow, list_business_rules]
+  connectors: [sas-visual-investigator]
+human_control:
+  - {role: approver, who: "SIU investigator", decides: "Open a review, request records or close"}
+  - {role: approver, who: "Payment integrity lead", decides: "Recovery, prepayment review or referral to authorities"}
+market:
+  saturation: crowded
+  vendors:
+    - "Codoxo ClaimPilot and Data Health Integrity agent"
+    - "Optum payment-accuracy AI agents"
+    - "Cotiviti AI Proactive COB (Aug 2026)"
+  sas_own: "Investigation Copilot for Visual Investigator (insurance fraud; healthcare payer coverage unconfirmed)."
+  sources:
+    - https://www.codoxo.com/press-release/codoxo-unveils-new-ai-data-health-integrity-agent-to-accelerate-time-to-value-and-eliminate-costly-data-errors/
+    - https://business.optum.com/en/insights/real-ai-use-cases-drive-payment-accuracy.html
+kpis: [Cases reviewed per investigator, Recovery per case, Cases closed with no finding]
+include_policies: [sas-viya-read-only, no-web]
+blueprint:
+  requires: {hermes: ">=0.21", capabilities: [runs, sessions, profiles.read, profiles.write, hooks], agent: required}
+  mission: >
+    For providers and claims flagged by SAS fraud, waste and abuse analytics, assemble the billing pattern, peer
+    comparison and the payment-policy rules involved, and draft the review case. Investigators decide; agents never
+    deny a payment or contact a provider.
+  agents:
+    - id: claims-pattern-analyst
+      role: Explains a flagged provider's billing pattern against peers and the payment rules.
+      soul:
+        objective: Show what is unusual about a provider's billing and which rule it may break.
+        principles: [Compare with a named peer group and period., Quote the payment rule involved.]
+        boundaries: [Never deny, hold or adjust a payment., Never contact a provider.]
+        output_contract: {format: markdown, required: [pattern, peer-comparison, rules, innocent-explanations]}
+      mcps: [sas-viya, sas-visual-investigator]
+      tests: [compares-with-peers]
+    - id: case-drafter
+      role: Drafts the review case for the investigator.
+      soul:
+        objective: Draft a review case that is fair to the provider and complete for the investigator.
+        principles: [List innocent explanations next to the concerns.]
+        boundaries: [Never state wrongdoing as fact.]
+        output_contract: {format: markdown, required: [summary, concerns, innocent-explanations, next-steps]}
+  workflows:
+    - id: provider-review
+      steps:
+        - {agent: claims-pattern-analyst, artifact: pattern.md}
+        - {agent: case-drafter, artifact: case.md}
+        - {human_gate: approver, timeout: 2d, escalate_to: admin, on_reject: claims-pattern-analyst}
+        - {open_decision_room: true, question_template: "Decide the provider review {case}"}
+  tests:
+    - id: compares-with-peers
+      target: claims-pattern-analyst
+      scenario: Why was the physiotherapy provider flagged this month, and how does its billing compare with peers?
+      required_tools: [sas-viya.get_castable_data]
+      forbidden_tools: [sas-viya.score_data, sas-viya.update_business_rule]
+      evaluator: none
+      limits: {max_seconds: 300, max_tokens: 200000, max_cost_usd: 0.5}

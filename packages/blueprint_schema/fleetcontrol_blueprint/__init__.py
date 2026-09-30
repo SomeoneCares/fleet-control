@@ -31,6 +31,7 @@ from .models import (
     dump_blueprint,
     json_schema,
 )
+from .missions import MissionPack, expand as expand_mission, get_pack, instantiate as instantiate_mission, library as mission_library
 
 __all__ = [
     "API_VERSION",
@@ -52,4 +53,9 @@ __all__ = [
     "load_blueprint",
     "dump_blueprint",
     "json_schema",
+    "MissionPack",
+    "expand_mission",
+    "get_pack",
+    "instantiate_mission",
+    "mission_library",
 ]

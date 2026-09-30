@@ -1,0 +1,62 @@
+apiVersion: fleetcontrol/v1
+kind: MissionPack
+id: forecast-exception-review
+title: Demand forecast exception review
+sector: retail-consumer
+summary: For product-location forecasts flagged as exceptions in SAS planning, agents explain the likely cause (promotion, stock-out, price, data) and propose accept or override; planners decide.
+value: Planners review only the exceptions that matter, each with a sourced explanation.
+sas:
+  modules: [SAS Intelligent Planning, SAS Visual Forecasting, CAS]
+  reach: connector
+  mcp_tools: [get_castable_data, list_castables, query_data, list_reports, export_report]
+  connectors: [sas-planning]
+human_control:
+  - {role: approver, who: "Demand planner", decides: "Accept or override each exception"}
+market:
+  saturation: crowded
+  vendors:
+    - "RELEX AI agents (exception root cause, live)"
+    - "o9 planning agents"
+    - "Blue Yonder retail planning agents (Mar 2026)"
+  sas_own: "SAS Intelligent Planning; an Intelligent Planning copilot is announced for 2026."
+  sources:
+    - https://www.relexsolutions.com/resources/introducing-relex-ai-agents-for-retail/
+    - https://www.sas.com/en_us/software/intelligent-planning.html
+kpis: [Exceptions reviewed per planner, Overrides that improved accuracy, Stock-outs on exception items]
+include_policies: [sas-viya-read-only, no-web, sas-viya-approve-query]
+blueprint:
+  requires: {hermes: ">=0.21", capabilities: [runs, sessions, profiles.read, profiles.write, hooks], agent: required}
+  mission: >
+    For forecasts flagged as exceptions in SAS planning, explain the likely cause and propose whether to accept or
+    override. Planners decide; agents never change a forecast, order or price.
+  agents:
+    - id: exception-analyst
+      role: Explains why a product-location forecast was flagged.
+      soul:
+        objective: Tell the planner the likely cause of each exception and how sure it is.
+        principles: [Check promotions, stock-outs, price changes and data issues in that order.]
+        boundaries: [Never change a forecast, order or price.]
+        output_contract: {format: markdown, required: [exceptions, likely-cause, confidence, evidence]}
+      mcps: [sas-viya, sas-planning]
+      tests: [explains-exception]
+    - id: override-proposer
+      role: Proposes accept or override for each exception with its justification.
+      soul:
+        objective: Propose overrides only where the evidence supports them.
+        principles: [State the override size and why.]
+        boundaries: [Never apply an override.]
+        output_contract: {format: markdown, required: [proposals]}
+  workflows:
+    - id: exception-review
+      steps:
+        - {agent: exception-analyst, artifact: exceptions.md}
+        - {agent: override-proposer, artifact: proposals.md}
+        - {human_gate: approver, timeout: 1d, escalate_to: admin, on_reject: exception-analyst}
+  tests:
+    - id: explains-exception
+      target: exception-analyst
+      scenario: Why is next week's forecast for sparkling water in the coastal stores flagged?
+      required_tools: [sas-viya.get_castable_data]
+      forbidden_tools: [sas-viya.upload_inline_data, sas-viya.execute_sas_code]
+      evaluator: none
+      limits: {max_seconds: 300, max_tokens: 200000, max_cost_usd: 0.5}

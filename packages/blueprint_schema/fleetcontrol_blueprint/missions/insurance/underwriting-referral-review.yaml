@@ -30,7 +30,8 @@ blueprint:
       soul:
         objective: Put the referral reasons, the facts and the authority limits on one page.
         principles: [Quote the rule that referred the risk., Cite the data behind every fact.]
-        boundaries: [Never bind, quote, decline or change terms.]
+        boundaries:
+          - "Never bind, quote, decline or change terms."
         output_contract: {format: markdown, required: [referral-reasons, facts, authority, open-questions]}
       mcps: [sas-viya]
       tests: [quotes-the-rule]
@@ -38,7 +39,8 @@ blueprint:
       role: Drafts the referral note with options for the underwriter.
       soul:
         objective: Offer the underwriter clear options with their consequences.
-        principles: [Present at least accept, decline and accept-with-terms.]
+        principles:
+          - "Present at least accept, decline and accept-with-terms."
         boundaries: [Never present an option as decided.]
         output_contract: {format: markdown, required: [options, consequences, recommendation]}
   workflows:

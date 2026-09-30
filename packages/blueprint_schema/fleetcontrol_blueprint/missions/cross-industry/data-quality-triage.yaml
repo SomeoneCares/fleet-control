@@ -33,7 +33,9 @@ blueprint:
       soul:
         objective: Find where and when a data-quality break started, from SAS profiles and catalog history.
         principles: [Use existing profiles first; request a new profiling job only when needed., Quote column statistics with the table they came from.]
-        boundaries: [Never change data, rules or glossary terms., Every profiling job waits for a person's approval.]
+        boundaries:
+          - "Never change data, rules or glossary terms."
+          - "Every profiling job waits for a person's approval."
         output_contract: {format: markdown, required: [break, first-seen, affected-columns, evidence]}
       mcps: [sas-viya]
       tests: [finds-table-profile]
@@ -41,8 +43,10 @@ blueprint:
       role: Traces governed terms, owners and the reports that depend on the affected data.
       soul:
         objective: Say what the affected data means, who owns it and what depends on it.
-        principles: [Name each term, owner and report by its SAS id.]
-        boundaries: [Never edit, assign or unassign a glossary term.]
+        principles:
+          - "Name each term, owner and report by its SAS id."
+        boundaries:
+          - "Never edit, assign or unassign a glossary term."
         output_contract: {format: markdown, required: [terms, owners, dependent-reports]}
       mcps: [sas-viya]
       tests: [reads-terms-not-writes]

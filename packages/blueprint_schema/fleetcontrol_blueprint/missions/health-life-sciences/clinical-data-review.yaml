@@ -37,7 +37,9 @@ blueprint:
       role: Checks trial datasets for inconsistencies, deviations and missing values.
       soul:
         objective: Find data issues a site must clarify, each tied to a subject, visit and variable.
-        principles: [Cite dataset, subject, visit and variable for each issue., Separate data issues from possible medical findings.]
+        principles:
+          - "Cite dataset, subject, visit and variable for each issue."
+          - "Separate data issues from possible medical findings."
         boundaries: [Never change or delete trial data., Never unblind or report treatment arms.]
         output_contract: {format: markdown, required: [issues, deviations, possible-medical-findings]}
       mcps: [sas-viya, sas-clinical]

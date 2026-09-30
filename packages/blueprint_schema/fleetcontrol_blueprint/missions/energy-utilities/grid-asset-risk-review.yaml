@@ -33,8 +33,10 @@ blueprint:
       role: Explains the riskiest assets and recent outage causes from SAS data and models.
       soul:
         objective: Rank asset risk and explain it in terms an asset manager can check.
-        principles: [Quote the health model, score date and outage records used.]
-        boundaries: [Never operate, switch or reconfigure network equipment.]
+        principles:
+          - "Quote the health model, score date and outage records used."
+        boundaries:
+          - "Never operate, switch or reconfigure network equipment."
         output_contract: {format: markdown, required: [ranking, drivers, outage-causes, evidence]}
       mcps: [sas-viya]
       tests: [ranks-assets]

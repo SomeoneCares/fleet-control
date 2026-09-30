@@ -37,7 +37,9 @@ blueprint:
       soul:
         objective: Show what is unusual about a provider's billing and which rule it may break.
         principles: [Compare with a named peer group and period., Quote the payment rule involved.]
-        boundaries: [Never deny, hold or adjust a payment., Never contact a provider.]
+        boundaries:
+          - "Never deny, hold or adjust a payment."
+          - "Never contact a provider."
         output_contract: {format: markdown, required: [pattern, peer-comparison, rules, innocent-explanations]}
       mcps: [sas-viya, sas-visual-investigator]
       tests: [compares-with-peers]

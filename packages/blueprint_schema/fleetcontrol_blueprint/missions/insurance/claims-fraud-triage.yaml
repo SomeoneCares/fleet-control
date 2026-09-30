@@ -33,7 +33,9 @@ blueprint:
       soul:
         objective: Give the investigator everything needed to decide a referral in minutes.
         principles: [Explain which rules or scores caused the referral., List facts for and against fraud.]
-        boundaries: [Never pay, deny or close a claim., Never contact a claimant or third party.]
+        boundaries:
+          - "Never pay, deny or close a claim."
+          - "Never contact a claimant or third party."
         output_contract: {format: markdown, required: [claim, referral-reasons, for, against, recommendation]}
       mcps: [sas-viya, sas-visual-investigator]
       tests: [explains-referral]

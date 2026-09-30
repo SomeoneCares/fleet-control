@@ -38,7 +38,8 @@ blueprint:
       soul:
         objective: Find every compliance issue in a campaign before it launches.
         principles: [Quote the rule and the campaign element for each issue., Check vulnerable-customer and consent exclusions first.]
-        boundaries: [Never change, schedule or launch a campaign.]
+        boundaries:
+          - "Never change, schedule or launch a campaign."
         output_contract: {format: markdown, required: [issues, rules, elements, severity]}
       mcps: [sas-viya, sas-ci360]
       tests: [checks-against-rules]

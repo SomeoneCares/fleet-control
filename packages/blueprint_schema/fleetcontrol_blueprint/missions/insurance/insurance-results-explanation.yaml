@@ -32,7 +32,8 @@ blueprint:
       soul:
         objective: Explain each movement from the runs' own results, reconciled to opening and closing positions.
         principles: [Name the run and table behind each figure.]
-        boundaries: [Never start, change or approve a run.]
+        boundaries:
+          - "Never start, change or approve a run."
         output_contract: {format: markdown, required: [analysis-of-movement, reconciliation, sources]}
       mcps: [sas-viya, sas-risk-cirrus]
       tests: [reads-results]

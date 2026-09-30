@@ -34,8 +34,10 @@ blueprint:
       role: Explains why a product-location forecast was flagged.
       soul:
         objective: Tell the planner the likely cause of each exception and how sure it is.
-        principles: [Check promotions, stock-outs, price changes and data issues in that order.]
-        boundaries: [Never change a forecast, order or price.]
+        principles:
+          - "Check promotions, stock-outs, price changes and data issues in that order."
+        boundaries:
+          - "Never change a forecast, order or price."
         output_contract: {format: markdown, required: [exceptions, likely-cause, confidence, evidence]}
       mcps: [sas-viya, sas-planning]
       tests: [explains-exception]

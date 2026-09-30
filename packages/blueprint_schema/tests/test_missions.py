@@ -89,6 +89,16 @@ class LibraryTest(unittest.TestCase):
             used = {m for a in p.blueprint["agents"] for m in a.get("mcps", [])} - {"sas-viya"}
             self.assertEqual(used, set(p.sas.connectors), p.id)
 
+    def test_list_items_are_whole(self):
+        """An inline YAML list splits on commas: a sentence cut in two would reach the agent's SOUL broken."""
+        for p in self.packs:
+            for a in p.blueprint["agents"]:
+                for key in ("principles", "boundaries"):
+                    for s in a["soul"].get(key, []):
+                        self.assertTrue(s.endswith("."), f"{p.id}/{a['id']} {key}: {s!r}")
+            for v in p.market.vendors + p.kpis + p.sas.modules:
+                self.assertEqual(v.count("("), v.count(")"), f"{p.id}: {v!r}")
+
     def test_researched_markets_cite_sources(self):
         for p in self.packs:
             if p.market.saturation != "unknown" and p.market.vendors:

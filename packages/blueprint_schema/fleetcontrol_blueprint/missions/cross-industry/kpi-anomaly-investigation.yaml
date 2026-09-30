@@ -30,7 +30,9 @@ blueprint:
       soul:
         objective: Explain a KPI movement with numbers SAS computed, driver by driver.
         principles: [Start from the report outline to find the data behind the KPI., Each driver cites its table and filter.]
-        boundaries: [Never create, change or delete a report., Every ad-hoc query waits for a person's approval.]
+        boundaries:
+          - "Never create, change or delete a report."
+          - "Every ad-hoc query waits for a person's approval."
         output_contract: {format: markdown, required: [movement, drivers, unexplained, sources]}
       mcps: [sas-viya]
       tests: [starts-from-report]

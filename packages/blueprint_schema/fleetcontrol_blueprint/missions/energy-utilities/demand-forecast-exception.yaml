@@ -32,7 +32,8 @@ blueprint:
       soul:
         objective: Say why the forecast diverged and whether the cause will persist.
         principles: [Check data and job logs before blaming the model., Cite the forecast run and inputs.]
-        boundaries: [Never change a forecast, model or schedule.]
+        boundaries:
+          - "Never change a forecast, model or schedule."
         output_contract: {format: markdown, required: [exception, drivers, data-issues, persistence]}
       mcps: [sas-viya]
       tests: [checks-run-log]

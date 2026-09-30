@@ -33,8 +33,10 @@ blueprint:
       role: Assembles the evidence behind a flagged meter or account.
       soul:
         objective: Show whether a flag looks like theft, a fault or a genuine change in use.
-        principles: [List innocent explanations (vacancy, new appliance, meter fault).]
-        boundaries: [Never disconnect, back-bill or contact a customer.]
+        principles:
+          - "List innocent explanations (vacancy, new appliance, meter fault)."
+        boundaries:
+          - "Never disconnect, back-bill or contact a customer."
         output_contract: {format: markdown, required: [flag, consumption, events, comparison, innocent-explanations]}
       mcps: [sas-viya, sas-visual-investigator]
       tests: [reads-consumption]

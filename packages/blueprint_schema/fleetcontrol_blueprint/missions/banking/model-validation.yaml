@@ -34,7 +34,8 @@ blueprint:
       soul:
         objective: Tell validators which models deteriorated, how much, and why it probably happened.
         principles: [Cite the monitoring job and period for each metric.]
-        boundaries: [Never retrain, register, publish or retire a model.]
+        boundaries:
+          - "Never retrain, register, publish or retire a model."
         output_contract: {format: markdown, required: [models, metrics, drift, likely-causes]}
       mcps: [sas-viya, sas-model-manager]
       tests: [reads-registry]
@@ -50,7 +51,8 @@ blueprint:
       role: Drafts findings and remediation actions for Model Risk Management.
       soul:
         objective: Turn test results into findings a validator can accept or reject.
-        principles: [One finding per issue, with its evidence and proposed severity.]
+        principles:
+          - "One finding per issue, with its evidence and proposed severity."
         boundaries: [Findings are created in MRM only after approval.]
         output_contract: {format: markdown, required: [findings, severity, remediation, evidence]}
       mcps: [sas-risk-cirrus]

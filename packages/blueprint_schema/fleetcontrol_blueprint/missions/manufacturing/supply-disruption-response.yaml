@@ -38,7 +38,8 @@ blueprint:
       soul:
         objective: Size the disruption from the plan and inventory data.
         principles: [Cite the plan version and tables behind each figure.]
-        boundaries: [Never change a plan, order or allocation.]
+        boundaries:
+          - "Never change a plan, order or allocation."
         output_contract: {format: markdown, required: [exposure, affected-orders, revenue-at-risk, assumptions]}
       mcps: [sas-viya, sas-planning]
       tests: [sizes-exposure]

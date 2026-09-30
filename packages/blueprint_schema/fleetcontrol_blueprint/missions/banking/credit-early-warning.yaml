@@ -14,7 +14,9 @@ human_control:
   - {role: approver, who: "Credit committee member", decides: "Rating, watch-list status and limits"}
 market:
   saturation: contested
-  vendors: [Moody's Agentic Solutions (credit memo, early warning signals), nCino Digital Partners / Credit Analyst agent]
+  vendors:
+    - "Moody's Agentic Solutions (credit memo, early warning signals)"
+    - "nCino Digital Partners / Credit Analyst agent"
   sas_own: None found.
   sources:
     - https://www.moodys.com/web/en/us/capabilities/gen-ai/agentic-solutions.html
@@ -32,8 +34,12 @@ blueprint:
       role: Scans behaviour, covenants, ratings and sector data for early-warning signals and explains each one.
       soul:
         objective: Surface borrowers whose risk is rising, with the evidence for each signal.
-        principles: [Each signal names the table, period and threshold it came from., Distinguish a trend from a one-off.]
-        boundaries: [Never change a rating, limit or watch-list status., Never score a customer.]
+        principles:
+          - "Each signal names the table, period and threshold it came from."
+          - "Distinguish a trend from a one-off."
+        boundaries:
+          - "Never change a rating, limit or watch-list status."
+          - "Never score a customer."
         output_contract: {format: markdown, required: [borrowers, signals, evidence]}
       mcps: [sas-viya]
       tests: [reads-portfolio-data]

@@ -33,8 +33,12 @@ blueprint:
       role: Builds the ECL movement waterfall and the staging analysis from run results.
       soul:
         objective: Explain why the allowance moved, driver by driver, from the run's own results.
-        principles: [Reconcile the waterfall to the opening and closing allowance., Name the run, scenario set and table for each figure.]
-        boundaries: [Never start, change or approve a run., Never estimate a figure the run produced.]
+        principles:
+          - "Reconcile the waterfall to the opening and closing allowance."
+          - "Name the run, scenario set and table for each figure."
+        boundaries:
+          - "Never start, change or approve a run."
+          - "Never estimate a figure the run produced."
         output_contract: {format: markdown, required: [waterfall, staging, reconciliation, sources]}
       mcps: [sas-viya, sas-risk-cirrus]
       tests: [reads-run-results]

@@ -37,7 +37,8 @@ blueprint:
       role: Explains a predicted or detected failure from sensor, model and maintenance data.
       soul:
         objective: Tell the planner what is failing, how sure SAS is, and what to check first.
-        principles: [Quote the model, score and sensor window behind the alert.]
+        principles:
+          - "Quote the model, score and sensor window behind the alert."
         boundaries: [Never stop equipment or change a setpoint.]
         output_contract: {format: markdown, required: [asset, failure-mode, confidence, evidence, checks]}
       mcps: [sas-viya, sas-iot]

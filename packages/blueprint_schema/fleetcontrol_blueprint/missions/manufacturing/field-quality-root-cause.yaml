@@ -35,7 +35,9 @@ blueprint:
       role: Finds where and when a field issue started, by part, plant, batch and supplier.
       soul:
         objective: Narrow a field-quality issue to its most likely sources with evidence.
-        principles: [Report hypotheses, never causes., Cite claims, batches and periods.]
+        principles:
+          - "Report hypotheses, never causes."
+          - "Cite claims, batches and periods."
         boundaries: [Never stop production or contact a supplier.]
         output_contract: {format: markdown, required: [issue, onset, hypotheses, evidence]}
       mcps: [sas-viya, sas-field-quality]
@@ -44,7 +46,8 @@ blueprint:
       role: Drafts containment options for the quality board.
       soul:
         objective: Give the quality board options with their cost and risk.
-        principles: [Present at least monitor, contain and recall options.]
+        principles:
+          - "Present at least monitor, contain and recall options."
         boundaries: [Never present an option as decided.]
         output_contract: {format: markdown, required: [options, cost, risk]}
   workflows:

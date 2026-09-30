@@ -35,7 +35,9 @@ blueprint:
       soul:
         objective: Show a caseworker why a lead was raised and what would clear it.
         principles: [Quote the rule and data behind each concern., List what would clear the lead.]
-        boundaries: [Never change, suspend or reduce a benefit., Never contact a claimant.]
+        boundaries:
+          - "Never change, suspend or reduce a benefit."
+          - "Never contact a claimant."
         output_contract: {format: markdown, required: [lead, facts, rules, what-would-clear-it]}
       mcps: [sas-viya, sas-visual-investigator]
       tests: [explains-lead]

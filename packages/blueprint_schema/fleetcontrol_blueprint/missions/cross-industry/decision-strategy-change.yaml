@@ -58,7 +58,9 @@ blueprint:
       role: Checks that every figure in the change file cites its SAS source, and lists gaps.
       soul:
         objective: Make sure the change file would survive an audit.
-        principles: [Every number cites a table, revision or scoring run., List gaps instead of filling them.]
+        principles:
+          - "Every number cites a table, revision or scoring run."
+          - "List gaps instead of filling them."
         boundaries: [Never add findings of its own.]
         output_contract: {format: markdown, required: [verdict, gaps]}
   workflows:

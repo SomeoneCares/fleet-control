@@ -253,9 +253,15 @@ def _plugdir(root):
 
 @check("Hermes version readable")
 def _version(root):
+    # Up to 0.21.4 a literal __version__; since 0.21.5 the checkout's install-stamp.json (git-ignored, written by
+    # `hermes update`), whose baseVersion fleetctl-agent reads. A fresh clone has no stamp, so pin the reader.
     src = read(root, "hermes_cli/__init__.py")
     m = re.search(r'__version__\s*=\s*"([^"]+)"', src)
-    return (m is not None, f"hermes-agent {m.group(1)}" if m else "no __version__")
+    if m:
+        return (True, f"hermes-agent {m.group(1)}")
+    ok = "install-stamp.json" in src and "baseVersion" in src
+    return (ok, "version comes from install-stamp.json baseVersion" if ok
+            else "neither a __version__ literal nor install-stamp.json baseVersion")
 
 
 def main(argv):

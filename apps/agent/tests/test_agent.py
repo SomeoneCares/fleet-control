@@ -589,6 +589,15 @@ class GatewayRecordTest(unittest.TestCase):
         h.dashboard = lambda route, *a, **k: {"version": "0.21.4"}
         self.assertNotIn("dashboard_stale", h.capability_report())
 
+    def test_since_0_21_5_the_installed_version_comes_from_the_install_stamp(self):
+        h = self._home(version="0.21.4")  # the stamp wins over a leftover literal
+        with open(os.path.join(h.cfg.hermes_home, "hermes-agent", "install-stamp.json"), "w", encoding="utf-8") as f:
+            json.dump({"schemaVersion": 2, "baseVersion": "0.21.5", "displayVersion": "0.21.5+2306.gf8123d2"}, f)
+        self.assertEqual(h.installed_version(), "0.21.5")
+        with open(os.path.join(h.cfg.hermes_home, "hermes-agent", "install-stamp.json"), "w", encoding="utf-8") as f:
+            f.write("not json")
+        self.assertEqual(h.installed_version(), "0.21.4")
+
 
 class McpLoginTest(unittest.TestCase):
     """When each MCP OAuth login runs out, read from Hermes' token files: times only, never a token."""

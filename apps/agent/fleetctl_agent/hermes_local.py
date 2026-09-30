@@ -517,11 +517,21 @@ class HermesLocal:
         return out
 
     def installed_version(self) -> Optional[str]:
-        """The Hermes version on disk (what a restart would run), from the checkout's hermes_cli/__init__.py."""
+        """The Hermes version on disk (what a restart would run): the ``baseVersion`` of the checkout's
+        install-stamp.json (written by ``hermes update`` since 0.21.5, and what the dashboard reports), else the
+        ``__version__`` literal in hermes_cli/__init__.py that older checkouts carry."""
         import re as _re
 
+        root = os.path.join(self.cfg.hermes_home, "hermes-agent")
         try:
-            with open(os.path.join(self.cfg.hermes_home, "hermes-agent", "hermes_cli", "__init__.py"), encoding="utf-8") as f:
+            with open(os.path.join(root, "install-stamp.json"), encoding="utf-8-sig") as f:
+                stamp = json.load(f)
+            if isinstance(stamp, dict) and stamp.get("baseVersion"):
+                return str(stamp["baseVersion"])
+        except (OSError, ValueError):
+            pass
+        try:
+            with open(os.path.join(root, "hermes_cli", "__init__.py"), encoding="utf-8") as f:
                 m = _re.search(r'__version__\s*=\s*"([^"]+)"', f.read())
             return m.group(1) if m else None
         except OSError:

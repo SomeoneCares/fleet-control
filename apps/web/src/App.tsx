@@ -14,6 +14,7 @@ import { ContentScreen } from "./screens/Content";
 import { DecisionRoomScreen, DecisionRoomsScreen } from "./screens/DecisionRooms";
 import { MyDecisionsScreen } from "./screens/MyDecisions";
 import { MessagingScreen } from "./screens/Messaging";
+import { MissionLibraryScreen } from "./screens/MissionLibrary";
 import { DesignerScreen } from "./screens/Designer";
 import { FleetArchitectScreen } from "./screens/FleetArchitect";
 import { InstancesScreen } from "./screens/Instances";
@@ -69,6 +70,7 @@ export const router = createBrowserRouter([
       { path: "blueprints", element: guarded("blueprints.read", <BlueprintsScreen />) },
       { path: "plans/:id", element: guarded("plans.read", <ApplyPlanScreen />) },
       { path: "architect", element: guarded("blueprints.read", <FleetArchitectScreen />) },
+      { path: "missions", element: guarded("blueprints.read", <MissionLibraryScreen />) },
       { path: "designer", element: guarded("blueprints.read", <DesignerScreen />) },
       { path: "studio", element: guarded("blueprints.read", <StudioScreen />) },
       { path: "audit", element: guarded("audit.read", <AuditScreen />) },

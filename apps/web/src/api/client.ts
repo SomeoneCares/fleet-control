@@ -949,6 +949,67 @@ export function detailOf(data: unknown): string | null {
 /** Fired when the API answers 401: the session ended, so the app shows Sign in again. */
 export const UNAUTHORIZED_EVENT = "fc:unauthorized";
 
+// Mission library (packages/blueprint_schema/fleetcontrol_blueprint/missions): ready-made fleets by sector.
+export type MissionReach = "mcp-today" | "public-api" | "connector";
+export type MissionMarketLevel = "crowded" | "contested" | "thin" | "open" | "unknown";
+
+export interface MissionSummary {
+  id: string;
+  title: string;
+  sector: string;
+  sector_label: string;
+  summary: string;
+  reach: MissionReach;
+  saturation: MissionMarketLevel;
+  modules: string[];
+  connectors: string[];
+  agents: string[];
+  gates: number;
+}
+
+export interface MissionGate {
+  role: string;
+  who: string;
+  decides: string;
+}
+
+export type MissionStep =
+  | { agent: string; artifact?: string | null; input?: string | null }
+  | { parallel: { agent: string; artifact?: string | null }[] }
+  | { human_gate: string; timeout?: string; escalate_to?: string | null; on_reject?: string | null }
+  | { open_decision_room: boolean; question_template?: string | null };
+
+export interface MissionBlueprint {
+  mission: string;
+  policies: { id: string; kind: string; description: string; applies_to: string[]; params: { tools?: string[] }; enforcement: "block" | "approve" | "flag" }[];
+  agents: { id: string; role: string; soul: { objective: string; principles: string[]; boundaries: string[] }; mcps: string[]; tests: string[] }[];
+  workflows: { id: string; steps: MissionStep[] }[];
+  tests: { id: string; target: string; scenario: string }[];
+}
+
+export interface MissionDetail {
+  id: string;
+  title: string;
+  sector: string;
+  sector_label: string;
+  summary: string;
+  value: string;
+  sas: { modules: string[]; reach: MissionReach; mcp_tools: string[]; connectors: string[] };
+  human_control: MissionGate[];
+  market: { saturation: MissionMarketLevel; vendors: string[]; sas_own: string | null; sources: string[] };
+  kpis: string[];
+  blueprint_yaml: string;
+  blueprint: MissionBlueprint;
+}
+
+export interface MissionProvisioned {
+  name: string;
+  version: number;
+  status: string;
+  mission: string;
+  connectors_needed: string[];
+}
+
 async function call<T>(method: string, path: string, body?: unknown, query?: Record<string, string | number>): Promise<T> {
   const qs = query ? "?" + new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)])).toString() : "";
   const headers: Record<string, string> = {};
@@ -1023,6 +1084,10 @@ export const api = {
     body: { action: DriftAction; fields?: { profile: string; field: string }[]; expires_at?: number; reason?: string },
   ) => call<ResolveResult>("POST", `/api/v1/instances/${enc(id)}/drift/resolve`, body),
   blueprints: () => call<BlueprintSummary[]>("GET", "/api/v1/blueprints"),
+  missions: () => call<{ sectors: Record<string, string>; missions: MissionSummary[] }>("GET", "/api/v1/missions"),
+  mission: (id: string) => call<MissionDetail>("GET", `/api/v1/missions/${enc(id)}`),
+  provisionMission: (id: string, body: { instance_id: string; name?: string }) =>
+    call<MissionProvisioned>("POST", `/api/v1/missions/${enc(id)}/blueprint`, body),
   blueprintVersions: (name: string) => call<BlueprintVersionInfo[]>("GET", `/api/v1/blueprints/${enc(name)}`),
   blueprint: (name: string, version: number) => call<BlueprintDetail>("GET", `/api/v1/blueprints/${enc(name)}/${version}`),
   createDraft: (name: string, version: number) =>

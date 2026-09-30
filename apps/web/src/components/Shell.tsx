@@ -19,6 +19,7 @@ export interface NavItem {
 // Build document §3.1: one shell on every admin screen.
 export const NAV: { group: string; items: NavItem[] }[] = [
   { group: "Design", items: [
+    { key: "mission-library", label: "Mission library", icon: "target", to: "/missions", permission: "blueprints.read" },
     { key: "fleet-architect", label: "Fleet Architect", icon: "spark", to: "/architect" },
     { key: "fleet-designer", label: "Fleet Designer", icon: "graph", to: "/designer" },
     { key: "agent-studio", label: "Agent Studio", icon: "bot", to: "/studio" },

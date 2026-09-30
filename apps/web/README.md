@@ -1,16 +1,20 @@
 # apps/web
 
-React + TypeScript (Vite, Tailwind v4) client for Fleet Control. Slice 1 admin screens: **Instances** (with the
-Connect drawer, the day-one empty state, and a blueprint created from what an instance runs), **Blueprints** (library, version history, YAML import, plan creation),
-**Plan before apply** (approvals, apply, outcome), **Drift** resolution (accept / revert / ignore once / exception),
-**Fleet Designer** (read-mostly topology laid out from the workflow, with an inspector), **Agent Studio** (edit an
-agent's managed fields; applied versions are immutable, so saving creates a draft) and the **Audit log** (filters,
-CSV export). **Sign in** gates everything; **Settings** holds General, Approvals and API tokens; the **Fleet Architect** sends a
-mission to an architect Hermes profile and saves the agents you accept as a blueprint draft; **Test Lab** runs a
-blueprint's tests on a lab or staging instance and **Assurance** shows each claim with its verdict and evidence; the **Access** screen (Admin) manages people and shows roles and agent
-permissions; Approvers and Viewers land on a **Workspace home** listing plans that wait for their approval. Buttons
-follow the signed-in role, and a missing Approve button says why. The other navigation items open a page naming the
-slice they arrive in.
+React + TypeScript (Vite, Tailwind v4) client for Fleet Control: the admin portal and the business-user Workspace in
+one app. What a person sees follows their role: Admins, Fleet Architects and Operators get the admin portal;
+Approvers and Viewers land on the Workspace. Buttons follow the role, and a missing one says why.
+
+## Screens
+
+| Area | Screens |
+|---|---|
+| Design | **Fleet Architect** (mission → proposal → accepted agents as a draft) · **Fleet Designer** (topology from the workflow, with an inspector) · **Agent Studio** (managed fields; applied versions are immutable, so saving makes a draft) · **Workflows** (each workflow, where it can run, the Run window with executor choice and readiness warnings) and a **workflow run** page (steps, artifacts, gates) |
+| Operate | **Decision Rooms** (list, and a room: evidence rail · what the fleet found · decision rail, plus its goAML panel) · **goAML reports** · **Ask the fleet** · **Assurance** (claims with their verdicts, 24 h summary, CSV) · **Test Lab** (agent and workflow tests, runs, stop and delete) |
+| Estate | **Instances** (Connect drawer, capability report, import, a blueprint from what runs there) · plan and **Drift** resolution · **Integrations** (MCP servers and model providers, tools, who may use them, per-profile health and login expiry) · **Messaging** (channels, delivery rules, test message; hidden when switched off) |
+| Govern | **Access** (people and roles, and the inspector: person ∩ agent ∩ system, each line with its rule) · **Audit log** (filters, CSV) |
+| Library | **Blueprints** (library, versions, YAML import, plans) · **Content** (zones and files) · **Fleet outputs** |
+| Workspace | **Home** · **My decisions** (rooms and workflow gates waiting for me, decided by me) · Decision Rooms · Fleet outputs · Ask the fleet · goAML reports |
+| Settings | General · Observability · Approvals · API tokens · Notifications (each person's own) · goAML (the bank's reporting-entity profile and the FIU schema) |
 
 ## Run it
 
@@ -25,9 +29,8 @@ cd apps/web && npm install && npm run dev      # http://localhost:5173, proxies 
 
 Sign in with the admin email and password from `.fleetcontrol-dev-credentials.json` at the repo root (git-ignored;
 created by `dev_api.py`). `dev_seed.py` adds one person per role to the same file (Dana is the Fleet Architect, Marcus
-and Lena are Approvers, Sam is an Operator, Riya a Viewer), so you can try the approval rules. It also creates three instances (two with a simulated Fleet Control Agent that answers import, drift-scan,
-policy and apply jobs), applies the example AML blueprint to staging, edits two fields there by hand so there is
-drift to resolve, and leaves a production plan waiting for approvals.
+and Lena are Approvers, Sam is an Operator, Riya a Viewer), instances with simulated agents, the example AML blueprint
+applied to staging with drift to resolve, rooms, outputs, and a production plan waiting for approvals.
 
 ## Design tokens
 
@@ -42,11 +45,11 @@ typecheck, production bundle). CI runs all three in the `web` job.
 
 ## Layout
 
-- `src/api/client.ts` — typed client for `/api/v1`; shapes mirror `apps/api/fleetcontrol_api/main.py`
-- `src/lib/view.ts` — pure view logic (instance status, capability rows, plan phase, drift rows, labels), unit-tested
-- `src/lib/topology.ts` — Fleet Designer layout (workflow rows, or delegation layers); `src/lib/soul.ts` mirrors `Soul.render()`
-- `src/components/` — the shell (navigation from build document §3.1) and the small UI kit
-- `src/screens/` — Instances, ConnectDrawer, DriftModal, Blueprints, ApplyPlan, Designer, Studio, Audit, NotYet
+- `src/api/client.ts`: typed client for `/api/v1`; shapes mirror `apps/api/fleetcontrol_api/main.py`
+- `src/lib/*.ts`: pure view logic per area (`view`, `topology`, `testlab`, `integrations`, `rooms`, `workflows`,
+  `messaging`, `access`, `goaml`, …), each with its Vitest file; `soul.ts` mirrors `Soul.render()`
+- `src/components/`: the shell (navigation from build document §3.1, `Shell.tsx`) and the small UI kit (`ui.tsx`)
+- `src/screens/`: one file per screen or area
 
-Not yet: single sign-on (OIDC), discovery for API-only instances, restoring a snapshot from the UI, the
-person ∩ agent ∩ system inspector on Access (Slice 4), and sandbox runs in Agent Studio (Test Lab, Slice 3).
+Not yet: single sign-on (OIDC), discovery for API-only instances, restoring a snapshot from the UI, sandbox runs in
+Agent Studio.

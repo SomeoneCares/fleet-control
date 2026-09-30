@@ -6,6 +6,31 @@ Inputs reconciled: *Hermes Fleet Studio — Deep Research Validation*, *Hermes F
 
 ---
 
+## Implementation status (1 October 2026)
+
+This document is the plan as written on 11 September; it is kept as it was. What was built, and where the build
+departed from the plan, is recorded here. `CLAUDE.md` has the detail per feature.
+
+**Built:** Slices 1 to 5 (§9), end to end, verified on a real Hermes host (`hermesbo-lab-01`, now Hermes 0.21.5).
+
+**Where the build differs from the plan, and why**
+
+| Plan | Built | Why |
+|---|---|---|
+| Workers on arq or Celery with Redis (§10) | Jobs live in the database; the Fleet Control Agent long-polls for them; agent heartbeats are the clock for escalations and Kanban reads | One fewer moving part; jobs survive restarts and two API processes cannot double-deliver (conditional updates) |
+| Fleet Control posts messages to channels (§8) | The agent posts to a `deliver_only` Hermes webhook route on loopback, signed with a secret that stays on the host | No inbound port and no channel secret in Fleet Control |
+| Assurance from Langfuse/OTel traces (§6) | Assurance reads the Hermes session transcript (and the plugin's tool events); Langfuse is reported, not read | The transcript exists on every instance; a missing transcript is Not verifiable, never a guess. Reading Langfuse is still open |
+| Workflows mapped onto Kanban where available (Slice 5) | Two executors: Hermes runs (one run per step, full transcript) and Hermes Kanban (linked tasks per stretch up to the next gate); gates stay in the portal | Kanban does not report tool calls, so Hermes runs remain the default for evidence and for tests |
+| Workflow tests (Slice 3) | A workflow test rehearses the workflow on lab/staging: gates approve themselves (marked automatic), no room opens; it gates production like agent tests | Tests check what agents do; nobody should be asked to decide a test |
+| Notifications as part of Messaging (Slice 4) | Personal notifications: each person picks a platform and gives their own address; a direct-message channel per platform | Blueprint delivery rules name team channels; decisions waiting for one person should reach that person |
+| Packaging: one Docker Compose stack (§10) | Not built. On a Kubernetes estate (the bank's SAS Viya cluster) a Helm chart deployed by Argo CD comes first, Compose second | The first deployment target is an RKE2 cluster already running Viya |
+| Auth: OIDC via Authlib (§10) | Local accounts (scrypt, session cookie, lockout) and API tokens; OIDC not built | Kept for the first enterprise request |
+
+**Added beyond the plan:** goAML reports for the FIU from decided Decision Rooms, checked against the FIU's own XSD
+(`docs/goaml.md`); MCP login expiry warnings; the SAS Viya MCP integration (`docs/sas-viya-mcp-integration.md`).
+
+---
+
 ## 1. Decisions already taken
 
 These were settled in discussion and are not reopened here.

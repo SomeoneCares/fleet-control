@@ -1,5 +1,10 @@
 # Spike Addendum — Hermes Agent 0.21.2 (source read + partial local run)
 
+> **Historical record (11 September 2026).** It explains why Fleet Control writes to Hermes through an agent on the
+> host. Hermes has since moved to 0.21.5; what the agent depends on today is pinned in
+> `apps/agent/fleetctl_agent/hermes_local.py` and checked on every release by `scripts/hermes_compat_check.py`, and
+> real-host captures are in `docs/dashboard-capture-<version>*.json`.
+
 Date: 11 September 2026 · Source: `NousResearch/hermes-agent` at commit `bf51fee` (release-dated 2026.9.11), package version **0.21.2**
 Method: full source review of the API server, dashboard backend, plugin/hook system, delegation, Langfuse plugin and messaging gateways; the API server's real handlers were exercised in-process (PyPI is blocked in the sandbox, so the servers could not be started over real HTTP). File references are to the repository.
 

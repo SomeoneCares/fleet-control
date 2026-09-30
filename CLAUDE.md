@@ -23,7 +23,7 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
 - `scripts/test.sh` runs all suites with the stdlib runner; `scripts/hermes_compat_check.py <hermes-agent checkout>` must stay green.
 - `design/` — 23 screen sources; `python3 build.py <Name> <nav>` regenerates an artboard. Tokens in `design/DESIGN.md`.
 
-## Current state (2026-09-16)
+## Current state (2026-10-01)
 - CI green on GitHub (tests + API end-to-end smoke). Nightly Hermes compat job configured.
 - DONE: real-host capture on Hermes 0.21.2 → `docs/dashboard-capture-0.21.2*.json`, and `hermes_local.py` reconciled
   against it (session header is `X-Hermes-Session-Token`; `/api/profiles` and `/api/mcp/servers` return wrapped lists;
@@ -90,8 +90,8 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   forbidden tools (MCP tools are `mcp_<server>__<tool>`), the expected artifact, the evaluator and the limits, and
   turns them into claims with the four verdicts; missing transcript = Not verifiable, never a guess. Tests are edited
   on drafts (`PUT/DELETE /api/v1/blueprints/{name}/{version}/tests/{id}`). Production applies are gated on the
-  version's agent tests having passed (Settings → Approvals, `require_tests_for_production`, default on; workflow
-  tests do not gate until Slice 5). Assurance: claims, 24 h summary, CSV export.
+  version's tests having passed (Settings → Approvals, `require_tests_for_production`, default on; workflow tests
+  count since 2026-09-26). Assurance: claims, 24 h summary, CSV export.
 - DONE (2026-09-16): Slice 3 part 2 — Integrations (`integrations.py`, `/api/v1/integrations*`, screen at
   `/integrations`). What exists comes from the instances (agent jobs `mcp_discover`, which connects to each MCP
   server to list its tools, and `mcp_write` for add/remove/enable/disable); who may use it comes from the blueprints
@@ -127,8 +127,9 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   the Viya host (`viya.internal/sas-mcp/mcp`, read-only, 51 of 92 tools); it is registered **per Hermes profile**
   by url with `auth: oauth`, and Integrations lists all 51 tools with `Used by: None` until a blueprint declares
   `mcps: [sas-viya]`. Four traps, all documented: the ingress sends only its leaf certificate (the root CA comes
-  from `viya/sas-viya-ca-certificate-secret`) and **Hermes ignores the system trust store** — the CA must go in
-  the venv's `certifi/cacert.pem` and `SSL_CERT_FILE` must point at that same file; device flow is not
+  from `viya/sas-viya-ca-certificate-secret`) and **Hermes ignores the system trust store** — since 0.21.5 Hermes
+  runs from per-install environments, so the CA lives in `~/.hermes/certs/ca-bundle.pem` and `SSL_CERT_FILE` names
+  it for the gateway (systemd drop-in), `fleetctl-dashboard` and shells; device flow is not
   advertised, so `--flow browser` (Dynamic Client Registration works, no SASLogon client needed); the OAuth
   callback listens on the host, so forward the port and keep the login's stdin open or it kills its own
   listener; profiles do not inherit root `mcp_servers`, so registration and tokens are per profile (N agents =
@@ -207,6 +208,15 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   note (both executors). Cancel archives open tasks (reclaiming running workers). Compat check pins the Kanban
   routes, `CreateTaskBody` and the Task/Run fields read back; all 16 checks pass on the host's 0.21.4 source.
   Evidence on Kanban is Kanban's own run records (tool calls are not reported through it).
+- DONE (2026-09-26): MCP login expiry. The agent reports each profile's OAuth login expiry with its heartbeat
+  (`mcp_logins`: the refresh token's `exp`, never a token); Integrations shows it per profile and treats a lapsed login
+  as unreachable; workflow readiness warns; personal event `mcp.login_expiring` (Admin/Operator) three days ahead and
+  on expiry. SAS Logon's refresh token has an absolute 24 h lifetime on the lab Viya, so a SAS login lasts a day
+  (`docs/sas-viya-mcp-integration.md`, Trap 4b); raising the `sas-mcp` client's validity or going headless is Basem's call.
+- DONE (2026-09-26): workflow tests. A test whose target is a workflow rehearses it on lab/staging with Hermes runs:
+  gates approve themselves (`automatic`), no room opens, nothing is filed as an output, nobody is notified; the run is
+  judged by `evaluate()` (all steps' tool calls, produced artifacts, final output, time, summed tokens) and counts in
+  the production gate. Stopping the test stops its workflow.
 - DONE (2026-10-01): goAML reports for the FIU (Egypt: EMLCU), `goaml.py`, `/api/v1/goaml/*`, screens `/goaml`, a
   room panel and Settings → goAML (`docs/goaml.md`). A decided room's `fleetcontrol.goaml-draft/v1` draft (goAML's own
   element names) becomes the XML in the UNODC order (checked against a published FIU XSD); **the FIU's own XSD, loaded

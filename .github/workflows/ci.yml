@@ -11,7 +11,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install pydantic pyyaml sqlalchemy
+      - run: pip install pydantic pyyaml sqlalchemy xmlschema
       - run: sh scripts/test.sh
   api-import:
     runs-on: ubuntu-latest

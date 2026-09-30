@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  A small goAML-shaped schema for Fleet Control's tests. It is NOT EMLCU's schema (or any FIU's): it follows the
+  UNODC goAML v4 element order for the parts the tests build, with short code lists and one XSD 1.1 assert, so the
+  tests exercise what a real FIU schema does (order, required fields, code lists, business rules).
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:vc="http://www.w3.org/2007/XMLSchema-versioning"
+           vc:minVersion="1.1" elementFormDefault="qualified">
+  <xs:simpleType name="country_type"><xs:restriction base="xs:string"><xs:enumeration value="EG"/><xs:enumeration value="AE"/><xs:enumeration value="CY"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="currency_type"><xs:restriction base="xs:string"><xs:enumeration value="EGP"/><xs:enumeration value="USD"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="funds_type"><xs:restriction base="xs:string"><xs:enumeration value="K"/><xs:enumeration value="E"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="conduction_type"><xs:restriction base="xs:string"><xs:enumeration value="A"/><xs:enumeration value="B"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="indicator_type"><xs:restriction base="xs:string"><xs:enumeration value="STR-CASH"/><xs:enumeration value="STR-TBML"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="text255"><xs:restriction base="xs:string"><xs:maxLength value="255"/></xs:restriction></xs:simpleType>
+
+  <xs:complexType name="t_address">
+    <xs:sequence>
+      <xs:element name="address_type" type="text255"/>
+      <xs:element name="address" type="text255"/>
+      <xs:element name="town" type="text255" minOccurs="0"/>
+      <xs:element name="city" type="text255"/>
+      <xs:element name="zip" type="text255" minOccurs="0"/>
+      <xs:element name="country_code" type="country_type"/>
+      <xs:element name="state" type="text255" minOccurs="0"/>
+      <xs:element name="comments" type="text255" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="t_phone">
+    <xs:sequence>
+      <xs:element name="tph_contact_type" type="text255"/>
+      <xs:element name="tph_communication_type" type="text255"/>
+      <xs:element name="tph_country_prefix" type="text255" minOccurs="0"/>
+      <xs:element name="tph_number" type="text255"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="t_person">
+    <xs:sequence>
+      <xs:element name="gender" type="text255" minOccurs="0"/>
+      <xs:element name="first_name" type="text255"/>
+      <xs:element name="middle_name" type="text255" minOccurs="0"/>
+      <xs:element name="last_name" type="text255"/>
+      <xs:element name="birthdate" type="xs:dateTime" minOccurs="0"/>
+      <xs:element name="id_number" type="text255" minOccurs="0"/>
+      <xs:element name="nationality1" type="country_type" minOccurs="0"/>
+      <xs:element name="phones" minOccurs="0"><xs:complexType><xs:sequence><xs:element name="phone" type="t_phone" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element>
+      <xs:element name="addresses" minOccurs="0"><xs:complexType><xs:sequence><xs:element name="address" type="t_address" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element>
+      <xs:element name="email" type="text255" minOccurs="0" maxOccurs="5"/>
+      <xs:element name="occupation" type="text255" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="t_account">
+    <xs:sequence>
+      <xs:element name="institution_name" type="text255"/>
+      <xs:element name="swift" type="text255"/>
+      <xs:element name="branch" type="text255" minOccurs="0"/>
+      <xs:element name="account" type="text255"/>
+      <xs:element name="currency_code" type="currency_type"/>
+      <xs:element name="opened" type="xs:dateTime" minOccurs="0"/>
+      <xs:element name="balance" type="xs:decimal" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="t_from">
+    <xs:sequence>
+      <xs:element name="from_funds_code" type="funds_type"/>
+      <xs:choice>
+        <xs:element name="from_account" type="t_account"/>
+        <xs:element name="from_person" type="t_person"/>
+      </xs:choice>
+      <xs:element name="from_country" type="country_type"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="t_to">
+    <xs:sequence>
+      <xs:element name="to_funds_code" type="funds_type"/>
+      <xs:choice>
+        <xs:element name="to_account" type="t_account"/>
+        <xs:element name="to_person" type="t_person"/>
+      </xs:choice>
+      <xs:element name="to_country" type="country_type"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:element name="report">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="rentity_id" type="xs:int"/>
+        <xs:element name="rentity_branch" type="text255" minOccurs="0"/>
+        <xs:element name="submission_code"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="E"/><xs:enumeration value="M"/></xs:restriction></xs:simpleType></xs:element>
+        <xs:element name="report_code"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="STR"/><xs:enumeration value="SAR"/></xs:restriction></xs:simpleType></xs:element>
+        <xs:element name="entity_reference" type="text255"/>
+        <xs:element name="fiu_ref_number" type="text255" minOccurs="0"/>
+        <xs:element name="submission_date" type="xs:dateTime"/>
+        <xs:element name="currency_code_local" type="currency_type"/>
+        <xs:element name="reporting_person" type="t_person"/>
+        <xs:element name="location" type="t_address" minOccurs="0"/>
+        <xs:element name="reason"><xs:simpleType><xs:restriction base="xs:string"><xs:maxLength value="4000"/></xs:restriction></xs:simpleType></xs:element>
+        <xs:element name="action" type="xs:string" minOccurs="0"/>
+        <xs:element name="transaction" minOccurs="0" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="transactionnumber" type="text255"/>
+              <xs:element name="transaction_description" type="xs:string" minOccurs="0"/>
+              <xs:element name="date_transaction" type="xs:dateTime"/>
+              <xs:element name="transmode_code" type="conduction_type"/>
+              <xs:element name="amount_local" type="xs:decimal"/>
+              <xs:choice><xs:element name="t_from_my_client" type="t_from"/><xs:element name="t_from" type="t_from"/></xs:choice>
+              <xs:choice><xs:element name="t_to_my_client" type="t_to"/><xs:element name="t_to" type="t_to"/></xs:choice>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="report_indicators">
+          <xs:complexType><xs:sequence><xs:element name="indicator" type="indicator_type" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <!-- an FIU business rule: a transaction report carries at least one transaction -->
+      <xs:assert test="if (report_code = 'STR') then count(transaction) ge 1 else true()"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

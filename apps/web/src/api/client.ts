@@ -856,6 +856,27 @@ export type AgentPatch = Partial<Pick<AgentDoc, "role" | "model" | "soul" | "ski
 
 export const AUDIT_EXPORT_URL = "/api/v1/audit/export";
 
+// goAML (goaml.py): a decided room's SAR draft as the FIU's XML; the FIU's own schema decides, people file.
+export interface GoamlAddress { address_type: string; address: string; town?: string | null; city: string; zip?: string | null; country_code: string; state?: string | null }
+export interface GoamlProfile {
+  fiu: string; rentity_id: number; rentity_branch?: string | null; currency_code_local: string; submission_code: string;
+  location?: GoamlAddress | null;
+}
+export interface GoamlSchemaInfo { id: string; name: string; sha256: string; loaded_at: number; loaded_by: string; size: number }
+export interface GoamlSettings { profile: GoamlProfile | null; schema: GoamlSchemaInfo | null; draft_schema: string }
+export type GoamlStatus = "unchecked" | "invalid" | "ready" | "filed";
+export interface GoamlReportRow {
+  id: string; room_id: string; case: string | null; zone: string; output_id: string; output_name: string; report_code: string | null;
+  entity_reference: string; reporter: { first_name: string; last_name: string; email: string; occupation?: string };
+  prepared_by: string; created_at: number; status: GoamlStatus; problems: string[]; errors: string[]; checked_at: number;
+  schema: { name: string; sha256: string } | null; decision: { option?: { id: string; label: string } | null; agreed?: boolean } | null;
+  filed: { by: string; at: number; fiu_ref_number: string; note: string | null } | null;
+}
+export interface GoamlReport extends GoamlReportRow { xml: string }
+export interface GoamlDraftInfo { output_id: string; name: string; produced_by: string | null; report_code: string | null; transactions: number; parties: number; problems: string[] }
+export interface GoamlRoom { room_id: string; drafts: GoamlDraftInfo[]; may_prepare: boolean; why: string | null; reports: GoamlReportRow[] }
+export const goamlXmlUrl = (id: string) => `/api/v1/goaml/reports/${encodeURIComponent(id)}/xml`;
+
 export interface PlanRow {
   kind: "create" | "update" | "remove" | "approval";
   symbol: string;
@@ -1091,6 +1112,16 @@ export const api = {
   decideWorkflowGate: (id: string, index: number, body: { approve: boolean; note?: string }) =>
     call<WorkflowRun>("POST", `/api/v1/workflows/runs/${enc(id)}/gates/${index}`, body),
   cancelWorkflowRun: (id: string) => call<WorkflowRun>("POST", `/api/v1/workflows/runs/${enc(id)}/cancel`),
+  goamlSettings: () => call<GoamlSettings>("GET", "/api/v1/goaml/settings"),
+  saveGoamlProfile: (body: GoamlProfile) => call<GoamlSettings>("PUT", "/api/v1/goaml/settings", body),
+  loadGoamlSchema: (name: string, xsd: string) => call<GoamlSchemaInfo>("POST", "/api/v1/goaml/schema", { name, xsd }),
+  goamlRoom: (roomId: string) => call<GoamlRoom>("GET", `/api/v1/goaml/rooms/${enc(roomId)}`),
+  goamlReports: () => call<GoamlReportRow[]>("GET", "/api/v1/goaml/reports"),
+  goamlReport: (id: string) => call<GoamlReport>("GET", `/api/v1/goaml/reports/${enc(id)}`),
+  prepareGoaml: (body: { room_id: string; output_id: string; reporter: { first_name: string; last_name: string; occupation?: string; phone?: string } }) =>
+    call<GoamlReport>("POST", "/api/v1/goaml/reports", body),
+  recheckGoaml: (id: string) => call<GoamlReport>("POST", `/api/v1/goaml/reports/${enc(id)}/check`),
+  goamlFiled: (id: string, body: { fiu_ref_number: string; note?: string }) => call<GoamlReport>("POST", `/api/v1/goaml/reports/${enc(id)}/filed`, body),
   accessSubjects: () => call<AccessSubjects>("GET", "/api/v1/access/subjects"),
   accessInspect: (q: { email?: string; blueprint?: string; agent?: string; tool?: string; room?: string; environment?: string }) =>
     call<AccessInspection>("GET", "/api/v1/access/inspect?" + new URLSearchParams(

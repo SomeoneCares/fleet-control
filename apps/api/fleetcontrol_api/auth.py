@@ -55,6 +55,11 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     "assurance.read": ADMIN_PORTAL,
     "settings.read": ADMIN_PORTAL,  # Settings → General and Approvals (everyone manages their own API tokens)
     "settings.manage": frozenset({"admin"}),
+    # goAML (Egypt: EMLCU): the people who decide SARs prepare and file the reports; loading the FIU's schema and the
+    # bank's reporting-entity id is an Admin setting
+    "goaml.read": frozenset({"admin", "approver"}),
+    "goaml.prepare": frozenset({"admin", "approver"}),
+    "goaml.manage": frozenset({"admin"}),
 }
 
 MIN_PASSWORD_LENGTH = 12

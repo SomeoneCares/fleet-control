@@ -7,6 +7,7 @@ import { EVIDENCE_ICON, EVIDENCE_LABEL, casesOf, dueLabel, matchesQuery, optionL
 import { VERDICT_TONE } from "../lib/testlab";
 import { formatDateTime, timeAgo } from "../lib/view";
 import { Banner, Button, Card, Chip, Field, INPUT, Icon, Modal, Mono, PageHeader, Spinner, TEXTAREA } from "../components/ui";
+import { GoamlRoomPanel } from "./Goaml";
 
 const VERDICTS = Object.keys(VERDICT_TONE) as Verdict[];
 const EVIDENCE_KINDS: EvidenceKind[] = ["file", "output", "claim", "note"];
@@ -190,6 +191,7 @@ export function DecisionRoomScreen() {
 
         <DecisionRail room={room} onDecided={async () => { await reload(); setMsg("Your decision is recorded."); }} />
       </div>
+      {can("goaml.read") && <GoamlRoomPanel roomId={room.id} decided={room.status === "decided"} />}
 
       {adding && <EvidenceModal room={room} onClose={() => setAdding(false)} onAdded={async () => { setAdding(false); await reload(); }} />}
     </>

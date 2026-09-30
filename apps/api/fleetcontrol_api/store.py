@@ -255,6 +255,20 @@ ASK_THREADS = Table(  # Ask the fleet: one person's conversation with the orches
     Column("updated_at", Float, nullable=False, index=True),
     Column("doc", Doc, nullable=False),
 )
+GOAML_SCHEMAS = Table(  # goAML: the FIU's XSDs as the bank loaded them; the newest is the one reports are checked against
+    "goaml_schemas", META,
+    Column("id", String(32), primary_key=True),
+    Column("loaded_at", Float, nullable=False, index=True),
+    Column("doc", Doc, nullable=False),  # name, sha256, loaded_by, root check; the XSD text itself in "xsd"
+)
+GOAML_REPORTS = Table(  # goAML: one report prepared from a decided Decision Room (goaml.py)
+    "goaml_reports", META,
+    Column("id", String(32), primary_key=True),
+    Column("room_id", String(32), nullable=False, index=True),
+    Column("status", String(16), nullable=False, index=True),
+    Column("created_at", Float, nullable=False, index=True),
+    Column("doc", Doc, nullable=False),
+)
 ARCHITECT_SESSIONS = Table(  # Fleet Architect: mission, constraints, proposal versions, decisions (architect.py)
     "architect_sessions", META,
     Column("id", String(32), primary_key=True),
@@ -1147,6 +1161,47 @@ class Store:
             doc = row["doc"]
             change(doc)
             c.execute(update(WORKFLOW_RUNS).where(WORKFLOW_RUNS.c.id == run_id).values(status=doc["status"], doc=doc))
+            return doc
+
+    # ---- goAML -------------------------------------------------------------------------
+    def save_goaml_schema(self, doc: dict) -> dict:
+        with self._tx() as c:
+            c.execute(insert(GOAML_SCHEMAS).values(id=doc["id"], loaded_at=doc["loaded_at"], doc=doc))
+        return doc
+
+    def goaml_schema(self) -> Optional[dict]:
+        """The FIU schema loaded last (with its XSD text), or None."""
+        with self._tx() as c:
+            row = _one(c, select(GOAML_SCHEMAS.c.doc).order_by(GOAML_SCHEMAS.c.loaded_at.desc()).limit(1))
+        return row["doc"] if row else None
+
+    def save_goaml_report(self, doc: dict) -> dict:
+        with self._tx() as c:
+            _upsert(c, GOAML_REPORTS, {"id": doc["id"]},
+                    {"room_id": doc["room_id"], "status": doc["status"], "created_at": doc["created_at"], "doc": doc})
+        return doc
+
+    def get_goaml_report(self, report_id: str) -> Optional[dict]:
+        with self._tx() as c:
+            row = _one(c, select(GOAML_REPORTS.c.doc).where(GOAML_REPORTS.c.id == report_id))
+        return row["doc"] if row else None
+
+    def list_goaml_reports(self, *, room_id: Optional[str] = None, limit: int = 200) -> list[dict]:
+        q = select(GOAML_REPORTS.c.doc).order_by(GOAML_REPORTS.c.created_at.desc()).limit(limit)
+        if room_id:
+            q = q.where(GOAML_REPORTS.c.room_id == room_id)
+        with self._tx() as c:
+            return [r["doc"] for r in _all(c, q)]
+
+    def update_goaml_report(self, report_id: str, change: Callable[[dict], Any]) -> Optional[dict]:
+        """Load, change and save one report in a transaction (two people marking it filed cannot both win)."""
+        with self._tx() as c:
+            row = _one(c, select(GOAML_REPORTS.c.doc).where(GOAML_REPORTS.c.id == report_id))
+            if not row:
+                return None
+            doc = row["doc"]
+            change(doc)
+            c.execute(update(GOAML_REPORTS).where(GOAML_REPORTS.c.id == report_id).values(status=doc["status"], doc=doc))
             return doc
 
     # ---- Ask the fleet ---------------------------------------------------------------

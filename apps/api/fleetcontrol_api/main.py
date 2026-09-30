@@ -23,7 +23,7 @@ from typing import Any, Iterable, Literal, Optional
 
 from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import Response
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from fleetcontrol_blueprint import Blueprint, dump_blueprint, json_schema, load_blueprint
 
@@ -59,7 +59,9 @@ from .auth import (
 )
 from .drift import DriftResolutionError, accept_into_blueprint, live_state_from_drift, select_drift
 from .edits import as_new_version, remove_test, update_agent, upsert_test
-from .testlab import VERDICTS, evaluate
+from .testlab import VERDICTS, evaluate, output_json
+from .goaml import DRAFT_SCHEMA as GOAML_DRAFT, GoamlError, build_xml as goaml_xml, check_draft as goaml_check, \
+    load_schema as goaml_load_schema, schema_sha as goaml_sha, validate as goaml_validate
 from .importer import LiveImportError, blueprint_from_live
 from .integrations import aggregate, login_status, mcp_config
 from .outputs import KINDS, OutputError, new_output, output_row, provenance
@@ -1922,6 +1924,229 @@ def _wf_stop(run: dict, why: str) -> dict:
     _wf_kanban_clear(run, f"run {why}")  # stop the workers and take the cards off the board
     return store.update_workflow_run(run["id"], lambda d: d.update(status="cancelled", finished_at=time.time(), updated_at=time.time(),
                                                                    error=why) if d["status"] in ("running", "waiting") else None)
+
+
+# ----------------------------------------------------------------------------- goAML (Egypt: EMLCU)
+
+
+class GoamlAddress(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    address_type: str = Field(..., min_length=1, max_length=10)
+    address: str = Field(..., min_length=1, max_length=100)
+    town: Optional[str] = Field(None, max_length=255)
+    city: str = Field(..., min_length=1, max_length=255)
+    zip: Optional[str] = Field(None, max_length=10)
+    country_code: str = Field(..., min_length=2, max_length=2)
+    state: Optional[str] = Field(None, max_length=255)
+
+
+class GoamlProfile(BaseModel):
+    """The bank as a goAML reporting entity: what the FIU assigned it and where it reports from."""
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    fiu: str = Field("EMLCU (Egypt)", min_length=1, max_length=80)
+    rentity_id: int = Field(..., ge=1, description="The reporting-entity id the FIU assigned to the bank in goAML.")
+    rentity_branch: Optional[str] = Field(None, max_length=255)
+    currency_code_local: str = Field("EGP", min_length=3, max_length=3)
+    submission_code: str = Field("E", min_length=1, max_length=1, description="E: electronic (XML upload).")
+    location: Optional[GoamlAddress] = None
+
+
+def _goaml_profile() -> dict:
+    return store.get_settings().get("goaml") or {}
+
+
+def _goaml_schema_out(doc: Optional[dict]) -> Optional[dict]:
+    return {k: v for k, v in doc.items() if k != "xsd"} if doc else None
+
+
+@app.get("/api/v1/goaml/settings")
+def goaml_settings(user: dict = Depends(require("goaml.read"))) -> dict:
+    """The bank's goAML profile and the FIU schema reports are checked against (its text is not returned)."""
+    return {"profile": _goaml_profile() or None, "schema": _goaml_schema_out(store.goaml_schema()), "draft_schema": GOAML_DRAFT}
+
+
+@app.put("/api/v1/goaml/settings")
+def put_goaml_settings(body: GoamlProfile, user: dict = Depends(require("goaml.manage"))) -> dict:
+    profile = body.model_dump(mode="json", exclude_none=True)
+    store.set_settings({"goaml": profile}, user["email"])
+    store.record(user["email"], "goaml.settings_changed", "goaml", f"{profile['fiu']}, reporting entity {profile['rentity_id']}")
+    return goaml_settings(user)
+
+
+class GoamlSchemaLoad(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200, description="The file name, e.g. goAMLSchema.xsd.")
+    xsd: str = Field(..., min_length=100, max_length=5_000_000)
+
+
+@app.post("/api/v1/goaml/schema", status_code=201)
+def load_goaml_schema(body: GoamlSchemaLoad, user: dict = Depends(require("goaml.manage"))) -> dict:
+    """The FIU's XSD, as the bank downloaded it from its goAML portal. Only a schema with a <report> element that
+    compiles (XSD 1.1, asserts included) is kept; every report is checked against the one loaded last."""
+    try:
+        goaml_load_schema(body.xsd)
+    except GoamlError as exc:
+        raise HTTPException(422, str(exc))
+    doc = {"id": "gxs_" + uuid.uuid4().hex[:10], "name": body.name, "sha256": goaml_sha(body.xsd), "loaded_at": time.time(),
+           "loaded_by": user["email"], "size": len(body.xsd), "xsd": body.xsd}
+    store.save_goaml_schema(doc)
+    store.record(user["email"], "goaml.schema_loaded", body.name, f"sha256 {doc['sha256'][:12]}, {len(body.xsd):,} characters")
+    return _goaml_schema_out(doc)
+
+
+def _goaml_drafts(room: dict) -> list[dict]:
+    """The room's evidence outputs that hold a goAML draft, each with what is wrong with it."""
+    out = []
+    for e in room["evidence"]:
+        if e.get("kind") != "output" or not e.get("ref"):
+            continue
+        output = store.get_output(e["ref"])
+        draft = output_json((output or {}).get("text") or "")
+        if not isinstance(draft, dict) or draft.get("schema") != GOAML_DRAFT:
+            continue
+        out.append({"output_id": output["id"], "name": output["name"], "produced_by": output.get("produced_by"),
+                    "report_code": draft.get("report_code"), "transactions": len(draft.get("transactions") or []),
+                    "parties": len(draft.get("parties") or []), "problems": goaml_check(draft)})
+    return out
+
+
+@app.get("/api/v1/goaml/rooms/{room_id}")
+def goaml_for_room(room_id: str, user: dict = Depends(require("goaml.read"))) -> dict:
+    """What a room offers goAML: its drafts, the reports prepared from it, and whether one may be prepared now."""
+    room = _room(room_id, user)
+    why = None if room["status"] == "decided" else "a report is prepared once the room's decision is in"
+    return {"room_id": room["id"], "drafts": _goaml_drafts(room), "may_prepare": why is None and allowed(user["role"], "goaml.prepare"),
+            "why": why or (None if allowed(user["role"], "goaml.prepare") else "Admins and Approvers prepare goAML reports"),
+            "reports": [_goaml_row(r) for r in store.list_goaml_reports(room_id=room["id"])]}
+
+
+class GoamlReporter(BaseModel):
+    """The reporting person goAML names: the person preparing the report. Their email is their account."""
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    first_name: str = Field(..., min_length=1, max_length=100)
+    last_name: str = Field(..., min_length=1, max_length=100)
+    occupation: Optional[str] = Field(None, max_length=255)
+    phone: Optional[str] = Field(None, max_length=50, pattern=r"^[0-9 +()-]{4,50}$")
+
+
+class GoamlPrepare(BaseModel):
+    room_id: str
+    output_id: str
+    reporter: GoamlReporter
+
+
+def _goaml_check(doc: dict, xml: bytes, problems: list[str]) -> None:
+    """File the result of checking a report: problems in the draft, then the FIU schema's own verdict."""
+    schema = store.goaml_schema()
+    errors = goaml_validate(xml, schema["xsd"]) if schema and not problems else []
+    doc.update(problems=problems, errors=errors, checked_at=time.time(),
+               schema={"name": schema["name"], "sha256": schema["sha256"]} if schema else None,
+               status="invalid" if problems or errors else "ready" if schema else "unchecked")
+
+
+@app.post("/api/v1/goaml/reports", status_code=201)
+def prepare_goaml_report(body: GoamlPrepare, user: dict = Depends(require("goaml.prepare"))) -> dict:
+    """Turn a decided room's goAML draft into the FIU's XML. Nothing is sent: the person downloads it, files it in
+    goAML and records the FIU's reference here."""
+    room = _room(body.room_id, user)
+    if room["status"] != "decided":
+        raise HTTPException(409, "the room's decision is not in yet: a goAML report is prepared after the people decide")
+    if body.output_id not in {e.get("ref") for e in room["evidence"] if e.get("kind") == "output"}:
+        raise HTTPException(404, "that output is not evidence in this room")
+    output = store.get_output(body.output_id)
+    draft = output_json((output or {}).get("text") or "")
+    if not isinstance(draft, dict) or draft.get("schema") != GOAML_DRAFT:
+        raise HTTPException(422, f"that output holds no {GOAML_DRAFT} draft")
+    report_id = "gar_" + uuid.uuid4().hex[:10]
+    reporter = {**body.reporter.model_dump(exclude_none=True, exclude={"phone"}), "email": user["email"]}
+    if body.reporter.phone:
+        reporter["phones"] = [{"tph_contact_type": "BUSN", "tph_communication_type": "L", "tph_number": body.reporter.phone}]
+    reference = "FC-" + report_id[4:].upper()
+    xml, problems = goaml_xml(draft, profile=_goaml_profile(), reporter=reporter, entity_reference=reference)
+    doc = {"id": report_id, "room_id": room["id"], "case": room.get("case"), "zone": room["zone"], "output_id": output["id"],
+           "output_name": output["name"], "report_code": draft.get("report_code"), "entity_reference": reference,
+           "reporter": reporter, "prepared_by": user["email"], "created_at": time.time(), "xml": xml.decode("utf-8"),
+           "decision": (room_view(room, email=user["email"], role=user["role"]).get("outcome") or {}), "filed": None}
+    _goaml_check(doc, xml, problems)
+    store.save_goaml_report(doc)
+    store.record(user["email"], "goaml.prepared", report_id,
+                 f"room {room['id']} ({room.get('case') or 'no case'}), {doc['report_code']}: {doc['status']}")
+    return _goaml_out(doc)
+
+
+def _goaml_row(doc: dict) -> dict:
+    return {k: v for k, v in doc.items() if k != "xml"}
+
+
+def _goaml_out(doc: dict) -> dict:
+    return {**doc, "row": _goaml_row(doc)}
+
+
+def _goaml_report(report_id: str, user: dict) -> dict:
+    doc = store.get_goaml_report(report_id)
+    if not doc or doc["zone"] not in _my_zones(user):
+        raise HTTPException(404, "no such goAML report")
+    return doc
+
+
+@app.get("/api/v1/goaml/reports")
+def list_goaml_reports(user: dict = Depends(require("goaml.read"))) -> list[dict]:
+    zones = set(_my_zones(user))
+    return [_goaml_row(d) for d in store.list_goaml_reports() if d["zone"] in zones]
+
+
+@app.get("/api/v1/goaml/reports/{report_id}")
+def get_goaml_report(report_id: str, user: dict = Depends(require("goaml.read"))) -> dict:
+    return _goaml_out(_goaml_report(report_id, user))
+
+
+@app.get("/api/v1/goaml/reports/{report_id}/xml")
+def download_goaml_report(report_id: str, user: dict = Depends(require("goaml.read"))) -> Response:
+    doc = _goaml_report(report_id, user)
+    store.record(user["email"], "goaml.downloaded", report_id, f"{doc['entity_reference']} ({doc['status']})")
+    name = f"{doc['entity_reference']}{'' if doc['status'] in ('ready', 'filed') else '-NOT-VALID'}.xml"
+    return Response(doc["xml"], media_type="application/xml", headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+@app.post("/api/v1/goaml/reports/{report_id}/check")
+def recheck_goaml_report(report_id: str, user: dict = Depends(require("goaml.prepare"))) -> dict:
+    """Check a report again against the schema loaded now (after the bank loads a newer FIU schema)."""
+    _goaml_report(report_id, user)
+
+    def change(d: dict) -> None:
+        if d["status"] != "filed":
+            _goaml_check(d, d["xml"].encode("utf-8"), d.get("problems") or [])
+
+    doc = store.update_goaml_report(report_id, change)
+    store.record(user["email"], "goaml.checked", report_id, doc["status"])
+    return _goaml_out(doc)
+
+
+class GoamlFiled(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+    fiu_ref_number: str = Field(..., min_length=1, max_length=255, description="The reference goAML gave the report.")
+    note: str = Field("", max_length=500)
+
+
+@app.post("/api/v1/goaml/reports/{report_id}/filed")
+def goaml_report_filed(report_id: str, body: GoamlFiled, user: dict = Depends(require("goaml.prepare"))) -> dict:
+    """Record that a person filed the report in goAML, with the FIU's reference. Only a report that passed the
+    FIU's schema can be recorded as filed."""
+    _goaml_report(report_id, user)
+    refused: list[str] = []
+
+    def change(d: dict) -> None:
+        if d["status"] != "ready":
+            refused.append("already recorded as filed" if d["status"] == "filed"
+                           else "only a report that passed the FIU's schema is filed; fix it and prepare it again")
+            return
+        d.update(status="filed", filed={"by": user["email"], "at": time.time(), "fiu_ref_number": body.fiu_ref_number.strip(),
+                                        "note": body.note.strip() or None})
+
+    doc = store.update_goaml_report(report_id, change)
+    if refused:
+        raise HTTPException(409, refused[0])
+    store.record(user["email"], "goaml.filed", report_id, f"{doc['entity_reference']}: FIU reference {body.fiu_ref_number.strip()}")
+    return _goaml_out(doc)
 
 
 # ----------------------------------------------------------------------------- Integrations (Slice 3)

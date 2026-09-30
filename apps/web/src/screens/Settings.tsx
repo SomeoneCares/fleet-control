@@ -3,10 +3,11 @@ import { api, type ApiToken, type SettingsValues } from "../api/client";
 import { useAuth } from "../lib/auth";
 import { errorText, useLoad, useNow } from "../lib/hooks";
 import { lifetimeChoices, tokenState } from "../lib/tokens";
+import { GoamlSettingsPanel } from "./Goaml";
 import { ENV_LABEL, formatDate, formatDateTime } from "../lib/view";
 import { Banner, Button, Card, Chip, Field, INPUT, Icon, Modal, Mono, PageHeader, Spinner, type IconName } from "../components/ui";
 
-type TabKey = "general" | "observability" | "approvals" | "tokens" | "notifications";
+type TabKey = "general" | "observability" | "approvals" | "tokens" | "notifications" | "goaml";
 
 // design/screens/Settings: General · Observability · Approvals · API tokens · Notifications
 const TABS: { key: TabKey; label: string; icon: IconName; permission?: string; slice?: number }[] = [
@@ -15,6 +16,7 @@ const TABS: { key: TabKey; label: string; icon: IconName; permission?: string; s
   { key: "approvals", label: "Approvals", icon: "check", permission: "settings.read" },
   { key: "tokens", label: "API tokens", icon: "lock" },
   { key: "notifications", label: "Notifications", icon: "message" },
+  { key: "goaml", label: "goAML", icon: "file", permission: "goaml.read" },
 ];
 
 export function SettingsScreen() {
@@ -42,6 +44,7 @@ export function SettingsScreen() {
           {tab === "tokens" && <TokensPanel />}
           {tab === "observability" && <ObservabilityPanel />}
           {tab === "notifications" && <NotificationsPanel />}
+          {tab === "goaml" && <GoamlSettingsPanel />}
         </Card>
       </div>
     </>

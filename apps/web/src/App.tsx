@@ -12,6 +12,7 @@ import { AuditScreen } from "./screens/Audit";
 import { BlueprintsScreen } from "./screens/Blueprints";
 import { ContentScreen } from "./screens/Content";
 import { DecisionRoomScreen, DecisionRoomsScreen } from "./screens/DecisionRooms";
+import { GoamlScreen } from "./screens/Goaml";
 import { MyDecisionsScreen } from "./screens/MyDecisions";
 import { MessagingScreen } from "./screens/Messaging";
 import { DesignerScreen } from "./screens/Designer";
@@ -77,6 +78,7 @@ export const router = createBrowserRouter([
       { path: "outputs", element: guarded("content.read", <OutputsScreen />) },
       { path: "rooms", element: guarded("rooms.read", <DecisionRoomsScreen />) },
       { path: "rooms/:id", element: guarded("rooms.read", <DecisionRoomScreen />) },
+      { path: "goaml", element: guarded("goaml.read", <GoamlScreen />) },
       { path: "my-decisions", element: guarded("rooms.read", <MyDecisionsScreen />) },
       { path: "ask", element: guarded("ask.use", <AskFleetScreen />) },
       { path: "workflows", element: guarded("blueprints.read", <WorkflowsScreen />) },

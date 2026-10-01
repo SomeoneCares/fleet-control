@@ -1,7 +1,7 @@
 # SAS Viya MCP Server on a Hermes host
 
 **Status: working end to end, 2026-09-20.** A Hermes profile on `hermesbo-lab-01` calls SAS Viya
-analytics through SAS's own MCP server, and Fleet Control discovers it and lists its tools.
+analytics through SAS's own MCP server, and Fleet Studio discovers it and lists its tools.
 
 This file exists because almost none of it was guessable. Four traps cost most of the time.
 
@@ -14,8 +14,8 @@ This file exists because almost none of it was guessable. Four traps cost most o
 | Tool surface | `readOnly: true`, all tiers: **51 of 92 tools**, no `execute_sas_code` |
 | Hermes host | `hermes@192.168.100.178` (HermesBO), instance `hermesbo-lab-01` |
 
-The MCP server is configured **on the Hermes host**, never in Fleet Control. The blueprint only
-says which agents may use it (`mcps: [sas-viya]`). No credential passes through Fleet Control.
+The MCP server is configured **on the Hermes host**, never in Fleet Studio. The blueprint only
+says which agents may use it (`mcps: [sas-viya]`). No credential passes through Fleet Studio.
 
 ## Registering it
 
@@ -93,7 +93,7 @@ and `SSL_CERT_FILE` (plus `REQUESTS_CA_BUNDLE`) names it wherever Hermes runs:
 
 - gateway: drop-in `~/.config/systemd/user/hermes-gateway.service.d/viya-ca.conf` (a drop-in survives
   Hermes rewriting its unit), then `systemctl --user daemon-reload` and a gateway restart
-- Fleet Control's dashboard: `~/.fleetctl-agent/dashboard.env`
+- Fleet Studio's dashboard: `~/.fleetctl-agent/dashboard.env`
 - interactive shells (`hermes mcp login`): `~/.profile` and `~/.bashrc`
 - the LAN `hermes-dashboard` is a system unit: the same `Environment=` lines need root
 
@@ -177,8 +177,8 @@ Levers, from cheapest:
    service identity. There is no consent or refresh chain, and restarts are harmless. The price is on
    the SAS side: *any* JWT this SAS Logon signs becomes an MCP credential (`deploy/K8S-DEPLOYMENT.md`).
    Give each agent its own SAS identity if per-agent attribution in SAS's audit trail matters. The
-   minting and renewal would live in the Fleet Control Agent. Credentials stay on the host (mode
-   600, like `API_SERVER_KEY`) and never pass through Fleet Control. This is not built yet.
+   minting and renewal would live in the Fleet Studio Agent. Credentials stay on the host (mode
+   600, like `API_SERVER_KEY`) and never pass through Fleet Studio. This is not built yet.
 3. Whatever the lifetime, the agent should report each profile's login **expiry** (the refresh
    JWT's `exp`, never the token), so Integrations can warn days ahead instead of a workflow
    discovering it mid-run.
@@ -276,7 +276,7 @@ On the lab host the culprit was not Hermes (~4 GB) but a nightly backup of `/srv
 included its own `backups/` directory: 193 MB → 294 MB → 1.2 GB → 2.3 GB → 8 GB → 13 GB → 24 GB →
 58 GB on consecutive nights. Any backup on a Hermes host must exclude its own output directory.
 
-## What Fleet Control shows
+## What Fleet Studio shows
 
 After `Discover now` on Integrations, `sas-viya` appears on `hermesbo-lab-01` with all six
 profiles, all 51 tools enumerated, `AUTH: oauth`, and:

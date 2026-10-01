@@ -1,6 +1,6 @@
 # apps/web
 
-React + TypeScript (Vite, Tailwind v4) client for Fleet Control. Slice 1 admin screens: **Instances** (with the
+React + TypeScript (Vite, Tailwind v4) client for Fleet Studio. Slice 1 admin screens: **Instances** (with the
 Connect drawer, the day-one empty state, and a blueprint created from what an instance runs), **Blueprints** (library, version history, YAML import, plan creation),
 **Plan before apply** (approvals, apply, outcome), **Drift** resolution (accept / revert / ignore once / exception),
 **Fleet Designer** (read-mostly topology laid out from the workflow, with an inspector), **Agent Studio** (edit an
@@ -29,7 +29,7 @@ To run two checkouts side by side (the current `main` and a feature branch in a 
 
 Sign in with the admin email and password from `.fleetcontrol-dev-credentials.json` at the repo root (git-ignored;
 created by `dev_api.py`). `dev_seed.py` adds one person per role to the same file (Dana is the Fleet Architect, Marcus
-and Lena are Approvers, Sam is an Operator, Riya a Viewer), so you can try the approval rules. It also creates three instances (two with a simulated Fleet Control Agent that answers import, drift-scan,
+and Lena are Approvers, Sam is an Operator, Riya a Viewer), so you can try the approval rules. It also creates three instances (two with a simulated Fleet Studio Agent that answers import, drift-scan,
 policy and apply jobs), applies the example AML blueprint to staging, edits two fields there by hand so there is
 drift to resolve, and leaves a production plan waiting for approvals.
 

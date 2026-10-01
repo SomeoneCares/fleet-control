@@ -211,12 +211,12 @@ function ArchitectCard({ config, writer, onChanged }: { config: ArchitectConfigD
               {c.profile} <span className="text-outline font-normal">·</span> {c.instance_id}
               {c.model && <> <span className="text-outline font-normal">·</span> {c.model.name}</>}
             </div>
-            <div className="text-small text-text-secondary">Hermes profile, asked through the Fleet Control Agent; it only proposes</div>
+            <div className="text-small text-text-secondary">Hermes profile, asked through the Fleet Studio Agent; it only proposes</div>
           </div>
         </div>
       ) : (
         <p className="m-0 text-small text-text-secondary">
-          No architect yet. Choose a profile on a connected instance, or create the Fleet Control architect blueprint and apply it first.
+          No architect yet. Choose a profile on a connected instance, or create the Fleet Studio architect blueprint and apply it first.
         </p>
       )}
       {c && c.instance_status !== "healthy" && <Banner tone="warning" className="text-small">{c.instance_id} is {c.instance_status}; the request waits until its agent reports.</Banner>}
@@ -248,7 +248,7 @@ function PickArchitectModal({ config, onClose, onSaved }: { config: ArchitectCon
 
   return (
     <Modal title="Choose the architect" onClose={onClose}
-      subtitle="A Hermes profile that turns missions into proposals, asked through the Fleet Control Agent on its instance."
+      subtitle="A Hermes profile that turns missions into proposals, asked through the Fleet Studio Agent on its instance."
       footer={<>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="primary" disabled={!instanceId || !profile || busy !== null}
@@ -257,7 +257,7 @@ function PickArchitectModal({ config, onClose, onSaved }: { config: ArchitectCon
         </Button>
       </>}>
       {candidates.length === 0 ? (
-        <Banner tone="warning">No instance has a paired Fleet Control Agent and imported profiles yet. Connect one on Instances and import its live profiles.</Banner>
+        <Banner tone="warning">No instance has a paired Fleet Studio Agent and imported profiles yet. Connect one on Instances and import its live profiles.</Banner>
       ) : (
         <>
           <Field label="Instance">
@@ -272,7 +272,7 @@ function PickArchitectModal({ config, onClose, onSaved }: { config: ArchitectCon
             </select>
           </Field>
           <div className="border-t border-hairline pt-4 mt-2">
-            <div className="text-[13px] font-semibold">Or use the Fleet Control architect</div>
+            <div className="text-[13px] font-semibold">Or use the Fleet Studio architect</div>
             <p className="text-small text-text-secondary mt-1 mb-3">
               Creates the <Mono>fleet-control-architect</Mono> blueprint: one <Mono>fc-architect</Mono> profile with no skills and no tools, on
               this instance's default model. Plan and apply it, import live profiles, then choose <Mono>fc-architect</Mono> here.
@@ -402,7 +402,7 @@ function SessionView({ sid, config, writer, history, onConfigChanged, onChanged 
                 </div>
                 <p className="m-0 text-[13px] leading-[18px] text-text-secondary">{proposal.summary}</p>
                 {proposal.adjustments.length > 0 && (
-                  <p className="m-0 text-small text-text-secondary">Fleet Control adjusted: {proposal.adjustments.join("; ")}.</p>
+                  <p className="m-0 text-small text-text-secondary">Fleet Studio adjusted: {proposal.adjustments.join("; ")}.</p>
                 )}
               </div>
               {proposal.agents.map((a) => {

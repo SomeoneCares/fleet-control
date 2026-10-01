@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Start Fleet Control for local development: the current version (main), the updated version (a feature
+  Start Fleet Studio for local development: the current version (main), the updated version (a feature
   branch checked out as a git worktree), or both side by side.
 
 .DESCRIPTION
@@ -13,7 +13,7 @@
   "stop") to stop that server. A port already in use is reported and left alone, so running the script
   twice never starts a second copy.
 
-  Only the current version (8080) is reachable by the lab host's Fleet Control Agent through the SSH
+  Only the current version (8080) is reachable by the lab host's Fleet Studio Agent through the SSH
   reverse tunnel (ssh -N -R 127.0.0.1:18080:127.0.0.1:8080 hermes@<host>).
 
 .PARAMETER Which
@@ -115,7 +115,7 @@ function Start-Version($v) {
     if (Test-Listening $v.Api) {
         Write-Host "  API: port $($v.Api) is already in use; leaving it alone"
     } else {
-        Start-Window "Fleet Control API - $($v.Label) :$($v.Api)" $v.Path "`$env:PORT = '$($v.Api)'; & '$python' scripts\dev_api.py"
+        Start-Window "Fleet Studio API - $($v.Label) :$($v.Api)" $v.Path "`$env:PORT = '$($v.Api)'; & '$python' scripts\dev_api.py"
         Write-Host "  API: starting on http://127.0.0.1:$($v.Api)"
     }
 
@@ -125,7 +125,7 @@ function Start-Version($v) {
     } else {
         $install = "if (-not (Test-Path node_modules)) { Write-Host 'Installing web dependencies (first run)...'; npm install }; "
         $envs = "`$env:FLEETCONTROL_WEB_PORT = '$($v.Web)'; `$env:FLEETCONTROL_API_PORT = '$($v.Api)'; "
-        Start-Window "Fleet Control web - $($v.Label) :$($v.Web)" $web ($envs + $install + 'npm run dev')
+        Start-Window "Fleet Studio web - $($v.Label) :$($v.Web)" $web ($envs + $install + 'npm run dev')
         Write-Host "  Web: starting on http://localhost:$($v.Web)"
     }
 }
@@ -142,7 +142,7 @@ function Stop-Version($v) {
 # ------------------------------------------------------------------ menu
 
 Write-Host ""
-Write-Host "Fleet Control - local development" -ForegroundColor White
+Write-Host "Fleet Studio - local development" -ForegroundColor White
 foreach ($v in $versions.Values) {
     $state = if (Test-Listening $v.Api) { 'running' } else { 'stopped' }
     '  {0,-8} {1,-28} API :{2}  web http://localhost:{3}  ({4})' -f $v.Label, $v.Branch, $v.Api, $v.Web, $state | Write-Host

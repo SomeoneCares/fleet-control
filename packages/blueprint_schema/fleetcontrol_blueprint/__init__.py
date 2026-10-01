@@ -1,7 +1,7 @@
 """Fleet Blueprint schema v1 — the desired-state model for a Hermes Agent fleet.
 
 Pydantic models are the single source of truth. They validate YAML/JSON blueprints,
-export JSON Schema for editors and CI, and are shared by the API, the Fleet Control
+export JSON Schema for editors and CI, and are shared by the API, the Fleet Studio
 Agent and the web client (via the exported schema).
 
 Design rules encoded here:

@@ -4,7 +4,7 @@ import { api, type Me } from "../api/client";
 import { useAuth, useMe } from "../lib/auth";
 import { errorText, useLoad } from "../lib/hooks";
 import { initials } from "../lib/view";
-import { Banner, Button, Field, INPUT, Icon, Modal, Spinner, type IconName } from "./ui";
+import { Banner, BrandLogo, Button, Field, INPUT, Icon, Modal, Spinner, customWorkspaceName, type IconName } from "./ui";
 
 export interface NavItem {
   key: string;
@@ -100,15 +100,12 @@ export function Shell() {
   return (
     <div className="min-h-screen flex flex-col">
       <header className="h-14 shrink-0 flex items-center gap-4 px-5 bg-white border-b border-hairline">
-        <div className="flex items-center gap-2.5 w-sidebar">
-          <span className="size-8 rounded-control bg-primary text-on-primary flex items-center justify-center"><Icon name="logo" size={18} /></span>
-          <div className="leading-tight">
-            <div className="text-[14px] font-bold">Fleet Control</div>
-            <div className="text-[11px] text-text-secondary truncate max-w-[180px]">
-              {me.workspace_name && me.workspace_name !== "Fleet Control" ? me.workspace_name : "for Hermes Agent"}
-            </div>
-          </div>
+        <div className="flex items-center gap-3 w-sidebar min-w-0">
+          <BrandLogo height={30} />
         </div>
+        {customWorkspaceName(me.workspace_name) && (
+          <div className="text-[13px] font-medium text-text-secondary truncate max-w-[280px] border-l border-hairline pl-4">{customWorkspaceName(me.workspace_name)}</div>
+        )}
         <div className="flex-1" />
         <div className="relative">
           <button type="button" onClick={() => setMenu((m) => !m)} aria-haspopup="menu" aria-expanded={menu}

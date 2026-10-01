@@ -4,7 +4,7 @@ intersected with what the connected system allows, each line with the rule that 
 Nothing here is a second source of truth. Every answer is read from the rules the API enforces: the role
 permissions (auth.PERMISSIONS), content zones (content.may_read), the agent's grants in its applied blueprint
 (content_zones, mcps, toolsets) and the blueprint's policies, and the Decision Room rules (rooms.may_decide).
-A connected system's own permissions are not visible to Fleet Control, so they are shown as decided by that
+A connected system's own permissions are not visible to Fleet Studio, so they are shown as decided by that
 system, never guessed.
 """
 
@@ -120,7 +120,7 @@ def tool_verdict(grants: dict, tool: str, *, servers: Optional[dict] = None) -> 
         system = servers.get(name) or {}
         auth = system.get("auth")
         sys_why = (f"{name} checks its own permissions: the profile signs in with OAuth, as itself" if auth == "oauth"
-                   else f"{name} checks its own permissions" if auth else f"{name}'s own permissions are not visible to Fleet Control")
+                   else f"{name} checks its own permissions" if auth else f"{name}'s own permissions are not visible to Fleet Studio")
         return {"allowed": True, "layer": "system", "needs_approval": bool(gate),
                 "why": f"{name} is one of the agent's MCP servers" + (f"; each call waits for a person (policy {gate['policy']})" if gate else ""),
                 "system": sys_why, "system_health": system.get("health")}

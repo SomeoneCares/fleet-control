@@ -197,10 +197,10 @@ def instructions(constraints: Constraints, estate: dict[str, list]) -> str:
     """The run's instructions: the contract, the rules, the constraints and the estate."""
     models = ", ".join(f"{p}/{n}" for p, n in estate["models"]) or "none known yet"
     return "\n".join([
-        "You are the Fleet Control architect. The user message describes a mission. Design a fleet of Hermes Agent",
+        "You are the Fleet Studio architect. The user message describes a mission. Design a fleet of Hermes Agent",
         "profiles for it. You only propose: never call tools and never change anything.",
         "",
-        f'Answer with exactly one JSON object that follows the Fleet Control proposal contract "{PROPOSAL_SCHEMA}".',
+        f'Answer with exactly one JSON object that follows the Fleet Studio proposal contract "{PROPOSAL_SCHEMA}".',
         "No prose before or after it and no Markdown fences. Shape:",
         json.dumps(CONTRACT_EXAMPLE, indent=2),
         "",
@@ -271,7 +271,7 @@ def parse_proposal(output: str) -> dict:
         where = "; ".join(f"{'.'.join(str(x) for x in e['loc'])}: {e['msg']}" for e in exc.errors()[:5])
         raise ProposalError(f"the answer does not follow {PROPOSAL_SCHEMA} ({where})") from None
     if proposal.contract != PROPOSAL_SCHEMA:
-        raise ProposalError(f'the answer declares "{proposal.contract}"; Fleet Control reads {PROPOSAL_SCHEMA}')
+        raise ProposalError(f'the answer declares "{proposal.contract}"; Fleet Studio reads {PROPOSAL_SCHEMA}')
     ids = [a.id for a in proposal.agents]
     repeated = sorted({i for i in ids if ids.count(i) > 1})
     if repeated:
@@ -372,18 +372,18 @@ def to_blueprint(proposal: dict, *, name: str, owner: str, mission: str, constra
 
 
 def architect_blueprint(model: dict, *, instance_id: str, environment: str, owner: str, version: int) -> Blueprint:
-    """The Fleet Control architect as a blueprint: one profile with no skills and no tools, on ``model``."""
+    """The Fleet Studio architect as a blueprint: one profile with no skills and no tools, on ``model``."""
     return Blueprint.model_validate({
         "metadata": {"name": ARCHITECT_BLUEPRINT, "version": version, "owner": owner,
-                     "description": "The Fleet Control architect: one profile that turns missions into proposals. It has no tools."},
+                     "description": "The Fleet Studio architect: one profile that turns missions into proposals. It has no tools."},
         "requires": {"hermes": ">=0.21", "capabilities": ["runs", "profiles.write"], "agent": "required"},
-        "mission": f"Answer Fleet Control's architect requests with structured proposals ({PROPOSAL_SCHEMA}).",
+        "mission": f"Answer Fleet Studio's architect requests with structured proposals ({PROPOSAL_SCHEMA}).",
         "agents": [{
             "id": ARCHITECT_PROFILE,
-            "role": "Fleet Control architect: proposes fleets of Hermes profiles from a mission; never acts.",
+            "role": "Fleet Studio architect: proposes fleets of Hermes profiles from a mission; never acts.",
             "model": {"provider": model["provider"], "name": model["name"]},
             "soul": {
-                "objective": "Turn a mission into a fleet proposal Fleet Control can read.",
+                "objective": "Turn a mission into a fleet proposal Fleet Studio can read.",
                 "principles": [
                     "Answer with one JSON object that follows the contract in the instructions, and nothing else.",
                     "Prefer few, focused agents; one orchestrator coordinates the specialists.",

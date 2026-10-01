@@ -1,4 +1,4 @@
-# Hermes Fleet Control Platform — Components & Detailed Feature Plan
+# Hermes Fleet Studio Platform — Components & Detailed Feature Plan
 ## 1. Purpose
 This document consolidates the agreed product direction into a platform component model and detailed feature inventory. The platform is an independent visual control plane around Hermes Agent. Hermes remains the underlying agent runtime; the platform adds deployment lifecycle, fleet architecture, graphical management, collaboration, content, testing, assurance, operations, governance and enterprise integration.
 ## 2. Product principles

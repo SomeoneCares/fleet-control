@@ -137,7 +137,7 @@ def compute_plan(bp: Blueprint, live: dict[str, dict], *, target_instance: str, 
         policy_push[a.profile_name] = {"version": 1, "profile": a.profile_name, "deny_tools": sorted(deny), "approve_tools": sorted(approve), "rules": []}
 
     blocked = not agent_installed and any(r["kind"] in ("create", "update") for r in rows)
-    blocked_reason = "This instance is connected API-only; install the Fleet Control Agent to apply changes." if blocked else None
+    blocked_reason = "This instance is connected API-only; install the Fleet Studio Agent to apply changes." if blocked else None
     warnings = []
     if missing_mcps:
         names = ", ".join(sorted(set(missing_mcps)))

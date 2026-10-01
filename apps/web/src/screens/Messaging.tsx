@@ -268,7 +268,7 @@ function AddChannel({ doc, onClose, onAdded }: { doc: MessagingDoc; onClose: () 
   }
   return (
     <Modal width={560} title="Add channel" onClose={onClose}
-      subtitle="A messaging platform an instance's Hermes gateway has connected. Fleet Control's agent adds a deliver-only route for it; the platform's credentials never leave the instance."
+      subtitle="A messaging platform an instance's Hermes gateway has connected. Fleet Studio's agent adds a deliver-only route for it; the platform's credentials never leave the instance."
       footer={<>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="primary" type="submit" form="add-channel" disabled={busy || !instance || !chosen || id.length < 2}>{busy && <Spinner />}Add channel</Button>

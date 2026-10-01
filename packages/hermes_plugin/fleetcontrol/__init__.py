@@ -1,11 +1,11 @@
-"""Fleet Control plugin for Hermes Agent.
+"""Fleet Studio plugin for Hermes Agent.
 
 Runs inside the Hermes process. Two jobs:
 
 1. **Evidence**: forward tool-call and subagent lifecycle events (with arguments and
    results, redacted per capture mode) to the local ``fleetctl-agent`` daemon over a
    Unix socket (or a loopback TCP port on Windows). The daemon batches and relays them
-   to Fleet Control. This is the only real-time source of child-agent tool evidence:
+   to Fleet Studio. This is the only real-time source of child-agent tool evidence:
    the ``/v1/runs`` SSE stream drops it by design (see spike addendum, S4).
 
 2. **Policy**: block or escalate tool calls that violate the blueprint's policies for
@@ -219,14 +219,14 @@ class _Policy:
         name = canonical_tool(tool_name)
         allow = d.get("allow_tools")
         if allow is not None and name not in {canonical_tool(t) for t in allow}:
-            return {"action": "block", "message": f"Fleet Control policy: tool '{tool_name}' is not in this profile's allow-list.", "rule": "allow-list"}
+            return {"action": "block", "message": f"Fleet Studio policy: tool '{tool_name}' is not in this profile's allow-list.", "rule": "allow-list"}
         if name in {canonical_tool(t) for t in d.get("deny_tools", [])}:
-            return {"action": "block", "message": f"Fleet Control policy: tool '{tool_name}' is denied for this profile.", "rule": "deny-list"}
+            return {"action": "block", "message": f"Fleet Studio policy: tool '{tool_name}' is denied for this profile.", "rule": "deny-list"}
         if name in {canonical_tool(t) for t in d.get("approve_tools", [])}:
-            return {"action": "approve", "message": f"Fleet Control policy: '{tool_name}' requires human approval.", "rule_key": f"fleetcontrol:{tool_name}", "rule": "approve-list"}
+            return {"action": "approve", "message": f"Fleet Studio policy: '{tool_name}' requires human approval.", "rule_key": f"fleetcontrol:{tool_name}", "rule": "approve-list"}
         for rid, pat, action, message in self._compiled:
             if pat.search(tool_name):
-                out = {"action": action, "message": message or f"Fleet Control policy rule '{rid}'.", "rule": rid}
+                out = {"action": action, "message": message or f"Fleet Studio policy rule '{rid}'.", "rule": rid}
                 if action == "approve":
                     out["rule_key"] = f"fleetcontrol:{rid}"
                 return out

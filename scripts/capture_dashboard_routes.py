@@ -12,7 +12,7 @@ dashboard with a fresh token and runs this for you. Nothing is written to Hermes
 Secrets in responses are masked: JSON fields, YAML/.env lines inside config/raw, Telegram bot
 tokens, and the 4-character prefix Hermes leaves on redacted values.
 
-Paste the resulting JSON back to the Fleet Control repo as docs/dashboard-capture-<hermes-version>.json.
+Paste the resulting JSON back to the Fleet Studio repo as docs/dashboard-capture-<hermes-version>.json.
 """
 
 import json
@@ -43,11 +43,11 @@ READS = [
 ]
 
 WRITES = [
-    ("POST", "/api/profiles", {"name": PROBE, "description": "Fleet Control probe (safe to delete)", "provider": "openai", "model": "gpt-4o-mini"}),
+    ("POST", "/api/profiles", {"name": PROBE, "description": "Fleet Studio probe (safe to delete)", "provider": "openai", "model": "gpt-4o-mini"}),
     ("GET", f"/api/profiles/{PROBE}/soul", None),
-    ("PUT", f"/api/profiles/{PROBE}/soul", {"content": "# Objective\n\nProbe profile created by Fleet Control capture script.\n"}),
+    ("PUT", f"/api/profiles/{PROBE}/soul", {"content": "# Objective\n\nProbe profile created by Fleet Studio capture script.\n"}),
     ("GET", f"/api/profiles/{PROBE}/soul", None),
-    ("PUT", f"/api/profiles/{PROBE}/description", {"description": "Fleet Control probe, updated"}),
+    ("PUT", f"/api/profiles/{PROBE}/description", {"description": "Fleet Studio probe, updated"}),
     ("GET", f"/api/skills?profile={PROBE}", None),
     ("GET", f"/api/tools/toolsets?profile={PROBE}", None),
     ("GET", f"/api/mcp/servers?profile={PROBE}", None),

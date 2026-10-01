@@ -12,8 +12,8 @@ export const VERDICT_TONE: Record<Verdict, Tone> = {
 export const VERDICT_MEANING: Record<Verdict, string> = {
   "Evidence found": "The run's transcript shows it happened.",
   "No evidence": "The run's transcript does not show it: the agent claimed or was expected to do something that did not run.",
-  "Not verifiable": "There is no transcript for this run, so Fleet Control cannot tell either way.",
-  "Policy blocked": "A Fleet Control policy blocked the call.",
+  "Not verifiable": "There is no transcript for this run, so Fleet Studio cannot tell either way.",
+  "Policy blocked": "A Fleet Studio policy blocked the call.",
 };
 
 export function statusChip(status: TestStatus | "not_run"): { label: string; tone: Tone } {

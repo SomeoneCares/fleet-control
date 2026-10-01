@@ -1,7 +1,7 @@
 """Messaging (build document §8, Slice 4): fleet events delivered to people where they already are.
 
 A channel is a messaging platform a Hermes gateway on an instance has connected (Telegram, Slack, email, …),
-optionally a particular chat on it. Fleet Control never talks to the platform: the instance's Fleet Control Agent
+optionally a particular chat on it. Fleet Studio never talks to the platform: the instance's Fleet Studio Agent
 keeps one ``deliver_only`` webhook route per channel (``fc-<channel>``), whose secret never leaves the host, and posts
 each message to it on its own loopback; Hermes delivers the text as-is, with no agent run.
 
@@ -83,7 +83,7 @@ def merge_gateway(platforms: list[dict], gateway: Optional[dict]) -> list[dict]:
 def channel_health(channel: dict, state: Optional[dict]) -> dict:
     """Whether a channel can deliver, from the last messaging discovery of its instance, and what to do if not."""
     if not channel.get("enabled", True):
-        return {"status": "disabled", "detail": "switched off in Fleet Control"}
+        return {"status": "disabled", "detail": "switched off in Fleet Studio"}
     if not state:
         return {"status": "unknown", "detail": f"not discovered yet: Discover on {channel['instance_id']}"}
     hooks = state.get("webhooks") or {}
@@ -119,10 +119,10 @@ def rules_from(blueprints: Iterable[dict], channels: Iterable[dict]) -> list[dic
 
 def render(event: str, template: str, ctx: dict, *, show_titles: bool, portal_url: str, head: Optional[str] = None) -> str:
     """The message: what happened, where, and a link back. ``ctx`` carries ``title`` (case content: shown only on a
-    channel that shows titles), ``case``, ``instance``, ``detail`` (Fleet Control's own words) and ``link`` (a path)."""
+    channel that shows titles), ``case``, ``instance``, ``detail`` (Fleet Studio's own words) and ``link`` (a path)."""
     head = head or {"decision-request": "Decision needed", "approval-request": "Second approval needed",
                     "output-summary": "New fleet output"}.get(template) or EVENTS.get(event, event)
-    lines = [f"Fleet Control · {head}"]
+    lines = [f"Fleet Studio · {head}"]
     if ctx.get("title") and show_titles:
         lines.append(str(ctx["title"])[:300])
     facts = [f"case {ctx['case']}" if ctx.get("case") else None, f"on {ctx['instance']}" if ctx.get("instance") else None]
@@ -138,7 +138,7 @@ def render(event: str, template: str, ctx: dict, *, show_titles: bool, portal_ur
 
 
 def test_text(channel: dict, by: str, portal_url: str) -> str:
-    return (f"Fleet Control · Test message\nChannel {channel['name']} ({channel['ref']}) on {channel['instance_id']}, "
+    return (f"Fleet Studio · Test message\nChannel {channel['name']} ({channel['ref']}) on {channel['instance_id']}, "
             f"sent by {by}.\nOpen: {portal_url.rstrip('/')}/messaging")
 
 

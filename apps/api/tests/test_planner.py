@@ -102,7 +102,7 @@ class PlannerTest(unittest.TestCase):
     def test_api_only_instance_cannot_apply(self):
         plan = compute_plan(self.bp, {}, target_instance="hermes-lab-01", agent_installed=False, environment="lab")
         self.assertFalse(plan["can_apply"])
-        self.assertIn("install the fleet control agent", plan["blocked_reason"].lower())
+        self.assertIn("install the fleet studio agent", plan["blocked_reason"].lower())
 
     def test_agent_jobs_order(self):
         plan = compute_plan(self.bp, {}, target_instance="hermes-staging-eu-01", agent_installed=True, environment="staging")

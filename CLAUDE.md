@@ -3,13 +3,19 @@
 Read this first, then `docs/build-document.md` and `docs/spike-addendum-hermes-0.21.2.md`.
 
 ## What this is
-Fleet Control for Hermes Agent: an independent control plane around Hermes Agent (NousResearch/hermes-agent, currently 0.21.x).
-It designs fleets as versioned Blueprints, plans and applies them to Hermes instances through an installed Fleet Control Agent,
+Fleet Studio for Hermes Agent: an independent control plane around Hermes Agent (NousResearch/hermes-agent, currently 0.21.x).
+It designs fleets as versioned Blueprints, plans and applies them to Hermes instances through an installed Fleet Studio Agent,
 verifies what agents actually did, detects drift, and gives business users a governed Workspace (Decision Rooms) in the same app.
-Hermes stays the runtime; we never re-implement its primitives. Product name is a neutral placeholder; never brand as "Hermes …".
+Hermes stays the runtime; we never re-implement its primitives. The product is **Fleet Studio, by Verto Wave** (renamed
+from the placeholder "Fleet Control" on 2026-10-01; logo in `apps/web/public/brand/`). Never brand it as "Hermes …".
+The rename is in everything people read (portal, messages, docs, design sources). Internal identifiers keep the old
+spelling on purpose, because installed agents, stored blueprints and API clients depend on them: Python packages
+`fleetcontrol_*`, `fleetctl_agent`, `apiVersion: fleetcontrol/v1`, the `X-Fleet-Control` header, `FLEETCONTROL_*`
+variables, `fc-*` profiles and the `fleetctl-*` units on hosts. Recorded Hermes captures (`docs/dashboard-capture-*`) are
+verbatim and keep the old name.
 
 ## Decisions already made (do not reopen without asking Basem)
-- Writes to Hermes go through the Fleet Control Agent on the host (plugin + daemon), never through an exposed dashboard API.
+- Writes to Hermes go through the Fleet Studio Agent on the host (plugin + daemon), never through an exposed dashboard API.
 - Two experiences, one app: admin portal and business-user Workspace. Decision Rooms live in the Workspace.
 - Messaging delivers; it never records decisions. Assurance verdicts are exactly: Evidence found / No evidence / Not verifiable / Policy blocked.
 - Stack: Python 3.11+, FastAPI, Pydantic v2, SQLAlchemy Core on PostgreSQL (SQLite for dev and tests), React+TS+Vite+Tailwind for `apps/web`.
@@ -42,7 +48,7 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   `FLEETCONTROL_ADMIN_EMAIL` (no default password). Local dev: `scripts/dev_api.py` then `scripts/dev_seed.py`;
   passwords land in git-ignored `.fleetcontrol-dev-credentials.json`. Claude must not type passwords into the web form:
   the user signs in for browser checks.
-- DONE (2026-09-16): Fleet Control Agent installed on the lab host as instance `hermesbo-lab-01` (systemd user units
+- DONE (2026-09-16): Fleet Studio Agent installed on the lab host as instance `hermesbo-lab-01` (systemd user units
   `fleetctl-dashboard`, its own dashboard on 127.0.0.1:9129 with a token only the daemon knows, and `fleetctl-agent`;
   source copied to `~/fleet-control-src`). The installer no longer writes to `~/.hermes/.env` and leaves the LAN
   dashboard alone; the plugin is copied but not enabled, and the capability report says so. The daemon reaches a
@@ -96,7 +102,7 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   `/integrations`). What exists comes from the instances (agent jobs `mcp_discover`, which connects to each MCP
   server to list its tools, and `mcp_write` for add/remove/enable/disable); who may use it comes from the blueprints
   (an agent's `mcps`/`model` and the tool allow- and deny-lists in policies). Server configuration lives on the
-  instance, never in a blueprint, and **no credentials pass through Fleet Control**: a server is added by url or
+  instance, never in a blueprint, and **no credentials pass through Fleet Studio**: a server is added by url or
   command only. `hermes_compat_check.py` now pins `/api/mcp/servers/{name}/test` and `/enabled`.
 - DONE (2026-09-16): Settings → Observability (read-only, honest): per instance, whether Assurance can read the
   Hermes session transcript (any paired agent), and the state of the `fleetcontrol` and Langfuse plugins from the
@@ -122,7 +128,7 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   open rooms. The Workspace home now shows the decisions waiting for you and the fleet's recent outputs.
 - NOTE: on Basem's Windows box `python3` is the Microsoft Store stub; run the suites as
   `PYTHON=.venv/Scripts/python bash scripts/test.sh` (with `PYTHONIOENCODING=utf-8`).
-- DONE (2026-09-20): SAS Viya MCP Server connected to `hermesbo-lab-01` and discovered by Fleet Control
+- DONE (2026-09-20): SAS Viya MCP Server connected to `hermesbo-lab-01` and discovered by Fleet Studio
   (`docs/sas-viya-mcp-integration.md` — read it before touching this). SAS's own MCP server runs in-cluster on
   the Viya host (`viya.internal/sas-mcp/mcp`, read-only, 51 of 92 tools); it is registered **per Hermes profile**
   by url with `auth: oauth`, and Integrations lists all 51 tools with `Used by: None` until a blueprint declares
@@ -140,9 +146,9 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   `copy_mcp` copies a registration from another profile on the same host (never env values, header tokens or OAuth
   tokens; OAuth logins become the plan's `manual_steps`), `remove_mcp` removes. Room evidence and findings carry a
   `basis` (source / analytical / interpretation / assumption / judgment; only people judge); an analytical finding
-  names its tool and Fleet Control checks it against the run or the plugin's session events (`rooms.check_tool`).
+  names its tool and Fleet Studio checks it against the run or the plugin's session events (`rooms.check_tool`).
 - DONE (2026-09-24): Slice 4 Ask the fleet (`ask.py`, `/api/v1/ask/*`, screen at `/ask`, `ask.use` = admin portal
-  roles + Approver). Fleet Control picks the sources (files, outputs, rooms) from zones the person may read AND the
+  roles + Approver). Fleet Studio picks the sources (files, outputs, rooms) from zones the person may read AND the
   orchestrator profile is granted by an applied blueprint's `content_zones`, numbers them S1…, and sends only those as
   a `hermes_run` with `transcript: true`. Citations are checked (invented ones dropped); the answer's verdict is
   Evidence found only if it cites sources and the transcript shows no tool calls. Conversations are the owner's alone;
@@ -154,7 +160,7 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   (`<platform>:<id>` is what blueprint `delivery` rules name). The agent keeps one `deliver_only` webhook route per
   channel (`fc-<id>`, prompt `{text}`) whose secret stays in `~/.fleetctl-agent/route-secrets.json`, and posts each
   message to it on loopback, signed `X-Webhook-Signature-V2` (hex HMAC of `<ts>.<body>`) with `X-Request-ID` =
-  the delivery id. So no inbound port and no secret in Fleet Control (the build document's "Fleet Control posts"
+  the delivery id. So no inbound port and no secret in Fleet Studio (the build document's "Fleet Studio posts"
   became "the agent posts": same route, no exposed port). Rules come from each blueprint's newest applied version and
   are edited on drafts (`PUT /api/v1/blueprints/{name}/{version}/delivery`). Events: room opened, second approval
   needed, output shared, assurance No evidence / Policy blocked, drift detected, apply completed/failed; one message

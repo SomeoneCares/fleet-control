@@ -1,7 +1,7 @@
 [project]
 name = "fleetcontrol-blueprint"
 version = "0.1.0"
-description = "Fleet Blueprint schema v1 for Fleet Control (for Hermes Agent)"
+description = "Fleet Blueprint schema v1 for Fleet Studio (for Hermes Agent)"
 requires-python = ">=3.11"
 dependencies = ["pydantic>=2.7,<3", "PyYAML>=6"]
 

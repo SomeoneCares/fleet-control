@@ -10,7 +10,7 @@ from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 DEFAULTS: dict[str, Any] = {
-    "workspace_name": "Fleet Control",  # shown under the product name in the top bar
+    "workspace_name": "Fleet Studio",  # shown under the product name in the top bar
     "session_hours": 12,  # how long a sign-in lasts without activity; applies to new sign-ins
     "approvals_production": 2,  # the floor for production plans (build document §7); a blueprint target may ask for more
     "approvals_staging": 0,

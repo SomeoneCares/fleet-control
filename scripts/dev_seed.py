@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Fill a local Fleet Control API with realistic demo data for the web client, with simulated agents.
+"""Fill a local Fleet Studio API with realistic demo data for the web client, with simulated agents.
 
     python scripts/dev_api.py      # terminal 1: the API (in-memory) with a bootstrap admin
     python scripts/dev_seed.py     # terminal 2: seeds, then keeps the simulated agents running
 
 Signs in as the bootstrap admin from .fleetcontrol-dev-credentials.json and creates one demo person per
 role (their one-time passwords go into the same git-ignored file). Creates three instances: staging and
-production with a paired, simulated Fleet Control Agent, and a lab instance connected API-only. Uploads
+production with a paired, simulated Fleet Studio Agent, and a lab instance connected API-only. Uploads
 the example AML blueprint, imports live profiles, applies v3 to staging, then changes two fields "by hand"
 on staging and scans, so there is drift to resolve. Dana (Fleet Architect) creates a production plan that
 waits for two approvals from Admin or Approver. The simulated agents keep answering jobs (import, drift
@@ -204,7 +204,7 @@ def main() -> None:
     except urllib.error.HTTPError as exc:
         sys.exit(f"Signing in as {creds['admin']['email']} failed ({exc.code}). Was the API started with scripts/dev_api.py?")
     except (urllib.error.URLError, OSError) as exc:
-        sys.exit(f"Fleet Control API not reachable at {BASE} ({exc}). Start it: python scripts/dev_api.py")
+        sys.exit(f"Fleet Studio API not reachable at {BASE} ({exc}). Start it: python scripts/dev_api.py")
     if admin.call("GET", "/api/v1/instances"):
         sys.exit("The API already has data (it persists in .fleetcontrol-dev.db). "
                  "For a clean demo, restart it with: python scripts/dev_api.py --fresh")
@@ -256,7 +256,7 @@ def main() -> None:
     wait(lambda: admin.call("GET", f"/api/v1/plans/{plan['id']}")["status"] == "applied", "apply on staging")
     print(f"applied {bp.metadata.name} v{bp.metadata.version} to {stg} ({plan['id']})", flush=True)
 
-    # someone edits staging by hand, outside Fleet Control
+    # someone edits staging by hand, outside Fleet Studio
     live = agents[stg].profiles
     live["sanctions-screener"]["skills"] = sorted(set(live["sanctions-screener"]["skills"]) | {"quick-lookup"})
     live["ownership-tracer"]["model"] = {"provider": "local", "name": "llama-4-8b"}

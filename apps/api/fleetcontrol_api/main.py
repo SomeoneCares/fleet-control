@@ -1,4 +1,4 @@
-"""Fleet Control API — Slice 1.
+"""Fleet Studio API — Slice 1.
 
 Two route families:
 
@@ -70,7 +70,7 @@ from .settings import DEFAULTS as SETTING_DEFAULTS
 from .settings import SettingsUpdate, approval_floor, effective as effective_settings
 from .store import Store
 
-app = FastAPI(title="Fleet Control API", version="0.1.0")
+app = FastAPI(title="Fleet Studio API", version="0.1.0")
 store = Store()
 
 SESSION_COOKIE = "fc_session"
@@ -91,7 +91,7 @@ def _bootstrap_admin() -> None:
     store.add_user(email, "Administrator", "admin", hash_password(password))
     store.record("fleetcontrol", "user.created", email, "Admin (bootstrap)")
     if not given:
-        print(f"Fleet Control: created admin {email} with one-time password {password}; change it after signing in.", flush=True)
+        print(f"Fleet Studio: created admin {email} with one-time password {password}; change it after signing in.", flush=True)
 
 
 _bootstrap_admin()
@@ -256,7 +256,7 @@ def update_user(email: str, body: UserUpdate, user: dict = Depends(require("user
     if target["email"] == user["email"] and (changes.get("disabled") or demoted):
         raise HTTPException(409, "you cannot disable yourself or remove your own Admin role")
     if target["role"] == "admin" and not target["disabled"] and (changes.get("disabled") or demoted) and len(_active_admins()) <= 1:
-        raise HTTPException(409, "Fleet Control needs at least one active Admin")
+        raise HTTPException(409, "Fleet Studio needs at least one active Admin")
     if "name" in changes:
         changes["name"] = changes["name"].strip() or target["name"]
     target = store.update_user(target["email"], **changes)
@@ -693,7 +693,7 @@ class FindingBody(BaseModel):
     verdict: Optional[str] = None
     run_id: Optional[str] = None
     # what the finding rests on (rooms.FINDING_BASES); an analytical one names the tool that computed it, and
-    # session_id is the Hermes session it came from, whose recorded tool calls Fleet Control checks
+    # session_id is the Hermes session it came from, whose recorded tool calls Fleet Studio checks
     basis: Optional[str] = None
     tool: Optional[str] = Field(None, max_length=200)
     session_id: Optional[str] = Field(None, max_length=200)
@@ -758,7 +758,7 @@ def get_ask_config(user: dict = Depends(require("ask.use"))) -> dict:
 def set_ask_config(body: AskConfig, user: dict = Depends(require("settings.manage"))) -> dict:
     inst = _require_instance(body.instance_id)
     if inst["mode"] != "agent" or not inst.get("agent_version"):
-        raise HTTPException(409, f"{body.instance_id} has no paired Fleet Control Agent; questions go through it")
+        raise HTTPException(409, f"{body.instance_id} has no paired Fleet Studio Agent; questions go through it")
     if body.profile not in (store.live_state_for(body.instance_id) or {}):
         raise HTTPException(422, f"no profile {body.profile!r} in the last import from {body.instance_id}; import live profiles first")
     store.set_settings({"ask": {"instance_id": body.instance_id, "profile": body.profile}}, user["email"])
@@ -825,7 +825,7 @@ def _ask_turn(thread: dict, question: str, user: dict) -> dict:
         raise HTTPException(409, "no orchestrator is chosen yet: an Admin chooses it on Ask the fleet")
     inst = store.get_instance(cfg["instance_id"])
     if not inst or inst["mode"] != "agent" or not inst.get("agent_version"):
-        raise HTTPException(409, f"the orchestrator's instance {cfg['instance_id']} has no paired Fleet Control Agent")
+        raise HTTPException(409, f"the orchestrator's instance {cfg['instance_id']} has no paired Fleet Studio Agent")
     granted = granted_zones(cfg["profile"], _blueprint_versions()[0])
     mine = _my_zones(user)
     searched = [z for z in mine if z in granted]
@@ -1083,7 +1083,7 @@ def _messaging_result(job: dict, instance_id: str) -> None:
 def _agent_instance_or_409(instance_id: str) -> dict:
     inst = _require_instance(instance_id)
     if inst["mode"] != "agent" or not inst.get("agent_version"):
-        raise HTTPException(409, f"{instance_id} has no paired Fleet Control Agent; messaging goes through it")
+        raise HTTPException(409, f"{instance_id} has no paired Fleet Studio Agent; messaging goes through it")
     return inst
 
 
@@ -1456,7 +1456,7 @@ def test_my_notifications(user: dict = Depends(current_user)) -> dict:
     ch = _direct_channels().get(via) if via else None
     if not (via and address and ch):
         raise HTTPException(409, "choose how to be reached and give your address first")
-    text = f"Fleet Control · Test notification\nFor {user['email']}.\nOpen: {_settings()['portal_url'].rstrip('/')}/settings"
+    text = f"Fleet Studio · Test notification\nFor {user['email']}.\nOpen: {_settings()['portal_url'].rstrip('/')}/settings"
     doc = _deliver(ch, event="test", key=f"test:{uuid.uuid4().hex}", text=text, chat_id=address, to=user["email"], by=user["email"])
     return {k: doc[k] for k in ("id", "status", "channel", "at")}
 
@@ -1806,7 +1806,7 @@ def start_workflow(body: WorkflowStart, user: dict = Depends(require("workflows.
         raise HTTPException(404, f"no workflow {body.workflow_id} in {body.blueprint}")
     inst = _require_instance(body.instance_id)
     if inst["mode"] != "agent" or not inst.get("agent_version"):
-        raise HTTPException(409, f"{inst['id']} has no paired Fleet Control Agent")
+        raise HTTPException(409, f"{inst['id']} has no paired Fleet Studio Agent")
     try:
         steps = normalize_steps(wf["steps"])
     except WorkflowError as exc:
@@ -1955,7 +1955,7 @@ class DiscoverBody(BaseModel):
 def discover_integrations(body: DiscoverBody, user: dict = Depends(require("instances.operate"))) -> dict:
     inst = _require_instance(body.instance_id)
     if inst["mode"] != "agent" or not inst.get("agent_version"):
-        raise HTTPException(409, f"{inst['id']} has no paired Fleet Control Agent")
+        raise HTTPException(409, f"{inst['id']} has no paired Fleet Studio Agent")
     profiles = sorted(store.live_state_for(inst["id"]) or {})
     if not profiles:
         raise HTTPException(409, f"import live profiles from {inst['id']} first")
@@ -1977,7 +1977,7 @@ class McpServerBody(BaseModel):
 @app.post("/api/v1/integrations/mcp", status_code=201)
 def add_mcp_server(body: McpServerBody, user: dict = Depends(require("instances.operate"))) -> dict:
     """Add an MCP server to one profile on one instance. Credentials are added on the instance: none pass through
-    Fleet Control (and none are stored in the job)."""
+    Fleet Studio (and none are stored in the job)."""
     inst = _require_instance(body.instance_id)
     if body.profile not in (store.live_state_for(inst["id"]) or {}):
         raise HTTPException(422, f"no profile {body.profile!r} in the last import from {inst['id']}")
@@ -2161,7 +2161,7 @@ def start_test_runs(body: TestRunStart, user: dict = Depends(require("tests.run"
     if inst["environment"] == "production":
         raise HTTPException(409, "tests run on lab or staging instances, never on production")
     if inst["mode"] != "agent" or not inst.get("agent_version"):
-        raise HTTPException(409, f"{inst['id']} has no paired Fleet Control Agent to run tests")
+        raise HTTPException(409, f"{inst['id']} has no paired Fleet Studio Agent to run tests")
     rows = _test_rows(bp)
     if body.test_ids is not None:
         unknown = sorted(set(body.test_ids) - {r["test"]["id"] for r in rows})
@@ -2461,7 +2461,7 @@ def get_architect_config(user: dict = Depends(require("blueprints.read"))) -> di
 def set_architect_config(body: ArchitectConfig, user: dict = Depends(require("blueprints.write"))) -> dict:
     inst = _require_instance(body.instance_id)
     if inst["mode"] != "agent" or not inst.get("agent_version"):
-        raise HTTPException(409, f"{body.instance_id} has no paired Fleet Control Agent; the architect is asked through it")
+        raise HTTPException(409, f"{body.instance_id} has no paired Fleet Studio Agent; the architect is asked through it")
     if body.profile not in (store.live_state_for(body.instance_id) or {}):
         raise HTTPException(422, f"no profile {body.profile!r} in the last import from {body.instance_id}; import live profiles first")
     store.set_settings({"architect": {"instance_id": body.instance_id, "profile": body.profile}}, user["email"])
@@ -2485,7 +2485,7 @@ def create_architect_asset(body: ArchitectAsset, user: dict = Depends(require("b
     version = store.next_blueprint_version(ARCHITECT_BLUEPRINT)
     bp = architect_blueprint(model, instance_id=body.instance_id, environment=inst["environment"], owner=user["email"], version=version)
     rec = store.save_blueprint(ARCHITECT_BLUEPRINT, version, dump_blueprint(bp), bp.model_dump(mode="json"), user["email"])
-    store.record(user["email"], "blueprint.saved", f"{ARCHITECT_BLUEPRINT} v{version}", f"Fleet Control architect for {body.instance_id}")
+    store.record(user["email"], "blueprint.saved", f"{ARCHITECT_BLUEPRINT} v{version}", f"Fleet Studio architect for {body.instance_id}")
     return {"name": rec["name"], "version": rec["version"], "status": rec["status"]}
 
 
@@ -2495,7 +2495,7 @@ def _require_architect() -> dict:
         raise HTTPException(409, "choose the architect profile first (Fleet Architect → Architect)")
     inst = store.get_instance(cfg["instance_id"])
     if not inst or inst["mode"] != "agent" or not inst.get("agent_version"):
-        raise HTTPException(409, f"the architect's instance {cfg['instance_id']} has no paired Fleet Control Agent")
+        raise HTTPException(409, f"the architect's instance {cfg['instance_id']} has no paired Fleet Studio Agent")
     return cfg
 
 
@@ -2787,7 +2787,7 @@ def edit_instance(instance_id: str, body: InstanceUpdate, user: dict = Depends(r
 
 @app.delete("/api/v1/instances/{instance_id}")
 def remove_instance(instance_id: str, user: dict = Depends(require("instances.connect"))) -> dict:
-    """Forget an instance: Fleet Control stops tracking it and its agent can no longer report.
+    """Forget an instance: Fleet Studio stops tracking it and its agent can no longer report.
 
     Nothing on the host changes — the Hermes profiles and the agent keep running there, so this is
     reversible by connecting it again (which issues a new pairing token). History is kept: the audit
@@ -3270,7 +3270,7 @@ def heartbeat(instance_id: str, body: HeartbeatBody, inst: str = Depends(agent_i
         raise HTTPException(403)
     store.heartbeat(instance_id, body.agent_version, body.report)
     _logins_due(instance_id, (body.report or {}).get("mcp_logins") or [])
-    _wf_escalate()  # heartbeats are Fleet Control's clock: an overdue workflow gate escalates within a beat
+    _wf_escalate()  # heartbeats are Fleet Studio's clock: an overdue workflow gate escalates within a beat
     _wf_kanban_sync(instance_id)  # and Kanban-run workflows are followed at the same pace
     return {"ok": True}
 

@@ -91,13 +91,13 @@ export interface CapabilityRow {
   tone: Tone;
 }
 
-/** "What Fleet Control can do here": derived from the agent's capability report, never assumed. */
+/** "What Fleet Studio can do here": derived from the agent's capability report, never assumed. */
 export function capabilityRows(inst: Instance): CapabilityRow[] {
   const r = inst.report ?? {};
   const caps = new Set(inst.capabilities ?? r.capabilities ?? []);
   const apiOk = r.surfaces?.api === "ok";
   if (inst.mode === "agent" && !inst.agent_version) {
-    return [{ label: "Fleet Control Agent", value: "Not paired yet", tone: "neutral" }];
+    return [{ label: "Fleet Studio Agent", value: "Not paired yet", tone: "neutral" }];
   }
   const agent = inst.mode === "agent";
   return [

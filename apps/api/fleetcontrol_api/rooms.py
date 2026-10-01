@@ -1,6 +1,6 @@
 """Decision Rooms (build document §4.1, §9 Slice 4): a governed question, its evidence, and the decision.
 
-A room asks one question about one case. Its evidence is what Fleet Control already holds — content files,
+A room asks one question about one case. Its evidence is what Fleet Studio already holds — content files,
 fleet outputs, assurance claims with their verdicts — plus notes a person adds; findings come from the agents
 that worked the case. People decide by choosing an option and writing a rationale; decisions are append-only,
 one per person, and a room that needs a second approver stays open until they have decided too. The room's
@@ -9,7 +9,7 @@ content zone decides who may see it, exactly as it does for files and outputs.
 Every piece of evidence and every finding says what it rests on (its ``basis``), so a person deciding can tell
 the source data from what an analytical system (SAS, say) computed, from an agent's reading of either, from an
 assumption, from a person's judgment. Only people make judgments. An analytical finding names the tool that
-computed it, and Fleet Control checks that tool against what the run actually called: one of the four verdicts,
+computed it, and Fleet Studio checks that tool against what the run actually called: one of the four verdicts,
 never a guess.
 
 Messaging delivers a room; it never records a decision (build document §8).
@@ -22,7 +22,7 @@ from typing import Any, Iterable, Optional
 
 EVIDENCE_KINDS = ("file", "output", "claim", "note")
 BASES = ("source", "analytical", "interpretation", "assumption", "judgment")
-# what each kind of item may rest on, and what it rests on when nobody says; a claim is Fleet Control's own
+# what each kind of item may rest on, and what it rests on when nobody says; a claim is Fleet Studio's own
 # verification of a run, so it carries its verdict instead of a basis
 _EVIDENCE_BASES = {"file": (("source", "analytical", "assumption"), "source"),
                    "output": (("analytical", "interpretation", "assumption"), "interpretation"),
@@ -137,7 +137,7 @@ def check_tool(tool: str, *, run: Optional[dict] = None, events: Optional[list[d
         return {"verdict": "No evidence", "detail": f"run {run.get('id')} never called {tool}"}
     if events:
         if any(e.get("kind") == "tool.pre" and e.get("decision") == "block" and tool_matches(tool, e.get("tool") or "") for e in events):
-            return {"verdict": "Policy blocked", "detail": f"a Fleet Control policy blocked {tool} in this session"}
+            return {"verdict": "Policy blocked", "detail": f"a Fleet Studio policy blocked {tool} in this session"}
         if any(e.get("kind") == "tool.post" and tool_matches(tool, e.get("tool") or "") for e in events):
             return {"verdict": "Evidence found", "detail": f"the session called {tool}"}
         return {"verdict": "No evidence", "detail": f"the session's recorded tool calls do not include {tool}"}

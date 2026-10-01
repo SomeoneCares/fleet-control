@@ -33,7 +33,7 @@ from typing import Any, Callable, Optional
 DASHBOARD_SESSION_HEADER = "X-Hermes-Session-Token"
 
 # Skills Hermes keeps enabled whatever the config says (``ESSENTIAL_SKILLS`` in agent/skill_utils.py;
-# the disabled list silently drops them). Fleet Control leaves them unmanaged: not in live state,
+# the disabled list silently drops them). Fleet Studio leaves them unmanaged: not in live state,
 # not synced, never drift. scripts/hermes_compat_check.py fails when upstream's set changes.
 HERMES_ESSENTIAL_SKILLS = frozenset({"hermes-agent"})
 
@@ -159,7 +159,7 @@ class HermesLocal:
                                         for s in hooks.get("subscriptions") or [] if isinstance(s, dict)]}}
 
     def webhook_create(self, route: str, platform: str, chat_id: Optional[str], secret: str, description: str) -> dict:
-        """A deliver_only route: whatever {text} Fleet Control's agent posts is delivered as-is through ``platform``
+        """A deliver_only route: whatever {text} Fleet Studio's agent posts is delivered as-is through ``platform``
         (its home channel, or ``chat_id``). No agent run, no model, nothing else read from the payload."""
         body = {"name": route, "description": description, "deliver": platform, "deliver_only": True,
                 "prompt": "{text}", "secret": secret}
@@ -201,7 +201,7 @@ class HermesLocal:
     # ------------------------------------------------------------------ Kanban (workflow runs)
 
     def kanban_state(self) -> dict:
-        """Can Fleet Control run workflows on this host's Kanban board: is the plugin API there, and will anything
+        """Can Fleet Studio run workflows on this host's Kanban board: is the plugin API there, and will anything
         dispatch its tasks (a live gateway, per its own record, with kanban.dispatch_in_gateway on)."""
         try:
             self.dashboard("kanban.boards")
@@ -225,8 +225,8 @@ class HermesLocal:
     def kanban_submit(self, board: str, tasks: list[dict]) -> dict:
         """Create the board if needed, then the tasks in order; a task's ``parents`` name earlier tasks by ``key``.
         Returns {key: task_id}. ``idempotency_key`` makes a retried submit reuse the task it already made."""
-        self.dashboard("kanban.board.create", {"slug": board, "name": "Fleet Control workflows",
-                                               "description": "Workflow runs submitted by Fleet Control"})
+        self.dashboard("kanban.board.create", {"slug": board, "name": "Fleet Studio workflows",
+                                               "description": "Workflow runs submitted by Fleet Studio"})
         ids: dict[str, str] = {}
         for t in tasks:
             body = {"title": t["title"][:200], "body": t["body"], "assignee": t["assignee"], "tenant": t.get("tenant"),
@@ -260,7 +260,7 @@ class HermesLocal:
         done = []
         for tid in task_ids:
             try:
-                self.dashboard("kanban.task.reclaim", {"reason": "workflow run cancelled in Fleet Control"}, board=board, task_id=tid)
+                self.dashboard("kanban.task.reclaim", {"reason": "workflow run cancelled in Fleet Studio"}, board=board, task_id=tid)
             except HermesLocalError:
                 pass  # not running: nothing to reclaim
             try:
@@ -334,7 +334,7 @@ class HermesLocal:
 
     def ensure_profile_api_key(self, profile: str) -> tuple[str, bool]:
         """(key, created): give a named profile an API_SERVER_KEY when it has none. The key stays on this
-        host (the profile's .env, mode 600); Fleet Control never sees it."""
+        host (the profile's .env, mode 600); Fleet Studio never sees it."""
         key = self.profile_api_key(profile)
         if key:
             return key, False
@@ -419,7 +419,7 @@ class HermesLocal:
     # ------------------------------------------------------------------ discovery
 
     def capability_report(self) -> dict:
-        """What Fleet Control can do on this host. Drives the Instances screen's honest panel."""
+        """What Fleet Studio can do on this host. Drives the Instances screen's honest panel."""
         report: dict[str, Any] = {"hermes_version": None, "surfaces": {}, "plugins": {}, "notes": []}
         try:
             st = self.dashboard("status")
@@ -469,7 +469,7 @@ class HermesLocal:
         report["versions"] = {"dashboard": report["hermes_version"], "installed": installed}
         if installed and report["hermes_version"] and installed != report["hermes_version"]:
             report["dashboard_stale"] = True
-            report["notes"].append(f"Fleet Control's dashboard runs Hermes {report['hermes_version']} but {installed} is installed: "
+            report["notes"].append(f"Fleet Studio's dashboard runs Hermes {report['hermes_version']} but {installed} is installed: "
                                    "restart it (systemctl --user restart fleetctl-dashboard); until then its answers may be out of date")
         return report
 

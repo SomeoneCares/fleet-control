@@ -275,7 +275,7 @@ function RegisterModal({ onClose, onDone }: { onClose: () => void; onDone: (text
 
   return (
     <Modal width={560} title="Register an MCP server" onClose={onClose}
-      subtitle="Added to one profile on one instance through its Fleet Control Agent."
+      subtitle="Added to one profile on one instance through its Fleet Studio Agent."
       footer={<>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="primary" type="submit" form="mcp-form" disabled={busy || !chosen || !useProfile || !name.trim() || !endpoint.trim()}>
@@ -283,7 +283,7 @@ function RegisterModal({ onClose, onDone }: { onClose: () => void; onDone: (text
         </Button>
       </>}>
       {usable.length === 0 ? (
-        <Banner tone="warning">No instance with a paired Fleet Control Agent and imported profiles yet.</Banner>
+        <Banner tone="warning">No instance with a paired Fleet Studio Agent and imported profiles yet.</Banner>
       ) : (
         <form id="mcp-form" onSubmit={(e) => void submit(e)}>
           <div className="grid grid-cols-2 gap-3">
@@ -323,7 +323,7 @@ function RegisterModal({ onClose, onDone }: { onClose: () => void; onDone: (text
             </select>
           </Field>
           <Banner tone="info" className="text-small">
-            Credentials are never sent through Fleet Control: add API keys or tokens on the instance itself. Nothing here is stored as a secret.
+            Credentials are never sent through Fleet Studio: add API keys or tokens on the instance itself. Nothing here is stored as a secret.
           </Banner>
           {error && <Banner tone="error">{error}</Banner>}
         </form>

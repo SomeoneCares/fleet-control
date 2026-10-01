@@ -59,7 +59,7 @@ class MissionSAS(_Strict):
 
 
 class MissionGate(_Strict):
-    role: str = Field(..., description="Fleet Control role that decides the gate.")
+    role: str = Field(..., description="Fleet Studio role that decides the gate.")
     who: str = Field(..., description="Who that is in the organisation, e.g. 'Credit committee member'.")
     decides: str
 

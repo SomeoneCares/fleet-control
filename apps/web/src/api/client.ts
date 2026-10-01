@@ -1,4 +1,4 @@
-// Typed client for the Fleet Control API (apps/api, /api/v1). Shapes mirror fleetcontrol_api/main.py.
+// Typed client for the Fleet Studio API (apps/api, /api/v1). Shapes mirror fleetcontrol_api/main.py.
 // In development Vite proxies /api to the API (see vite.config.ts), so paths stay relative.
 
 export type Environment = "lab" | "staging" | "production";
@@ -300,7 +300,7 @@ export interface RoomFinding {
   basis?: Basis;
   tool?: string | null;  // the tool an analytical finding says computed it
   session_id?: string | null;
-  tool_check?: { verdict: Verdict; detail: string } | null;  // Fleet Control's check of that tool against the run
+  tool_check?: { verdict: Verdict; detail: string } | null;  // Fleet Studio's check of that tool against the run
 }
 
 export interface RoomDecision {

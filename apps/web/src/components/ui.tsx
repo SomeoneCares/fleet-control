@@ -38,6 +38,21 @@ const ICONS = {
 
 export type IconName = keyof typeof ICONS;
 
+/** The Fleet Studio logo (mark, wordmark and "by Verto Wave"); the artwork lives in public/brand. */
+export function BrandLogo({ height = 32, className = "" }: { height?: number; className?: string }) {
+  return <img src="/brand/fleet-studio-logo.svg" alt="Fleet Studio by Verto Wave" style={{ height }} className={`block w-auto ${className}`} />;
+}
+
+/** The F mark alone, where the full logo does not fit. */
+export function BrandMark({ size = 20, className = "" }: { size?: number; className?: string }) {
+  return <img src="/brand/fleet-studio-mark.svg" alt="" aria-hidden="true" style={{ width: size, height: size }} className={`block shrink-0 ${className}`} />;
+}
+
+/** A workspace name worth showing: not empty and not the product's own name (old or new). */
+export function customWorkspaceName(name?: string | null): string | null {
+  return name && !["Fleet Studio", "Fleet Control"].includes(name.trim()) ? name.trim() : null;
+}
+
 export function Icon({ name, size = 16, className = "" }: { name: IconName; size?: number; className?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}

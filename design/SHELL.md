@@ -1,6 +1,6 @@
-# Fleet Control — shared shell & conventions (read fully before writing an artboard)
+# Fleet Studio — shared shell & conventions (read fully before writing an artboard)
 
-Product name on screens: **Fleet Control** with the descriptor "for Hermes Agent" (never "Hermes Fleet Control").
+Product name on screens: **Fleet Studio** with the descriptor "for Hermes Agent" (never "Hermes Fleet Studio").
 Persona: Dana Whitfield, Fleet Architect. Org: Meridian Bank (fictional). Fleet in focus: "AML Investigation" blueprint v3.
 Dates are September 2026. Model names: "Claude Sonnet", "GPT-5", "Llama 4 (local)". Never invent cryptographic/HSM/hallucination-proof claims.
 

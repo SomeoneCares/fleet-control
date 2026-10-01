@@ -1,7 +1,7 @@
 [project]
 name = "fleetcontrol-api"
 version = "0.1.0"
-description = "Fleet Control API (control plane)"
+description = "Fleet Studio API (control plane)"
 requires-python = ">=3.11"
 dependencies = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "sqlalchemy>=2.0", "fleetcontrol-blueprint"]
 

@@ -9,7 +9,7 @@ Method: full source review of the API server, dashboard backend, plugin/hook sys
 
 Everything the design assumes is technically reachable, but **not through the surface the research document assumed**. The stable `/v1` API cannot write configuration at all and says so (`/v1/capabilities` returns `admin_config_rw: false`). Every profile, SOUL, skill, toolset, MCP and messaging write lives on the **web dashboard backend** (`hermes_cli/web_routers/*`, port 9119), which is an internal SPA backend with no stability promise and, when exposed off loopback, no non-interactive machine credential. Real-time tool arguments and child-agent tool calls are deliberately dropped from the `/v1/runs` event stream.
 
-**So the answer is the one you proposed mid-spike: install our own client on the Hermes host.** Not as a workaround but as the architecture. Hermes is designed for exactly this: plugins run in-process with hooks that see every tool call and can block it; backend plugins can mount routes; outbound webhooks push signed lifecycle events; the CLI does everything the dashboard does. A small **Fleet Control Agent** installed beside Hermes gives Fleet Control a supported, local, credentialed path to everything, without exposing the dashboard to the network and without depending on an API Nous never promised.
+**So the answer is the one you proposed mid-spike: install our own client on the Hermes host.** Not as a workaround but as the architecture. Hermes is designed for exactly this: plugins run in-process with hooks that see every tool call and can block it; backend plugins can mount routes; outbound webhooks push signed lifecycle events; the CLI does everything the dashboard does. A small **Fleet Studio Agent** installed beside Hermes gives Fleet Studio a supported, local, credentialed path to everything, without exposing the dashboard to the network and without depending on an API Nous never promised.
 
 The rest of this document gives the evidence per question and then the resulting architecture.
 
@@ -38,20 +38,20 @@ SOUL `PUT /api/profiles/{name}/soul` (atomic write) · model `PUT /api/profiles/
 - SSE emits `tool.started {tool, preview}` and `tool.completed {tool, duration, error}` — no arguments, no result (`api_server_runs.py:41-45`). `subagent.start/complete` carry identity and totals (`child_session_id`, `delegation_id`, `parent_id`, tokens, cost) but child tool calls are dropped by design ("high-volume UI noise", `api-server.md:474-490`; code at `api_server_runs.py:160-166`).
 - After the fact, `GET /api/sessions/{id}/messages` returns full `tool_calls` with arguments and `role=tool` results, for parent and child sessions alike (`api_server.py:2712-2719, 2926-2956`). Child sessions are hidden from the list unless `?include_children=true`. `GET /v1/runs/{id}` gives `session_id`, which bridges run → transcript.
 - In-process hooks `pre_tool_call` / `post_tool_call` receive `args` and `result` in real time (`model_tools.py:660-683`); `pre_tool_call` can **block** a call. Plugin hooks, shell hooks and outbound webhooks all sit on this event bus.
-- **Outbound webhooks** (`hooks.outbound:` in config) POST HMAC-signed JSON for any hook event, including `post_tool_call` with `tool_input`, `subagent_stop`, `on_session_end`, with `profile`, `session_id`, `delivery_id` and timestamp (`hooks.md:1848-1935`). Notify-only, best-effort, one retry. This is a config-only way to get real-time tool evidence pushed to Fleet Control.
+- **Outbound webhooks** (`hooks.outbound:` in config) POST HMAC-signed JSON for any hook event, including `post_tool_call` with `tool_input`, `subagent_stop`, `on_session_end`, with `profile`, `session_id`, `delivery_id` and timestamp (`hooks.md:1848-1935`). Notify-only, best-effort, one retry. This is a config-only way to get real-time tool evidence pushed to Fleet Studio.
 - Kanban worker runs expose only status/claim/complete events, no tool-level data.
 
 ### S5 — Langfuse and OpenTelemetry
 **Verdict: Langfuse carries full tool evidence; OTLP carries none; trace lookup is deterministic at session granularity.**
 - `plugins/observability/langfuse/` records generations with usage/cost and **tool observations with full arguments and results**, subject to `HERMES_LANGFUSE_CAPTURE ∈ {metadata, sanitized (default), full}`. Subagents appear as spans in the parent trace with metadata only; each child's own calls are a separate root trace keyed by `child_session_id`.
-- Trace id is derived: `create_trace_id(seed=f"{session_id}::{task_id}")` where for `/v1/runs` `task_id == session_id or run_id`, so Fleet Control can compute it. It omits `turn_id`, so all turns of one session share one trace. Sampling < 1.0 can mean no trace.
+- Trace id is derived: `create_trace_id(seed=f"{session_id}::{task_id}")` where for `/v1/runs` `task_id == session_id or run_id`, so Fleet Studio can compute it. It omits `turn_id`, so all turns of one session share one trace. Sampling < 1.0 can mean no trace.
 - Enablement is global per instance (`plugins.enabled: [observability/langfuse]` plus `HERMES_LANGFUSE_*` env), not per profile in config, though env can be profile-isolated.
 - The OTLP exporter (`agent/monitoring/otlp_exporter.py`) exports gateway health and cron events only; content is explicitly out of scope. Do not plan tool evidence on OTLP.
 
 ### S6 — Messaging gateways
 **Verdict: Slack, Teams, email and webhooks exist and are configurable over the dashboard API; there is no outbound "send" endpoint, but a supported LLM-free delivery path exists.**
 - ~30 platforms; Slack, Teams and Email are plugins with env-key schemas (`plugins/platforms/{slack,teams,email}/plugin.yaml`). `GET/PUT /api/messaging/platforms/{id}` and `/test` write `.env` and `platforms.<id>.enabled` per profile (`web_routers/messaging.py:771-906`), secrets redacted on read.
-- No `POST /api/messaging/send`. The intended notify path is an inbound webhook route with `deliver_only: true` (`gateway/platforms/webhook.py:453-473`, documented as "zero LLM tokens, sub-second delivery"): Fleet Control POSTs an HMAC-signed payload to `:8644/webhooks/<route>` and Hermes delivers the rendered template to Slack/Teams/email. Routes are creatable over HTTP (`POST /api/webhooks`) or CLI (`hermes webhook subscribe --deliver slack --deliver-only`). Alternatives: a cron job with `deliver:` and `no_agent: true`; or an agent run using the `send_message` tool (costs tokens, non-deterministic).
+- No `POST /api/messaging/send`. The intended notify path is an inbound webhook route with `deliver_only: true` (`gateway/platforms/webhook.py:453-473`, documented as "zero LLM tokens, sub-second delivery"): Fleet Studio POSTs an HMAC-signed payload to `:8644/webhooks/<route>` and Hermes delivers the rendered template to Slack/Teams/email. Routes are creatable over HTTP (`POST /api/webhooks`) or CLI (`hermes webhook subscribe --deliver slack --deliver-only`). Alternatives: a cron job with `deliver:` and `no_agent: true`; or an agent run using the `send_message` tool (costs tokens, non-deterministic).
 - Links: Slack (mrkdwn, unfurl controls) and Teams (`textFormat: markdown`) render links; **email is plain text only** and always sends as a `Re:` reply — acceptable for v1, not pretty.
 
 ### S7 — Reading live config for drift
@@ -68,29 +68,29 @@ SOUL `PUT /api/profiles/{name}/soul` (atomic write) · model `PUT /api/profiles/
 
 ---
 
-## 2. The architecture this forces: the Fleet Control Agent
+## 2. The architecture this forces: the Fleet Studio Agent
 
 Install a small, signed component on every Hermes host. It has three parts, each mapping onto a Hermes extension point that is documented and supported.
 
 ### 2.1 Hermes plugin `fleetcontrol` (in-process)
 - Registers plugin hooks: `pre_tool_call` (policy enforcement — can **block**, giving "Policy blocked" real teeth), `post_tool_call` (tool name, args, result → evidence), `subagent_start/stop`, `on_session_end`, `pre_approval_request`, `post_approval_response`.
-- Streams those events to the local daemon (Unix socket) which forwards them to Fleet Control. This replaces the lossy `/v1/runs` stream for managed profiles and gives real-time child-agent evidence, which no HTTP surface provides.
-- Optionally mounts a dashboard backend router at `/api/plugins/fleetcontrol/*` for typed, versioned read/write of the fields Fleet Control manages, wrapping `hermes_cli.profiles`, `load_config`/`save_config` and SOUL I/O. This is our contract on top of Hermes internals, so upstream churn is absorbed in one place we control.
+- Streams those events to the local daemon (Unix socket) which forwards them to Fleet Studio. This replaces the lossy `/v1/runs` stream for managed profiles and gives real-time child-agent evidence, which no HTTP surface provides.
+- Optionally mounts a dashboard backend router at `/api/plugins/fleetcontrol/*` for typed, versioned read/write of the fields Fleet Studio manages, wrapping `hermes_cli.profiles`, `load_config`/`save_config` and SOUL I/O. This is our contract on top of Hermes internals, so upstream churn is absorbed in one place we control.
 
 ### 2.2 Host daemon `fleetctl-agent` (systemd/launchd service)
-- Holds an **outbound** mTLS WebSocket to Fleet Control. Nothing on the host is exposed inbound; the dashboard stays on loopback; no dashboard auth problem.
+- Holds an **outbound** mTLS WebSocket to Fleet Studio. Nothing on the host is exposed inbound; the dashboard stays on loopback; no dashboard auth problem.
 - Executes managed operations: profile create/clone/delete via the `hermes` CLI, field writes via the loopback dashboard API using a session token the daemon sets itself (`HERMES_DASHBOARD_SESSION_TOKEN`) or via the plugin router, config snapshots and restores (tar of the profile dirs), drift scans (reads the same routes as S7, plus file hashes of `SOUL.md` and `config.yaml`), test runs via `/v1/runs`, and gateway lifecycle (`hermes gateway start|stop|restart`).
 - Reports the capability matrix on connect: Hermes version from `/health`, dashboard reachability, which plugins are enabled (Langfuse), which gateways are configured.
 
 ### 2.3 Zero-install mode ("connect existing", degraded)
-For a host where the customer will not install anything yet: Fleet Control uses `/v1` (discovery, runs, sessions) plus, if the operator adds two config entries, `hooks.outbound` pushing `post_tool_call`/`subagent_stop`/`on_session_end` to Fleet Control and the Langfuse plugin for after-the-fact evidence. Reads work; **writes are unavailable**; assurance is "Not verifiable" for anything the outbound hook did not cover. The Instances screen already has the right shape for this: the "What Fleet Control can do here" panel becomes *Agent installed* vs *API only*.
+For a host where the customer will not install anything yet: Fleet Studio uses `/v1` (discovery, runs, sessions) plus, if the operator adds two config entries, `hooks.outbound` pushing `post_tool_call`/`subagent_stop`/`on_session_end` to Fleet Studio and the Langfuse plugin for after-the-fact evidence. Reads work; **writes are unavailable**; assurance is "Not verifiable" for anything the outbound hook did not cover. The Instances screen already has the right shape for this: the "What Fleet Studio can do here" panel becomes *Agent installed* vs *API only*.
 
 ### 2.4 What this changes in the design and the plan
-- Instances / connect drawer: two paths — "Install the Fleet Control Agent" (one command, prints a pairing code) and "Connect via API only (read-only)". Show agent version and last heartbeat per instance.
+- Instances / connect drawer: two paths — "Install the Fleet Studio Agent" (one command, prints a pairing code) and "Connect via API only (read-only)". Show agent version and last heartbeat per instance.
 - Plan screen: change rows show method as *Agent* / *API (read-only)* instead of *Dashboard API* / *CLI*. Internally the agent still chooses CLI vs loopback dashboard vs plugin router, but that is no longer a user-facing concept.
 - Assurance: evidence source per verdict is *Agent hook* (real time, full), *Session transcript* (after the fact, full), *Langfuse trace* (after the fact, full or sanitized), *Outbound webhook* (real time, inputs only), or none → "Not verifiable".
 - Policy: "Policy blocked" is enforced by the plugin's `pre_tool_call` for managed profiles, not merely detected afterwards. This is a stronger product claim than the original design made, and it is true.
-- Messaging: delivery rules are implemented as `deliver_only` webhook routes created by the agent; Fleet Control posts signed payloads to the instance's webhook port. Email links stay plain text in v1.
+- Messaging: delivery rules are implemented as `deliver_only` webhook routes created by the agent; Fleet Studio posts signed payloads to the instance's webhook port. Email links stay plain text in v1.
 - Correct every "v2.4" to real Hermes versions (0.21.x) in the docs and the screens.
 - Slice 1 grows by the agent (plugin + daemon + installer + pairing) and shrinks by the adapter tiers it no longer needs. Net effect roughly +2 weeks; risk goes down substantially because the write path no longer depends on an unstable HTTP surface or on exposing the dashboard.
 

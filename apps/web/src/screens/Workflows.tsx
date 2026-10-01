@@ -173,7 +173,7 @@ function RunModal({ workflow, onClose }: { workflow: Workflow; onClose: () => vo
   }
   return (
     <Modal width={560} title={`Run ${titleCase(workflow.id)}`} onClose={onClose}
-      subtitle="Each agent step runs on the instance through its Fleet Control Agent; the run stops at every human gate until someone decides it here."
+      subtitle="Each agent step runs on the instance through its Fleet Studio Agent; the run stops at every human gate until someone decides it here."
       footer={<>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="primary" type="submit" form="wf-run" disabled={busy || !instance || input.trim().length < 3}>{busy && <Spinner />}Start run</Button>

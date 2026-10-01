@@ -2,7 +2,7 @@
 
 A zone is the unit of access. People reach a zone through their role; agents reach it because the blueprint
 gives them that zone (``content_zones``), and an agent on a redacted-only model sees redacted summaries only —
-the instance redacts before the agent sees anything, so Fleet Control only records the intent. Classification
+the instance redacts before the agent sees anything, so Fleet Studio only records the intent. Classification
 (internal, confidential, restricted) travels with each file and with everything produced from it; it is shown
 and recorded, while the zone is what grants or denies the read.
 """

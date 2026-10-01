@@ -1,11 +1,11 @@
 #!/usr/bin/env sh
-# Fleet Control Agent installer (Linux/macOS). Run on the Hermes host as the user that runs Hermes.
+# Fleet Studio Agent installer (Linux/macOS). Run on the Hermes host as the user that runs Hermes.
 #   FLEETCONTROL_URL=https://fleetcontrol.example FLEETCONTROL_INSTANCE_ID=hermes-prod-eu-01 \
 #   FLEETCONTROL_PAIRING_TOKEN=pair_... sh install-agent.sh
 # What it does: installs fleetctl-agent into its own venv, copies the fleetcontrol plugin into
 # ~/.hermes/plugins/fleetcontrol (not enabled yet; see the last line), starts a Hermes dashboard of its
 # own on 127.0.0.1:$FLEETCONTROL_DASHBOARD_PORT (default 9129) with a session token only the daemon
-# knows, pairs with Fleet Control, and installs systemd (Linux) or launchd (macOS) services.
+# knows, pairs with Fleet Studio, and installs systemd (Linux) or launchd (macOS) services.
 # Nothing is exposed on the network. A dashboard you already run, and ~/.hermes/.env, are not touched.
 # Re-runnable: the token and the pairing are kept.
 set -eu
@@ -72,7 +72,7 @@ if [ "$(uname)" = "Linux" ] && command -v systemctl >/dev/null 2>&1; then
   mkdir -p "$UNITS"
   cat > "$UNITS/fleetctl-dashboard.service" <<UNIT
 [Unit]
-Description=Hermes dashboard on loopback for the Fleet Control Agent
+Description=Hermes dashboard on loopback for the Fleet Studio Agent
 [Service]
 EnvironmentFile=$STATE/dashboard.env
 ExecStart=$HB dashboard --host 127.0.0.1 --port $DPORT --no-open --skip-build
@@ -83,7 +83,7 @@ WantedBy=default.target
 UNIT
   cat > "$UNITS/fleetctl-agent.service" <<UNIT
 [Unit]
-Description=Fleet Control Agent for Hermes
+Description=Fleet Studio Agent for Hermes
 After=network-online.target fleetctl-dashboard.service
 Wants=fleetctl-dashboard.service
 [Service]

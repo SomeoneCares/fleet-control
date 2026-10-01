@@ -1,6 +1,6 @@
 """Test Lab and Assurance (build document §6 and §9, Slice 3).
 
-A test runs its scenario on the target agent's profile on a lab or staging instance. The Fleet Control Agent
+A test runs its scenario on the target agent's profile on a lab or staging instance. The Fleet Studio Agent
 returns the run's output, usage and duration, and every tool call from the Hermes session transcript. Each
 check is judged against that evidence: pass, fail, or not verifiable when the evidence is missing. The
 checks also become claims with one of the four assurance verdicts: Evidence found, No evidence, Not
@@ -82,7 +82,7 @@ def evaluate(test: dict, agent: Optional[dict], result: dict) -> dict:
     calls = result.get("tool_calls")
     evidence = calls is not None
     names = [c.get("name", "") for c in calls or []]
-    blocked = list(result.get("blocked_tools") or [])  # tool calls the Fleet Control plugin blocked (policy)
+    blocked = list(result.get("blocked_tools") or [])  # tool calls the Fleet Studio plugin blocked (policy)
     missing = "no session transcript for this run" + (f" ({result['evidence_error']})" if result.get("evidence_error") else "")
     output = result.get("output") or ""
 
@@ -96,7 +96,7 @@ def evaluate(test: dict, agent: Optional[dict], result: dict) -> dict:
         else:
             outcome, detail = "fail", f"not among the {len(names)} tool call(s) of the run"
         if was_blocked:
-            outcome, detail = "fail", "the call was blocked by a Fleet Control policy"
+            outcome, detail = "fail", "the call was blocked by a Fleet Studio policy"
         _check(checks, claims, cid=f"required:{tool}", kind="required_tool", subject=tool, outcome=outcome, detail=detail,
                claim=f"Called {tool}", verdict="Policy blocked" if was_blocked else None)
 
@@ -104,7 +104,7 @@ def evaluate(test: dict, agent: Optional[dict], result: dict) -> dict:
         hits = [n for n in names if tool_matches(tool, n)]
         was_blocked = any(tool_matches(tool, b) for b in blocked)
         if was_blocked:
-            outcome, detail = "pass", "attempted, and blocked by a Fleet Control policy"
+            outcome, detail = "pass", "attempted, and blocked by a Fleet Studio policy"
         elif not evidence:
             outcome, detail = "not_verifiable", missing
         elif hits:

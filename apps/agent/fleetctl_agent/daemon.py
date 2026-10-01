@@ -1,15 +1,15 @@
-"""fleetctl-agent: the host daemon of the Fleet Control Agent.
+"""fleetctl-agent: the host daemon of the Fleet Studio Agent.
 
 Responsibilities (build document §5.2):
 - accept evidence events from the in-process Hermes plugin on a local socket, buffer them,
-  and relay them to Fleet Control;
-- hold ONE outbound connection to Fleet Control (WebSocket, mTLS in production) and execute
+  and relay them to Fleet Studio;
+- hold ONE outbound connection to Fleet Studio (WebSocket, mTLS in production) and execute
   the jobs it receives: capability report, import, plan-apply for managed fields, drift scan,
   policy push, snapshot, test run;
 - never expose an inbound network port.
 
 This is the Slice 1 skeleton: the socket server, job loop and job handlers are real; the
-transport to Fleet Control is a thin interface with an HTTP long-poll implementation so it
+transport to Fleet Studio is a thin interface with an HTTP long-poll implementation so it
 can run against the API scaffold today and be swapped for WebSocket without touching jobs.
 """
 
@@ -382,7 +382,7 @@ class Jobs:
             out[profile] = servers
         return {"servers": out, "at": time.time()}
 
-    # ---- messaging: Fleet Control's routes are deliver_only webhooks whose secrets never leave this host
+    # ---- messaging: Fleet Studio's routes are deliver_only webhooks whose secrets never leave this host
 
     def _route_secrets_path(self) -> str:
         return os.path.join(self.cfg.state_dir, "route-secrets.json")
@@ -404,7 +404,7 @@ class Jobs:
         os.replace(tmp, path)
 
     def messaging_discover(self, p: dict) -> dict:
-        """The messaging platforms and the webhook platform's state; which Fleet Control routes this agent can
+        """The messaging platforms and the webhook platform's state; which Fleet Studio routes this agent can
         sign for (it holds their secrets)."""
         state = self.hermes.messaging_state()
         state["gateway"] = self.hermes.gateway_runtime()
@@ -420,7 +420,7 @@ class Jobs:
 
         route, action = p["route"], p["action"]
         if not route.startswith("fc-"):
-            raise ValueError("Fleet Control only manages its own routes (fc-…)")
+            raise ValueError("Fleet Studio only manages its own routes (fc-…)")
         held = self._route_secrets()
         existing = {r.get("name") for r in self.hermes.messaging_state()["webhooks"]["routes"]}
         if route in existing:
@@ -431,7 +431,7 @@ class Jobs:
             return {"route": route, "removed": route in existing}
         secret = _secrets.token_urlsafe(32)
         summary = self.hermes.webhook_create(route, p["platform"], p.get("chat_id"), secret,
-                                             f"Fleet Control channel {p.get('channel') or route} (deliver only)")
+                                             f"Fleet Studio channel {p.get('channel') or route} (deliver only)")
         held[route] = secret
         self._save_route_secrets(held)
         return {"route": route, "url": summary.get("url"), "created": True}
@@ -482,7 +482,7 @@ class Jobs:
 
     def mcp_write(self, p: dict) -> dict:
         """params: {profile, action: add|remove|enable|disable, server?, config?}. Credentials are never sent
-        through Fleet Control: a server is added by url or command only, and secrets stay on this host."""
+        through Fleet Studio: a server is added by url or command only, and secrets stay on this host."""
         profile, action = p["profile"], p["action"]
         if action == "add":
             config = dict(p["config"])
@@ -498,7 +498,7 @@ class Jobs:
 
     def _ensure_key(self, profile: Optional[str]) -> list[str]:
         """A named profile needs its own API_SERVER_KEY for /p/<profile>/ runs; create one on this host when it
-        has none (the profile was chosen for Fleet Control to run), and say so."""
+        has none (the profile was chosen for Fleet Studio to run), and say so."""
         if profile not in (None, "", "default") and not self.hermes.profile_api_key(profile):
             self.hermes.ensure_profile_api_key(profile)
             return [f"gave profile {profile} its own API_SERVER_KEY (in its .env on this host)"]
@@ -506,8 +506,8 @@ class Jobs:
 
     def run_test(self, p: dict) -> dict:
         """params: {profile, scenario, timeout?}: run a test scenario on a profile (Test Lab) and collect the evidence
-        Fleet Control judges it by: the run's output, usage and duration, and every tool call in its session
-        transcript. ``ok`` means the test ran; whether it passed is Fleet Control's call."""
+        Fleet Studio judges it by: the run's output, usage and duration, and every tool call in its session
+        transcript. ``ok`` means the test ran; whether it passed is Fleet Studio's call."""
         profile = p.get("profile")
         notes = self._ensure_key(profile)
         started = time.monotonic()
@@ -528,7 +528,7 @@ class Jobs:
     def hermes_run(self, p: dict) -> dict:
         """params: {profile, input, instructions?, timeout?, transcript?}: one Hermes /v1 run, waited for (Fleet
         Architect, Ask the fleet). With ``transcript``, the run's tool calls come back too, from its session
-        transcript, so Fleet Control can tell whether the agent used anything besides what it was given."""
+        transcript, so Fleet Studio can tell whether the agent used anything besides what it was given."""
         profile = p.get("profile")
         notes = self._ensure_key(profile)
         out = self.hermes.run_agent(profile, p["input"], p.get("instructions"), float(p.get("timeout", 600)))
@@ -571,9 +571,9 @@ class AgentDaemon:
                     token = self.cp.pair(self.hermes.capability_report())
                     break
                 except urllib.error.HTTPError:
-                    raise  # Fleet Control answered and refused the token; retrying cannot help
+                    raise  # Fleet Studio answered and refused the token; retrying cannot help
                 except OSError as exc:  # URLError included: not reachable yet, keep the token and wait
-                    logger.warning("Fleet Control unreachable at %s (%s); retrying pairing in %ds",
+                    logger.warning("Fleet Studio unreachable at %s (%s); retrying pairing in %ds",
                                    self.cfg.control_plane_url, getattr(exc, "reason", exc), delay)
                     time.sleep(delay)
                     delay = min(delay * 2, 60)
@@ -581,7 +581,7 @@ class AgentDaemon:
                 f.write(token)
             os.chmod(token_file, 0o600)
             self.cfg.agent_token = token
-            logger.info("paired with Fleet Control as %s", self.cfg.instance_id)
+            logger.info("paired with Fleet Studio as %s", self.cfg.instance_id)
 
     def _event_relay(self) -> None:
         while True:

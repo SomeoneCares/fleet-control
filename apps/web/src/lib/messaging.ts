@@ -40,7 +40,7 @@ export function failuresToday(channel: Pick<Channel, "id">, deliveries: Delivery
   return deliveries.filter((d) => d.channel === channel.id && d.status === "failed" && d.at >= midnight.getTime() / 1000).length;
 }
 
-/** "4 of 5 enabled", and how many rules name a channel Fleet Control does not have. */
+/** "4 of 5 enabled", and how many rules name a channel Fleet Studio does not have. */
 export function ruleSummary(rules: DeliveryRuleRow[]): { enabled: number; total: number; orphaned: number } {
   return { enabled: rules.filter((r) => r.enabled).length, total: rules.length, orphaned: rules.filter((r) => !r.channel).length };
 }

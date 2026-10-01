@@ -2,17 +2,17 @@
 
 Egypt's FIU, the Egyptian Money Laundering and Terrorist Financing Combating Unit (EMLCU), has required
 suspicious transaction reports through **goAML** since 2022: UNODC's reporting system, where each report is an XML
-file that must validate against the FIU's own XSD. Fleet Control prepares those files. **It never files one.**
+file that must validate against the FIU's own XSD. Fleet Studio prepares those files. **It never files one.**
 
-## What Fleet Control does, and what it leaves to people
+## What Fleet Studio does, and what it leaves to people
 
 | Step | Who |
 |---|---|
 | Investigate the case, draft the report as `fleetcontrol.goaml-draft/v1` JSON | agents (e.g. `sar-drafter`), as a fleet output in the case's zone |
 | Put the draft before people as evidence, decide whether to file | a Decision Room whose filing option was named when it opened: Admins and Approvers decide, each with a rationale |
-| Build the goAML XML from the draft, check it against the FIU's XSD | Fleet Control (`goaml.py`), on request of an Admin or Approver, only once every decider chose the filing option |
+| Build the goAML XML from the draft, check it against the FIU's XSD | Fleet Studio (`goaml.py`), on request of an Admin or Approver, only once every decider chose the filing option |
 | Upload the XML in goAML Web | a person (the MLRO) |
-| Record the FIU's reference | the same person, in Fleet Control; audited |
+| Record the FIU's reference | the same person, in Fleet Studio; audited |
 
 ## A decision is not an authorization until it is the right one
 
@@ -25,7 +25,7 @@ from it. People set the filing option when they open a room; a workflow's room g
 deciders and the authorization it rests on.
 
 The reporting person in the XML is the person who prepares the report (their name, their account's email). No goAML
-credential passes through Fleet Control, and the only way to mark a report filed is to type the FIU's reference.
+credential passes through Fleet Studio, and the only way to mark a report filed is to type the FIU's reference.
 
 ## The FIU's schema decides
 

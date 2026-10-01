@@ -48,14 +48,14 @@ class Requires(_Strict):
     """What a Hermes instance must offer for this blueprint to be applicable.
 
     ``hermes`` is a PEP 440-style specifier against the real Hermes version (0.21.x line);
-    ``capabilities`` are Fleet Control capability ids reported by the agent.
+    ``capabilities`` are Fleet Studio capability ids reported by the agent.
     """
 
     hermes: str = Field(">=0.21", description="Version specifier for the Hermes package version.")
     capabilities: list[str] = Field(default_factory=lambda: ["runs", "sessions", "profiles.read"])
     agent: Literal["required", "optional"] = Field(
         "required",
-        description="Whether the Fleet Control Agent must be installed on target instances. "
+        description="Whether the Fleet Studio Agent must be installed on target instances. "
         "'optional' allows API-only (read-only) targets.",
     )
 
@@ -273,7 +273,7 @@ class DeliveryRule(_Strict):
 
 
 class Target(_Strict):
-    instance: str = Field(..., description="Instance id as registered in Fleet Control.")
+    instance: str = Field(..., description="Instance id as registered in Fleet Studio.")
     environment: Environment
     requires_approvals: int = Field(0, ge=0, description="Approvals needed before apply; production default is 2.")
 
@@ -375,7 +375,7 @@ class Blueprint(_Strict):
         raise KeyError(agent_id)
 
     def managed_fields(self) -> dict[str, dict[str, Any]]:
-        """The per-profile desired state the Fleet Control Agent reconciles and watches for drift.
+        """The per-profile desired state the Fleet Studio Agent reconciles and watches for drift.
 
         Keys are Hermes profile names. Only fields the agent can read AND write on a Hermes
         instance are included; anything else is informational and never produces a plan row.

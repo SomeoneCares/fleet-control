@@ -84,7 +84,7 @@ export function ImportBlueprintModal({ instanceId, onClose }: { instanceId: stri
         </div>
       )}
       <p className="text-small text-text-secondary mt-2 mb-0">
-        Profiles left out stay unmanaged: Fleet Control lists them on plans and never changes them.
+        Profiles left out stay unmanaged: Fleet Studio lists them on plans and never changes them.
       </p>
       {failure && <Banner tone="error" className="mt-4">{failure}</Banner>}
     </Modal>

@@ -1,4 +1,4 @@
-"""Fleet Control store: SQLAlchemy Core over PostgreSQL (deployments) or SQLite (development, tests).
+"""Fleet Studio store: SQLAlchemy Core over PostgreSQL (deployments) or SQLite (development, tests).
 
 Each table keeps the columns queries filter on plus a JSON document (JSONB on PostgreSQL) with the
 rest, so the records the API returns keep the shapes of the Slice 1 scaffold (build document §4.1).
@@ -218,7 +218,7 @@ CHANNELS = Table(  # Messaging: platforms on instances that fleet events are del
     Column("created_at", Float, nullable=False),
     Column("doc", Doc, nullable=False),
 )
-DELIVERIES = Table(  # Messaging: every message Fleet Control sent or tried to send, and how it went
+DELIVERIES = Table(  # Messaging: every message Fleet Studio sent or tried to send, and how it went
     "deliveries", META,
     Column("id", String(32), primary_key=True),
     Column("channel", String(64), nullable=False, index=True),

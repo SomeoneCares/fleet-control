@@ -1,4 +1,4 @@
-# Fleet Control for Hermes Agent
+# Fleet Studio for Hermes Agent
 
 Independent control plane around [Hermes Agent](https://github.com/NousResearch/hermes-agent): design fleets as
 versioned blueprints, plan and apply them through approvals, test them, verify what agents actually did, detect drift,
@@ -14,7 +14,7 @@ matters (the lab instance `hermesbo-lab-01`, Hermes 0.21.5):
 
 | Slice | What works |
 |---|---|
-| 1 | Sign-in and five roles, instances and the Fleet Control Agent, blueprints, plan → approve → apply, drift and its four resolutions, Fleet Designer, Agent Studio, audit log, blueprints from what an instance runs |
+| 1 | Sign-in and five roles, instances and the Fleet Studio Agent, blueprints, plan → approve → apply, drift and its four resolutions, Fleet Designer, Agent Studio, audit log, blueprints from what an instance runs |
 | 2 | Fleet Architect: a mission to an architect profile, a validated proposal, accepted agents saved as a draft |
 | 3 | Test Lab (agent and workflow tests), Assurance (four verdicts from the session transcript), Integrations (MCP servers, their tools, who may use them, login expiry), Settings → Observability |
 | 4 | Workspace, Decision Rooms, Ask the fleet, content zones, fleet outputs, Messaging, personal notifications, the Access inspector |
@@ -55,7 +55,7 @@ scripts/    test.sh · hermes_compat_check.py · install-agent.sh · dev_api.py 
 1. **Blueprint** (`packages/blueprint_schema`) is the desired state: agents, policies, workflows, tests, delivery
    rules. `Blueprint.managed_fields()` is what the agent reconciles per profile (description, model, SOUL, skills,
    toolsets, MCP servers).
-2. **Fleet Control Agent** = plugin + daemon on the Hermes host. The daemon pairs once, then long-polls Fleet Control
+2. **Fleet Studio Agent** = plugin + daemon on the Hermes host. The daemon pairs once, then long-polls Fleet Studio
    for jobs (import, apply, drift scan, policy push, test and workflow runs, MCP discovery, Kanban, message delivery)
    and carries them out through the `hermes` CLI and a loopback dashboard only it can use. It reports its capabilities,
    Kanban state and MCP login expiry with every heartbeat. Nothing inbound is exposed; no credential leaves the host.
@@ -92,4 +92,4 @@ created on start. On a first real start set `FLEETCONTROL_ADMIN_EMAIL` (there is
 To connect a Hermes host: Instances → Connect → run the install command `scripts/install-agent.sh` on the host → the
 instance reports in → import what runs there, or plan a blueprint onto it.
 
-Design canvas: the "Fleet Control Redesign" artifact on claude.ai. Regenerate a screen with `cd design && python3 build.py <Name> <nav>`.
+Design canvas: the "Fleet Studio Redesign" artifact on claude.ai. Regenerate a screen with `cd design && python3 build.py <Name> <nav>`.

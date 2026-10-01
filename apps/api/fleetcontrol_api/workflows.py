@@ -388,7 +388,7 @@ def instructions(run: dict, member: dict, step: dict) -> str:
     """The run's instructions for one agent step."""
     artifact = member.get("artifact")
     return (f"You are step {step['index'] + 1} of {len(run['steps'])} of the workflow {run['workflow_id']} "
-            f"({run['blueprint']} v{run['version']}), run by Fleet Control. A later step or a person reads what you produce "
+            f"({run['blueprint']} v{run['version']}), run by Fleet Studio. A later step or a person reads what you produce "
             "before anything is decided.\n"
             + (f"Reply with the {artifact} itself, complete, as your whole answer." if artifact else "Reply with your result as your whole answer.")
             + "\nUse only what you are given and what your tools return; say plainly what you could not establish.")

@@ -1,6 +1,6 @@
 # Spike Addendum — Hermes Agent 0.21.2 (source read + partial local run)
 
-> **Historical record (11 September 2026).** It explains why Fleet Control writes to Hermes through an agent on the
+> **Historical record (11 September 2026).** The product it calls Fleet Control is now **Fleet Studio**. It explains why Fleet Control writes to Hermes through an agent on the
 > host. Hermes has since moved to 0.21.5; what the agent depends on today is pinned in
 > `apps/agent/fleetctl_agent/hermes_local.py` and checked on every release by `scripts/hermes_compat_check.py`, and
 > real-host captures are in `docs/dashboard-capture-<version>*.json`.

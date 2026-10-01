@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { api } from "../api/client";
 import { useAuth } from "../lib/auth";
 import { errorText } from "../lib/hooks";
-import { Banner, Button, Field, INPUT, Icon, Spinner } from "../components/ui";
+import { Banner, Button, Field, INPUT, Spinner } from "../components/ui";
 
 export function SignInScreen() {
   const { setMe } = useAuth();
@@ -26,13 +26,7 @@ export function SignInScreen() {
   return (
     <div className="min-h-screen bg-container-low flex items-center justify-center px-4">
       <form onSubmit={(e) => void submit(e)} className="w-[420px] max-w-full bg-white border border-hairline rounded-card p-9 flex flex-col gap-6">
-        <div className="flex items-center gap-2.5">
-          <span className="size-7 rounded-control bg-primary text-on-primary flex items-center justify-center"><Icon name="logo" /></span>
-          <div className="leading-[14px]">
-            <div className="text-[14px] font-bold">Fleet Control</div>
-            <div className="text-[11px] text-text-secondary">for Hermes Agent</div>
-          </div>
-        </div>
+        <img src="/fleet-studio-logo.svg" alt="Fleet Studio by Verto Wave" className="w-[260px] h-auto self-start -ml-2" />
         <h1 className="text-title m-0">Sign in</h1>
         <Button variant="primary" icon="lock" disabled title="Single sign-on (OIDC) arrives after local accounts">Continue with corporate SSO</Button>
         <div className="flex items-center gap-3 text-small text-outline">
@@ -48,7 +42,7 @@ export function SignInScreen() {
           {error && <Banner tone="error" className="mb-4">{error}</Banner>}
           <Button type="submit" className="w-full" disabled={busy || !email || !password}>{busy && <Spinner />}Sign in</Button>
         </div>
-        <div className="text-small text-text-secondary text-center">Fleet Control for Hermes Agent</div>
+        <div className="text-small text-text-secondary text-center">Fleet Studio · the control plane for Hermes Agent fleets</div>
       </form>
     </div>
   );

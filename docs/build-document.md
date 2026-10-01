@@ -1,8 +1,8 @@
-# Fleet Control for Hermes Agent — Build Document v1
+# Fleet Studio for Hermes Agent — Build Document v1
 
 Date: 11 September 2026
 Status: Working draft for the first engineering team · revised after the Hermes 0.21.2 spike
-Inputs reconciled: *Hermes Fleet Studio — Deep Research Validation*, *Hermes Fleet Control Platform — Components & Detailed Feature Plan*, the 18 Stitch screens, and the 23-screen consolidated redesign canvas ("Fleet Control Redesign").
+Inputs reconciled: *Hermes Fleet Studio — Deep Research Validation*, *Hermes Fleet Studio Platform — Components & Detailed Feature Plan*, the 18 Stitch screens, and the 23-screen consolidated redesign canvas ("Fleet Studio Redesign").
 
 ---
 
@@ -17,8 +17,8 @@ departed from the plan, is recorded here. `CLAUDE.md` has the detail per feature
 
 | Plan | Built | Why |
 |---|---|---|
-| Workers on arq or Celery with Redis (§10) | Jobs live in the database; the Fleet Control Agent long-polls for them; agent heartbeats are the clock for escalations and Kanban reads | One fewer moving part; jobs survive restarts and two API processes cannot double-deliver (conditional updates) |
-| Fleet Control posts messages to channels (§8) | The agent posts to a `deliver_only` Hermes webhook route on loopback, signed with a secret that stays on the host | No inbound port and no channel secret in Fleet Control |
+| Workers on arq or Celery with Redis (§10) | Jobs live in the database; the Fleet Studio Agent long-polls for them; agent heartbeats are the clock for escalations and Kanban reads | One fewer moving part; jobs survive restarts and two API processes cannot double-deliver (conditional updates) |
+| Fleet Studio posts messages to channels (§8) | The agent posts to a `deliver_only` Hermes webhook route on loopback, signed with a secret that stays on the host | No inbound port and no channel secret in Fleet Studio |
 | Assurance from Langfuse/OTel traces (§6) | Assurance reads the Hermes session transcript (and the plugin's tool events); Langfuse is reported, not read | The transcript exists on every instance; a missing transcript is Not verifiable, never a guess. Reading Langfuse is still open |
 | Workflows mapped onto Kanban where available (Slice 5) | Two executors: Hermes runs (one run per step, full transcript) and Hermes Kanban (linked tasks per stretch up to the next gate); gates stay in the portal | Kanban does not report tool calls, so Hermes runs remain the default for evidence and for tests |
 | Workflow tests (Slice 3) | A workflow test rehearses the workflow on lab/staging: gates approve themselves (marked automatic), no room opens; it gates production like agent tests | Tests check what agents do; nobody should be asked to decide a test |
@@ -35,8 +35,8 @@ departed from the plan, is recorded here. `CLAUDE.md` has the detail per feature
 
 These were settled in discussion and are not reopened here.
 
-1. **Positioning.** Fleet Control is an independent control plane *around* Hermes Agent. Hermes remains the runtime; Fleet Control never re-implements a Hermes primitive because it can make it prettier. It designs, blueprints, plans, applies, tests, verifies and governs fleets, and gives business users a governed place to consume outcomes and record decisions.
-2. **Name.** Product name is a neutral placeholder, *Fleet Control*, with the descriptor *for Hermes Agent*. "Hermes" is Nous Research's name and is not used as the product brand.
+1. **Positioning.** Fleet Studio is an independent control plane *around* Hermes Agent. Hermes remains the runtime; Fleet Studio never re-implements a Hermes primitive because it can make it prettier. It designs, blueprints, plans, applies, tests, verifies and governs fleets, and gives business users a governed place to consume outcomes and record decisions.
+2. **Name.** Product name is a neutral placeholder, *Fleet Studio*, with the descriptor *for Hermes Agent*. "Hermes" is Nous Research's name and is not used as the product brand.
 3. **Two experiences, one app.** Administrators and architects use the full portal. Internal business users (compliance officers, approvers) sign in with the same identity and get a stripped *Workspace* experience. There is no separate portal and no multi-tenant "client" product in v1.
 4. **Decision Rooms live in the Workspace**, not in the admin portal.
 5. **Messaging is delivery, not decision.** Hermes messaging gateways push decision requests and outputs into Teams, Slack, email and webhooks, always with a link back into the Workspace. Replies in chat are never treated as decisions; a decision is recorded only in the Workspace so the audit trail stays complete.
@@ -49,7 +49,7 @@ These were settled in discussion and are not reopened here.
 
 ### 2.1 One-sentence definition
 
-Fleet Control connects to one or many Hermes Agent instances, turns a business mission into a reviewable, versioned Fleet Blueprint, applies it through a plan, tests and verifies what the agents actually did, detects drift, and gives business users a governed workspace to consume outputs and record decisions.
+Fleet Studio connects to one or many Hermes Agent instances, turns a business mission into a reviewable, versioned Fleet Blueprint, applies it through a plan, tests and verifies what the agents actually did, detects drift, and gives business users a governed workspace to consume outputs and record decisions.
 
 ### 2.2 Audiences and roles
 
@@ -63,11 +63,11 @@ Fleet Control connects to one or many Hermes Agent instances, turns a business m
 
 Five roles, not nine. Sub-permissions are added only when a customer asks.
 
-### 2.3 What Fleet Control owns vs what Hermes owns
+### 2.3 What Fleet Studio owns vs what Hermes owns
 
 Hermes owns: the agent loop, profiles/Bots, skills/toolsets/MCP execution, model providers, sessions and memory, delegation, Kanban, cron, messaging gateways, tool execution, core approvals, its APIs and events.
 
-Fleet Control owns: estate inventory and capability discovery, Fleet Blueprints and desired state, AI-assisted fleet design, plan/diff/apply, drift detection, tests and gates, execution assurance, governance and effective permissions, Decision Rooms and the Workspace, delivery rules for messaging, audit, and the Langfuse/OTel integration (never a replacement for them).
+Fleet Studio owns: estate inventory and capability discovery, Fleet Blueprints and desired state, AI-assisted fleet design, plan/diff/apply, drift detection, tests and gates, execution assurance, governance and effective permissions, Decision Rooms and the Workspace, delivery rules for messaging, audit, and the Langfuse/OTel integration (never a replacement for them).
 
 ---
 
@@ -137,7 +137,7 @@ Explicitly deferred: marketplace, arbitrary workflow engine, custom observabilit
 | **Apply** | Execution record of a plan | snapshot before, per-change result, rollback pointer |
 | **Snapshot** | Live config captured before an apply | used for rollback |
 | **DriftEvent** | Managed field differs from blueprint | resolution: accept / revert / ignore once / exception |
-| **Run** | A Hermes run observed by Fleet Control | linked to agent, instance, trace id |
+| **Run** | A Hermes run observed by Fleet Studio | linked to agent, instance, trace id |
 | **Claim** | A statement extracted from a run's output | subject of assurance |
 | **AssertionResult** | Verdict for a claim against a rule | Evidence found / No evidence / Not verifiable / Policy blocked, with evidence pointers |
 | **DecisionRoom** | Governed question with evidence, findings, options and a recorded decision | belongs to a case; opened by an orchestrator or a person |
@@ -201,7 +201,7 @@ Secrets are references, never values. SOUL text is stored in the blueprint with 
 
 ---
 
-## 5. Hermes integration: the Fleet Control Agent
+## 5. Hermes integration: the Fleet Studio Agent
 
 *Rewritten after the spike (see `spike-addendum-hermes-0.21.2.md`). The earlier "three-tier adapter" is withdrawn.*
 
@@ -215,21 +215,21 @@ Secrets are references, never values. SOUL text is stored in the blueprint with 
 
 ### 5.2 Architecture
 
-A small, signed **Fleet Control Agent** is installed beside every managed Hermes instance. Nothing on the host is exposed inbound; the dashboard stays on loopback.
+A small, signed **Fleet Studio Agent** is installed beside every managed Hermes instance. Nothing on the host is exposed inbound; the dashboard stays on loopback.
 
 | Part | Runs as | Uses | Provides |
 |---|---|---|---|
 | **Hermes plugin `fleetcontrol`** | in-process, `~/.hermes/plugins/fleetcontrol/` | plugin hooks (`pre_tool_call`, `post_tool_call`, `subagent_start`, `subagent_stop`, `on_session_end`, `pre_approval_request`, `post_approval_response`); optional dashboard backend router `/api/plugins/fleetcontrol/*` | real-time evidence with arguments and results for parent and child agents; policy enforcement by blocking a tool call; a versioned read/write contract for managed fields that we own |
-| **Host daemon `fleetctl-agent`** | systemd/launchd/Windows service | outbound mTLS WebSocket to Fleet Control; `hermes` CLI; loopback dashboard API with a session token the daemon sets (`HERMES_DASHBOARD_SESSION_TOKEN`); profile directories | profile create/clone/delete, field writes, config snapshots and restore, drift scans (routes + file hashes of `SOUL.md`/`config.yaml`), test runs via `/v1/runs`, gateway lifecycle, capability report |
+| **Host daemon `fleetctl-agent`** | systemd/launchd/Windows service | outbound mTLS WebSocket to Fleet Studio; `hermes` CLI; loopback dashboard API with a session token the daemon sets (`HERMES_DASHBOARD_SESSION_TOKEN`); profile directories | profile create/clone/delete, field writes, config snapshots and restore, drift scans (routes + file hashes of `SOUL.md`/`config.yaml`), test runs via `/v1/runs`, gateway lifecycle, capability report |
 | **API-only mode** (no install) | — | `/v1` for discovery/runs/sessions; optional `hooks.outbound` and Langfuse configured by the operator | read-only import and after-the-fact evidence; **no writes**; assurance verdicts fall back to "Not verifiable" |
 
-The connect wizard offers both paths: *Install the Fleet Control Agent* (one command, pairing code) and *Connect via API only (read-only)*. The Instances screen shows agent version and last heartbeat.
+The connect wizard offers both paths: *Install the Fleet Studio Agent* (one command, pairing code) and *Connect via API only (read-only)*. The Instances screen shows agent version and last heartbeat.
 
 Plan rows show the method as **Agent** or **API (read-only)**. Which local mechanism the agent uses (CLI, loopback dashboard, plugin router) is internal and chosen per Hermes version by the agent's compatibility table.
 
 Evidence sources, in order of preference: agent hook (real time, full) → session transcript (after the fact, full) → Langfuse trace (after the fact, capture-mode dependent) → outbound webhook (real time, inputs only) → none ("Not verifiable").
 
-Messaging delivery rules are implemented as `deliver_only` inbound webhook routes on the instance, created by the agent; Fleet Control posts HMAC-signed payloads to them. Email delivery is plain text in v1.
+Messaging delivery rules are implemented as `deliver_only` inbound webhook routes on the instance, created by the agent; Fleet Studio posts HMAC-signed payloads to them. Email delivery is plain text in v1.
 
 ### 5.3 Upstream tracking
 
@@ -239,7 +239,7 @@ Budget roughly half an engineer permanently for Hermes compatibility. Pin the pl
 
 ## 6. Assurance pipeline
 
-1. **Observe**: receive hook events from the Fleet Control Agent for managed profiles; for API-only instances, poll run status and read session transcripts after completion; optionally fetch the Langfuse trace.
+1. **Observe**: receive hook events from the Fleet Studio Agent for managed profiles; for API-only instances, poll run status and read session transcripts after completion; optionally fetch the Langfuse trace.
 2. **Extract claims**: rule-based first (regex/structured output contracts); an LLM extractor only for free-text outputs, and only in v2.
 3. **Check** against rules attached to agents and workflows: required tool called; forbidden tool not called; expected artifact exists (checked in the artifact store the workflow declares); output matches contract; policy constraints (approval present before external action; redacted-input-only for cloud models).
 4. **Verdict**: Evidence found / No evidence / Not verifiable (inputs missing, e.g. no trace on that instance) / Policy blocked.
@@ -252,7 +252,7 @@ What this is not: it does not prove correctness of content, and the product copy
 ## 7. Governance model
 
 - **Effective access = person ∩ agent ∩ downstream system.** The Access screen's inspector evaluates all three and shows which one denied.
-- Agents carry their own permissions in the blueprint (content zones, MCPs, external actions). People carry roles. Downstream systems (SAS Viya, core banking) keep their own auth; Fleet Control never bypasses it and only records what the agent was allowed to call.
+- Agents carry their own permissions in the blueprint (content zones, MCPs, external actions). People carry roles. Downstream systems (SAS Viya, core banking) keep their own auth; Fleet Studio never bypasses it and only records what the agent was allowed to call.
 - Production applies require the number of approvals set on the target (default 2). Staging and lab require none.
 - Every plan, apply, approval, decision, access change, drift event and delivery is an audit event. Export is CSV in v1.
 
@@ -275,7 +275,7 @@ Each slice is shippable and demoable on its own. Sizes assume a team of three to
 Remaining: capture real request/response pairs for the six dashboard routes the agent uses, on a host with Hermes installed (half a day).
 
 ### Slice 1 — The thin vertical slice (8–10 weeks)
-**Fleet Control Agent v0**: Hermes plugin with hook capture and `pre_tool_call` policy block; host daemon with outbound connection, pairing, capability report, profile read/write through CLI and loopback dashboard, snapshot/restore, drift scan; one-line installer for Linux and macOS. Then: Sign in (email/password; SSO stub) · Connect an instance (agent or API-only) with capability discovery and the honest "what Fleet Control can do here" panel · Import live profiles into a Blueprint v1 (YAML, Git-friendly) · Fleet Designer as a read-mostly topology with inspector · Agent Studio for managed fields (identity, SOUL, model, skills, MCPs) · Plan (diff) with method and pre-flight · Apply to lab/staging with snapshot and rollback · Drift detection and the four resolutions · Blueprints library and version history · Audit log · Roles (five) and basic RBAC.
+**Fleet Studio Agent v0**: Hermes plugin with hook capture and `pre_tool_call` policy block; host daemon with outbound connection, pairing, capability report, profile read/write through CLI and loopback dashboard, snapshot/restore, drift scan; one-line installer for Linux and macOS. Then: Sign in (email/password; SSO stub) · Connect an instance (agent or API-only) with capability discovery and the honest "what Fleet Studio can do here" panel · Import live profiles into a Blueprint v1 (YAML, Git-friendly) · Fleet Designer as a read-mostly topology with inspector · Agent Studio for managed fields (identity, SOUL, model, skills, MCPs) · Plan (diff) with method and pre-flight · Apply to lab/staging with snapshot and rollback · Drift detection and the four resolutions · Blueprints library and version history · Audit log · Roles (five) and basic RBAC.
 
 Exit criterion: a stranger can connect a Hermes instance, change an agent, see the plan, apply it, break it by hand and watch drift appear, then revert. Nothing else counts as done.
 
@@ -299,12 +299,12 @@ Total to a complete v1: roughly six months with a small team, assuming the spike
 
 Chosen for proximity to Hermes (Python) and for a small team that must move fast without a platform build-out.
 
-- **Backend**: Python 3.12, FastAPI, SQLAlchemy, Pydantic models for the blueprint schema (also used to generate JSON Schema for validation and export). The Fleet Control Agent is a separate Python package (plugin + daemon) installed on Hermes hosts; it shares the blueprint schema package with the API.
+- **Backend**: Python 3.12, FastAPI, SQLAlchemy, Pydantic models for the blueprint schema (also used to generate JSON Schema for validation and export). The Fleet Studio Agent is a separate Python package (plugin + daemon) installed on Hermes hosts; it shares the blueprint schema package with the API.
 - **Workers**: a lightweight task queue (arq or Celery with Redis) for drift polling, test runs, assurance checks and message delivery.
 - **Database**: PostgreSQL. Blueprints stored as YAML text plus a parsed JSONB column; versions immutable. Audit as an append-only table.
 - **Frontend**: React with TypeScript, Vite, Tailwind configured from the client's DESIGN.md tokens, a small in-house component set matching the redesign shell (no heavy UI framework). Topology in Fleet Designer rendered with React Flow in read-mostly mode.
 - **Auth**: OIDC via Authlib; local accounts for v1; SSO in Slice 4 or on first enterprise request.
-- **Observability integration**: Langfuse Python client for trace reads; OpenTelemetry exporter for Fleet Control's own metrics.
+- **Observability integration**: Langfuse Python client for trace reads; OpenTelemetry exporter for Fleet Studio's own metrics.
 - **Packaging**: single Docker Compose stack (api, worker, postgres, redis, web) for v1; Helm chart only when a customer needs it.
 - **Repo**: monorepo (`apps/api`, `apps/web`, `packages/blueprint-schema`, `packages/hermes-adapter`), with a CI job that runs the spike checks against the latest Hermes release nightly.
 
@@ -316,7 +316,7 @@ If the team is stronger in TypeScript than Python, the same architecture works w
 
 | Risk | Mitigation |
 |---|---|
-| No stable write API in Hermes | Fleet Control Agent does writes locally through CLI/loopback dashboard/plugin router; upstream conversation; keep managed-field set small |
+| No stable write API in Hermes | Fleet Studio Agent does writes locally through CLI/loopback dashboard/plugin router; upstream conversation; keep managed-field set small |
 | Plugin breaks on a Hermes release | Version-pinned plugin, nightly compat check, fail-open capture with loud status in the Instances screen |
 | Hermes ships desired-state/drift natively | Structural position: multi-instance, governance, evidence and Workspace are what a runtime vendor is least likely to build; keep the adapter thin so feature overlap is cheap to absorb |
 | Assurance data incomplete on some instances | "Not verifiable" verdict is first-class; per-instance Langfuse enablement from Settings |
@@ -324,7 +324,7 @@ If the team is stronger in TypeScript than Python, the same architecture works w
 | Two audiences dilute focus | Slice order forces the control plane to work before the Workspace exists |
 | Trademark on "Hermes" | Neutral brand; descriptor use only; check with counsel before launch |
 
-Open: which Hermes profile acts as the architect (a Fleet Control-provided profile shipped as a blueprint asset, or the customer's own); how SAR-style documents are produced (Hermes tool vs Fleet Control template); whether decision records need e-signature in the first regulated customer.
+Open: which Hermes profile acts as the architect (a Fleet Studio-provided profile shipped as a blueprint asset, or the customer's own); how SAR-style documents are produced (Hermes tool vs Fleet Studio template); whether decision records need e-signature in the first regulated customer.
 
 ---
 
@@ -339,4 +339,4 @@ Six to eight conversations with people who run more than a handful of agents in 
 1. Run the spike (section 5.2) on a lab Hermes instance; write the addendum.
 2. Confirm the stack (section 10) or the TypeScript variant.
 3. Set up the monorepo, CI with the nightly Hermes compatibility job, and the design tokens package from DESIGN.md.
-4. Start Slice 1 with the Fleet Control Agent v0 and the Instances screen; the first demo is "install the agent, connect, and see what this instance can do".
+4. Start Slice 1 with the Fleet Studio Agent v0 and the Instances screen; the first demo is "install the agent, connect, and see what this instance can do".

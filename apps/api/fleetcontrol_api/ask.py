@@ -1,6 +1,6 @@
 """Ask the fleet (build document §9, Slice 4): a question answered from content the person may see, sources shown.
 
-The bound is enforced here, not asked of the model. Fleet Control chooses the sources itself — files, fleet outputs
+The bound is enforced here, not asked of the model. Fleet Studio chooses the sources itself — files, fleet outputs
 and Decision Rooms — from the zones the person may read AND the orchestrator agent is granted by an applied
 blueprint (``content_zones``), numbers them S1, S2, … and sends only those. The orchestrator must answer from them
 and cite them; citations are checked against what was sent, and an invented one is dropped and said so.
@@ -117,7 +117,7 @@ def instructions(*, asker: str, role: str, sources: list[dict]) -> str:
         f"[{s['id']}] {s['label']} ({s['kind']}, zone {s['zone']}"
         + (f", {s['classification']}" if s.get("classification") else "") + ")\n" + s["excerpt"]
         for s in sources) or "(no sources: nothing this person may see matches the question)"
-    return f"""You answer questions for {asker} ({role}) on behalf of Fleet Control, the control plane of this agent fleet.
+    return f"""You answer questions for {asker} ({role}) on behalf of Fleet Studio, the control plane of this agent fleet.
 
 Answer ONLY from the numbered sources below. They are everything this person is allowed to see that matches the
 question. Do not use tools, memory, or anything else you know. If the sources do not answer the question, say so
@@ -258,12 +258,12 @@ def orchestrator_blueprint(model: dict, *, zones: list[str], instance_id: str, e
 
     return Blueprint.model_validate({
         "metadata": {"name": ORCHESTRATOR_BLUEPRINT, "version": version, "owner": owner,
-                     "description": "Ask the fleet: one profile that answers questions from the sources Fleet Control sends it. It has no tools."},
+                     "description": "Ask the fleet: one profile that answers questions from the sources Fleet Studio sends it. It has no tools."},
         "requires": {"hermes": ">=0.21", "capabilities": ["runs", "profiles.write"], "agent": "required"},
         "mission": "Answer people's questions from the content they may see, citing every source.",
         "agents": [{
             "id": ORCHESTRATOR_PROFILE,
-            "role": "Fleet Control orchestrator: answers questions from the sources it is given; never acts.",
+            "role": "Fleet Studio orchestrator: answers questions from the sources it is given; never acts.",
             "model": {"provider": model["provider"], "name": model["name"]},
             "soul": {
                 "objective": "Answer the question from the numbered sources in the instructions, citing each one used.",

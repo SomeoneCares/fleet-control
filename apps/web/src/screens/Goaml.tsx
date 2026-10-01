@@ -18,7 +18,7 @@ export function GoamlScreen() {
   return (
     <>
       <PageHeader crumb="Workspace" title="goAML reports"
-        subtitle={<>Suspicious transaction reports for {settings?.profile?.fiu ?? "the FIU"}, prepared from decided Decision Rooms. Fleet Control
+        subtitle={<>Suspicious transaction reports for {settings?.profile?.fiu ?? "the FIU"}, prepared from decided Decision Rooms. Fleet Studio
           checks each against the FIU's own goAML schema; a person files it in goAML and records the reference here.</>} />
       {gaps.length > 0 && <Banner tone="warning" className="mb-4">Before reports can be checked, an Admin sets {gaps.join(" and ")}.</Banner>}
       {error && <Banner tone="error" className="mb-4">{error}</Banner>}
@@ -206,7 +206,7 @@ export function GoamlSettingsPanel() {
   return (
     <div className="flex flex-col gap-5">
       <p className="m-0 text-text-secondary">
-        goAML is how the bank files suspicious transaction reports with its FIU; in Egypt that is the EMLCU. Fleet Control prepares each report
+        goAML is how the bank files suspicious transaction reports with its FIU; in Egypt that is the EMLCU. Fleet Studio prepares each report
         from a decided Decision Room and checks it against the FIU's own schema. It never files: a person uploads the report in goAML.
       </p>
       <ProfileForm profile={data.profile} canEdit={can("goaml.manage")} onSaved={reload} />

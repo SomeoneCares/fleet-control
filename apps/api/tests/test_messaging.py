@@ -73,12 +73,12 @@ class RenderTest(unittest.TestCase):
     def test_a_channel_that_shows_titles_gets_the_question(self):
         text = render("decision_room.opened", "decision-request", self.CTX, show_titles=True, portal_url="http://p")
         self.assertIn("Alpha Trading", text)
-        self.assertTrue(text.startswith("Fleet Control · Decision needed"))
+        self.assertTrue(text.startswith("Fleet Studio · Decision needed"))
 
     def test_alerts_and_tests_carry_what_happened_and_a_link(self):
         text = render("drift.detected", "alert", {"instance": "lab-01", "detail": "2 fields differ", "link": "/instances/lab-01/drift"},
                       show_titles=False, portal_url="http://p")
-        self.assertEqual(text, "Fleet Control · Drift detected\non lab-01\n2 fields differ\nOpen: http://p/instances/lab-01/drift")
+        self.assertEqual(text, "Fleet Studio · Drift detected\non lab-01\n2 fields differ\nOpen: http://p/instances/lab-01/drift")
         self.assertIn("telegram:ops-on-call", test_text(CH, "a@x", "http://p"))
         self.assertLessEqual(len(render("apply.failed", "alert", {"detail": "x" * 5000}, show_titles=True, portal_url="http://p")), 1000)
 

@@ -184,7 +184,7 @@ function InviteDrawer({ onClose, onInvited }: { onClose: () => void; onInvited: 
             {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </Field>
-        <p className="text-small text-text-secondary">Fleet Control generates a one-time password and shows it to you once. Share it privately.</p>
+        <p className="text-small text-text-secondary">Fleet Studio generates a one-time password and shows it to you once. Share it privately.</p>
         {error && <Banner tone="error">{error}</Banner>}
       </form>
     </Drawer>
@@ -200,7 +200,7 @@ function SecretModal({ secret, onClose }: { secret: Secret; onClose: () => void 
         <Button icon="copy" onClick={() => { void navigator.clipboard.writeText(secret.password); setCopied(true); }}>{copied ? "Copied" : "Copy"}</Button>
       </div>
       <Banner tone="warning" className="mt-4">
-        <span className="flex items-center gap-1"><Icon name="lock" size={14} />Shown once; Fleet Control keeps only a hash. Ask them to change it after signing in.</span>
+        <span className="flex items-center gap-1"><Icon name="lock" size={14} />Shown once; Fleet Studio keeps only a hash. Ask them to change it after signing in.</span>
       </Banner>
     </Modal>
   );

@@ -454,7 +454,7 @@ class McpCopyTest(unittest.TestCase):
 
 
 class MessagingTest(unittest.TestCase):
-    """Fleet Control's channels are deliver_only webhook routes; their secrets stay in the agent's state dir."""
+    """Fleet Studio's channels are deliver_only webhook routes; their secrets stay in the agent's state dir."""
 
     def _jobs(self, routes=None, enabled=True):
         h = FakeHermes()
@@ -479,7 +479,7 @@ class MessagingTest(unittest.TestCase):
         jobs, h = self._jobs()
         out = jobs.dispatch({"kind": "channel_route", "params": {"action": "create", "route": "fc-ops", "platform": "telegram", "chat_id": "-100"}})
         self.assertTrue(out["ok"], out)
-        self.assertNotIn("secret", json.dumps(out))  # the secret never goes back to Fleet Control
+        self.assertNotIn("secret", json.dumps(out))  # the secret never goes back to Fleet Studio
         path = os.path.join(jobs.cfg.state_dir, "route-secrets.json")
         self.assertEqual(json.load(open(path))["fc-ops"], h.created[0][3])
         if os.name != "nt":
@@ -812,10 +812,10 @@ class CapturedDashboardTest(unittest.TestCase):
         # Recorded: POST /api/profiles answers 200 with model_set=false when the provider has no credentials.
         h = CapturedDashboard()
         with self.assertRaises(HermesLocalError) as cm:
-            h.ensure_profile("fleetcontrol-probe", "Fleet Control probe (safe to delete)", "openai", "gpt-4o-mini")
+            h.ensure_profile("fleetcontrol-probe", "Fleet Studio probe (safe to delete)", "openai", "gpt-4o-mini")
         self.assertIn("model not set", str(cm.exception))
         post = [s for s in h.sent if s["method"] == "POST"][0]
-        self.assertEqual(post["body"], {"name": "fleetcontrol-probe", "description": "Fleet Control probe (safe to delete)",
+        self.assertEqual(post["body"], {"name": "fleetcontrol-probe", "description": "Fleet Studio probe (safe to delete)",
                                         "provider": "openai", "model": "gpt-4o-mini"})
 
     def test_import_profiles_job(self):

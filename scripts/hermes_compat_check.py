@@ -2,7 +2,7 @@
 """Hermes compatibility check — run nightly against the newest hermes-agent checkout.
 
 It does NOT need Hermes installed or runnable. It reads the source tree and verifies the
-things the Fleet Control Agent depends on are still there, so an upstream change surfaces as
+things the Fleet Studio Agent depends on are still there, so an upstream change surfaces as
 a failing CI job with a named reason instead of a broken customer install.
 
 Usage: python3 scripts/hermes_compat_check.py /path/to/hermes-agent [--json]

@@ -11,7 +11,7 @@ function Actor({ actor }: { actor: string }) {
     return <span className="flex items-center gap-2 min-w-0"><span className={`${bubble} bg-secondary-tint text-secondary`}><Icon name="bot" size={13} /></span><span className="truncate">{actor.slice(6)} agent</span></span>;
   }
   if (kind === "system") {
-    return <span className="flex items-center gap-2"><span className={`${bubble} bg-primary text-on-primary`}><Icon name="logo" size={12} /></span>Fleet Control</span>;
+    return <span className="flex items-center gap-2"><span className={`${bubble} bg-primary text-on-primary`}><Icon name="logo" size={12} /></span>Fleet Studio</span>;
   }
   const initials = actor.split(/[@.\s]/)[0].slice(0, 2).toUpperCase();
   return <span className="flex items-center gap-2 min-w-0"><span className={`${bubble} bg-tertiary-tint text-tertiary text-[10px] font-bold`}>{initials}</span><span className="truncate">{actor}</span></span>;
@@ -50,7 +50,7 @@ export function AuditScreen() {
             <input className={`${INPUT} max-w-[280px]`} placeholder="Filter…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Filter entries" />
             <select className={`${INPUT} max-w-[220px]`} value={actor} onChange={(e) => setActor(e.target.value)} aria-label="Actor">
               <option value="all">Actor: All</option>
-              {actors.map((a) => <option key={a} value={a}>{actorKind(a) === "agent" ? `${a.slice(6)} agent` : a === "fleetcontrol" ? "Fleet Control" : a}</option>)}
+              {actors.map((a) => <option key={a} value={a}>{actorKind(a) === "agent" ? `${a.slice(6)} agent` : a === "fleetcontrol" ? "Fleet Studio" : a}</option>)}
             </select>
             <select className={`${INPUT} max-w-[180px]`} value={type} onChange={(e) => setType(e.target.value)} aria-label="Type">
               <option value="all">Type: All</option>

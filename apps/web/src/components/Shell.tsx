@@ -102,11 +102,12 @@ export function Shell() {
     <div className="min-h-screen flex flex-col">
       <header className="h-14 shrink-0 flex items-center gap-4 px-5 bg-white border-b border-hairline">
         <div className="flex items-center gap-2.5 w-sidebar">
-          <span className="size-8 rounded-control bg-primary text-on-primary flex items-center justify-center"><Icon name="logo" size={18} /></span>
+          <img src="/fleet-studio-mark.svg" alt="" className="h-8 w-auto" />
           <div className="leading-tight">
-            <div className="text-[14px] font-bold">Fleet Control</div>
+            <div className="text-[15px] font-bold text-[#102A43]">Fleet Studio</div>
             <div className="text-[11px] text-text-secondary truncate max-w-[180px]">
-              {me.workspace_name && me.workspace_name !== "Fleet Control" ? me.workspace_name : "for Hermes Agent"}
+              {/* the workspace's own name once an Admin sets one; the product's former name counts as unset */}
+              {me.workspace_name && !["Fleet Studio", "Fleet Control"].includes(me.workspace_name) ? me.workspace_name : "by Verto Wave"}
             </div>
           </div>
         </div>

@@ -12,7 +12,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-# How long before an OAuth login runs out Fleet Control starts saying so. Renewing one needs a person in a browser
+# How long before an OAuth login runs out Fleet Studio starts saying so. Renewing one needs a person in a browser
 # on the host, so a warning has to come while there is still time to arrange that.
 LOGIN_WARN_SECONDS = 3 * 24 * 3600
 
@@ -224,7 +224,7 @@ def merge_discovery(previous: dict[str, dict], result: dict[str, list], at: floa
 def mcp_config(name: str, *, url: Optional[str] = None, command: Optional[str] = None, args: Optional[list[str]] = None,
                auth: Optional[str] = None) -> dict[str, Any]:
     """The body the agent sends to Hermes to add a server. Credentials are never part of it: they are added on
-    the instance, so no secret passes through (or is stored by) Fleet Control."""
+    the instance, so no secret passes through (or is stored by) Fleet Studio."""
     if bool(url) == bool(command):
         raise ValueError("give either a url (remote server) or a command (stdio server), not both")
     config: dict[str, Any] = {"name": name}

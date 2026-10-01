@@ -286,7 +286,7 @@ function ConfigModal({ doc, onClose, onSaved }: { doc: AskConfigDoc; onClose: ()
   );
 }
 
-// No profile fits? Fleet Control can write one: a tool-less fc-orchestrator granted the zones chosen here, as a
+// No profile fits? Fleet Studio can write one: a tool-less fc-orchestrator granted the zones chosen here, as a
 // blueprint draft to plan and apply like any other (the same way the Fleet Architect's profile is made).
 function AssetSection({ instance }: { instance: string }) {
   const { data: zones } = useLoad(api.contentZones, []);

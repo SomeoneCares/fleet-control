@@ -143,7 +143,7 @@ function Preflight({ plan }: { plan: Plan }) {
         <Chip tone={tone}>{label}</Chip>
       </div>
       <Check icon={plan.can_apply ? "checkCircle" : "xCircle"} tone={plan.can_apply ? "success" : "error"} title="Write path"
-        detail={plan.can_apply ? `Fleet Control Agent on ${plan.target_instance}` : plan.blocked_reason ?? "Cannot apply"} />
+        detail={plan.can_apply ? `Fleet Studio Agent on ${plan.target_instance}` : plan.blocked_reason ?? "Cannot apply"} />
       <Check icon={plan.approvals.length >= plan.approvals_required ? "checkCircle" : "clock"}
         tone={plan.approvals.length >= plan.approvals_required ? "success" : "warning"} title="Approvals"
         detail={plan.approvals_required ? `${plan.approvals.length} of ${plan.approvals_required} for ${ENV_LABEL[plan.environment].toLowerCase()}${plan.approvals.length ? ` (${plan.approvals.join(", ")})` : ""}` : `Not needed for ${ENV_LABEL[plan.environment].toLowerCase()}`} />

@@ -239,7 +239,7 @@ function GeneralPanel() {
   const v = form.values;
   return (
     <>
-      <PanelHead title="General" subtitle="Applies to everyone who signs in to this Fleet Control." />
+      <PanelHead title="General" subtitle="Applies to everyone who signs in to this Fleet Studio." />
       <Row label="Workspace name" hint="Shown under the product name in the top bar.">
         <input className={INPUT} aria-label="Workspace name" maxLength={80} value={v.workspace_name} disabled={locked}
           onChange={(e) => form.set("workspace_name", e.target.value)} />
@@ -255,7 +255,7 @@ function GeneralPanel() {
           Messaging on
         </label>
       </Row>
-      <Row label="Portal address" hint="Where links in messages point (Messaging): the address people open Fleet Control at.">
+      <Row label="Portal address" hint="Where links in messages point (Messaging): the address people open Fleet Studio at.">
         <input className={INPUT} aria-label="Portal address" maxLength={200} value={v.portal_url} disabled={locked}
           placeholder="https://fleetcontrol.example.com" onChange={(e) => form.set("portal_url", e.target.value)} />
       </Row>
@@ -329,10 +329,10 @@ function TokensPanel() {
 
   return (
     <>
-      <PanelHead title="API tokens" subtitle="For scripts and CI calling the Fleet Control API. A token acts as you, with your role, and never more." />
+      <PanelHead title="API tokens" subtitle="For scripts and CI calling the Fleet Studio API. A token acts as you, with your role, and never more." />
       <div className="px-5 py-4 border-b border-hairline flex items-center gap-4">
         <p className="m-0 flex-1 text-small text-text-secondary">
-          Send it as <Mono>Authorization: Bearer fct_…</Mono>. Tokens cannot create tokens or change your password; Fleet Control keeps only a hash.
+          Send it as <Mono>Authorization: Bearer fct_…</Mono>. Tokens cannot create tokens or change your password; Fleet Studio keeps only a hash.
         </p>
         <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>New token</Button>
       </div>
@@ -415,7 +415,7 @@ function NewTokenModal({ maxDays, onClose, onCreated }: { maxDays: number; onClo
 function TokenSecretModal({ name, secret, onClose }: { name: string; secret: string; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
   return (
-    <Modal title={`Token “${name}” created`} subtitle="Copy it now: Fleet Control keeps only a hash and cannot show it again." onClose={onClose}
+    <Modal title={`Token “${name}” created`} subtitle="Copy it now: Fleet Studio keeps only a hash and cannot show it again." onClose={onClose}
       footer={<Button variant="primary" onClick={onClose}>Done</Button>}>
       <div className="flex items-center gap-2">
         <code className="flex-1 font-mono text-[13px] px-3 py-2.5 rounded-control bg-container-low border border-hairline select-all break-all">{secret}</code>
@@ -437,10 +437,10 @@ function ObservabilityPanel() {
     <>
       <PanelHead title="Observability" subtitle="Where the evidence behind Assurance verdicts comes from, instance by instance." />
       <div className="px-5 py-4 border-b border-hairline text-[13px] leading-5 text-text-secondary">
-        Fleet Control reads each run's tool calls from the Hermes session transcript, so Assurance works on any instance with a paired
+        Fleet Studio reads each run's tool calls from the Hermes session transcript, so Assurance works on any instance with a paired
         agent. Two plugins add more: the <Mono>fleetcontrol</Mono> plugin gives real-time evidence and can block a tool call
         (<strong className="text-text">Policy blocked</strong>), and Hermes's Langfuse plugin adds traces. Both are turned on
-        <em> on the instance</em>; Fleet Control never enables one behind your back.
+        <em> on the instance</em>; Fleet Studio never enables one behind your back.
       </div>
       {instances.length === 0 && <p className="m-0 px-5 py-6 text-[13px] text-text-secondary">No instance connected yet.</p>}
       {instances.map((i) => {
@@ -454,7 +454,7 @@ function ObservabilityPanel() {
               <Chip tone={paired ? "success" : "neutral"}>{paired ? "Session transcript" : "No evidence source"}</Chip>
             </div>
             <div className="text-small text-text-secondary flex flex-wrap gap-x-5 gap-y-1">
-              <span>Fleet Control plugin: <strong className="text-text">{plugin}</strong></span>
+              <span>Fleet Studio plugin: <strong className="text-text">{plugin}</strong></span>
               <span>Langfuse: <strong className="text-text">{langfuse}</strong></span>
             </div>
             {plugin === "installed, not enabled" && (
@@ -469,7 +469,7 @@ function ObservabilityPanel() {
       })}
       <div className="px-5 py-3 bg-surface text-small text-text-secondary">
         Langfuse also needs its Python package and keys on the instance (<Mono>HERMES_LANGFUSE_PUBLIC_KEY</Mono> and
-        <Mono>HERMES_LANGFUSE_SECRET_KEY</Mono>), which stay there: Fleet Control never holds them.
+        <Mono>HERMES_LANGFUSE_SECRET_KEY</Mono>), which stay there: Fleet Studio never holds them.
       </div>
     </>
   );

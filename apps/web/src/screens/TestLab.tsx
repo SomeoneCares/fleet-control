@@ -66,7 +66,7 @@ export function TestLabScreen() {
         )}
         {can("tests.run") && (
           <Button icon="flask" disabled={!suite?.tests.length || !runOn || busy} onClick={() => void run()}
-            title={runOn ? undefined : "Connect a lab or staging instance with a Fleet Control Agent"}>
+            title={runOn ? undefined : "Connect a lab or staging instance with a Fleet Studio Agent"}>
             {busy && <Spinner />}Run suite
           </Button>
         )}
@@ -80,7 +80,7 @@ export function TestLabScreen() {
     <>
       {header}
       {msg && <Banner tone={msg.tone} className="mb-4">{msg.text}</Banner>}
-      {!runOn && <Banner tone="warning" className="mb-4">No lab or staging instance with a paired Fleet Control Agent: tests cannot run until one is connected.</Banner>}
+      {!runOn && <Banner tone="warning" className="mb-4">No lab or staging instance with a paired Fleet Studio Agent: tests cannot run until one is connected.</Banner>}
 
       <div className="grid grid-cols-3 gap-4 mb-5">
         <KpiTile label="Last run" value={summary.ran ? `${summary.passed}` : "—"} unit={summary.ran ? `of ${summary.ran} passed` : undefined}

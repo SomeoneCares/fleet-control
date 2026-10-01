@@ -109,7 +109,7 @@ export function DriftModal({ instanceId, onClose }: { instanceId: string; onClos
   return (
     <Modal width={720} icon={warnIcon} onClose={onClose}
       title={<>{instanceId} has drifted from {report.blueprint} v{report.version}</>}
-      subtitle={`Detected ${timeAgo(report.at)} · ${rows.length} field${rows.length === 1 ? "" : "s"} changed outside Fleet Control`}
+      subtitle={`Detected ${timeAgo(report.at)} · ${rows.length} field${rows.length === 1 ? "" : "s"} changed outside Fleet Studio`}
       footer={<>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="primary" onClick={() => void confirm()} disabled={!action || busy || chosen.length === 0 || (action === "accept" && hasMissing)}>
@@ -143,7 +143,7 @@ export function DriftModal({ instanceId, onClose }: { instanceId: string; onClos
         ))}
       </div>
 
-      <Label className="mb-2">How should Fleet Control resolve this?</Label>
+      <Label className="mb-2">How should Fleet Studio resolve this?</Label>
       <div className="flex flex-col gap-2">
         {options.map((o) => (
           <label key={o.action} title={o.disabled}

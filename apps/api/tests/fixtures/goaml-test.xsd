@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  A small goAML-shaped schema for Fleet Control's tests. It is NOT EMLCU's schema (or any FIU's): it follows the
+  A small goAML-shaped schema for Fleet Studio's tests. It is NOT EMLCU's schema (or any FIU's): it follows the
   UNODC goAML v4 element order for the parts the tests build, with short code lists and one XSD 1.1 assert, so the
   tests exercise what a real FIU schema does (order, required fields, code lists, business rules).
 -->

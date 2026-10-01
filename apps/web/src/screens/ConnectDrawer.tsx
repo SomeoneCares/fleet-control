@@ -9,7 +9,7 @@ const ID_PATTERN = /^[a-z0-9][a-z0-9.-]{1,62}$/;
 const PATHS: { mode: InstanceMode; title: string; body: string }[] = [
   {
     mode: "agent",
-    title: "Install the Fleet Control Agent",
+    title: "Install the Fleet Studio Agent",
     body: "One command on the Hermes host. Reads and writes profiles, captures tool evidence in real time, enforces policies. Nothing is exposed inbound.",
   },
   {
@@ -62,7 +62,7 @@ export function ConnectDrawer({ onClose, onCreated }: { onClose: () => void; onC
         {created.mode === "agent" ? (
           <>
             <Label className="mb-2">1 · Run on the Hermes host</Label>
-            <p className="mt-0 mb-2 text-text-secondary">As the user that runs Hermes. Replace <Mono>&lt;this server&gt;</Mono> with this Fleet Control's address.</p>
+            <p className="mt-0 mb-2 text-text-secondary">As the user that runs Hermes. Replace <Mono>&lt;this server&gt;</Mono> with this Fleet Studio's address.</p>
             <pre className="m-0 p-3 rounded-control bg-container-low border border-hairline font-mono text-[12px] whitespace-pre-wrap break-all">{created.install_command}</pre>
             <div className="flex items-center gap-3 mt-2 mb-1">
               <Button icon="copy" onClick={() => void copy(created.install_command)}>{copied ? "Copied" : "Copy command"}</Button>
@@ -75,7 +75,7 @@ export function ConnectDrawer({ onClose, onCreated }: { onClose: () => void; onC
                 <Banner tone="success" className="mb-4">
                   Paired · Hermes {live.hermes_version ?? "version unknown"} · agent {live.agent_version}
                 </Banner>
-                <Label className="mb-2">What Fleet Control can do here</Label>
+                <Label className="mb-2">What Fleet Studio can do here</Label>
                 <div className="border border-hairline rounded-control divide-y divide-hairline">
                   {capabilityRows(live).map((r) => (
                     <div key={r.label} className="flex justify-between gap-3 px-3 py-2.5">
@@ -108,7 +108,7 @@ export function ConnectDrawer({ onClose, onCreated }: { onClose: () => void; onC
         </Button>
       </>}>
       <form id="connect-form" onSubmit={(e) => void submit(e)}>
-        <Label className="mb-2">How should Fleet Control connect?</Label>
+        <Label className="mb-2">How should Fleet Studio connect?</Label>
         <div className="flex flex-col gap-2 mb-5">
           {PATHS.map((p) => (
             <label key={p.mode} className={`flex gap-3 p-3 rounded-control border cursor-pointer ${mode === p.mode ? "border-primary bg-container-low" : "border-border"}`}>

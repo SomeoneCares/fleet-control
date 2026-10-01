@@ -1,6 +1,6 @@
 # apps/web
 
-React + TypeScript (Vite, Tailwind v4) client for Fleet Control: the admin portal and the business-user Workspace in
+React + TypeScript (Vite, Tailwind v4) client for Fleet Studio: the admin portal and the business-user Workspace in
 one app. What a person sees follows their role: Admins, Fleet Architects and Operators get the admin portal;
 Approvers and Viewers land on the Workspace. Buttons follow the role, and a missing one says why.
 

@@ -25,7 +25,7 @@ export function InstancesScreen() {
   const current = list.find((i) => i.id === (selected ?? driftFor)) ?? shown[0] ?? null;
 
   const header = (
-    <PageHeader crumb="Estate" title="Instances" subtitle="Hermes installations Fleet Control can read from and apply blueprints to."
+    <PageHeader crumb="Estate" title="Instances" subtitle="Hermes installations Fleet Studio can read from and apply blueprints to."
       actions={<>
         <Button icon="refresh" onClick={() => void reload()}>Re-check all</Button>
         {can("instances.connect") && <Button variant="primary" icon="plus" onClick={() => setConnecting(true)}>Connect instance</Button>}
@@ -37,7 +37,7 @@ export function InstancesScreen() {
   </>;
 
   if (loading && !instances) return <>{header}<div className="flex gap-2 items-center text-text-secondary"><Spinner /> Loading instances…</div></>;
-  if (error && !instances) return <>{header}<Banner tone="error">Cannot reach the Fleet Control API: {error}. Is it running on port 8080?</Banner></>;
+  if (error && !instances) return <>{header}<Banner tone="error">Cannot reach the Fleet Studio API: {error}. Is it running on port 8080?</Banner></>;
 
   if (list.length === 0) {
     return (
@@ -46,12 +46,12 @@ export function InstancesScreen() {
         <Card className="max-w-[680px] mx-auto mt-10 px-10 py-12 text-center">
           <div className="mx-auto mb-5 size-14 rounded-card bg-primary-tint text-primary flex items-center justify-center"><Icon name="server" size={26} /></div>
           <h2 className="text-section m-0">No Hermes instances connected yet</h2>
-          <p className="text-text-secondary mt-2 mb-6">Point Fleet Control at a running Hermes Agent and it will read what is already there before you change anything.</p>
+          <p className="text-text-secondary mt-2 mb-6">Point Fleet Studio at a running Hermes Agent and it will read what is already there before you change anything.</p>
           {can("instances.connect")
             ? <Button variant="primary" icon="plus" onClick={() => setConnecting(true)}>Connect instance</Button>
             : <p className="m-0 text-small text-text-secondary">Ask an Admin to connect one.</p>}
           <ol className="grid grid-cols-3 gap-4 text-left list-none p-0 mt-9 pt-6 border-t border-hairline">
-            {["Install the Fleet Control Agent on the Hermes host", "Fleet Control discovers profiles, skills and MCPs", "Import what is running, or apply a blueprint"].map((s, n) => (
+            {["Install the Fleet Studio Agent on the Hermes host", "Fleet Studio discovers profiles, skills and MCPs", "Import what is running, or apply a blueprint"].map((s, n) => (
               <li key={s} className="flex gap-2.5 text-small text-text-secondary">
                 <span className="size-5 shrink-0 rounded-full bg-primary-tint text-primary text-[11px] font-bold flex items-center justify-center">{n + 1}</span>{s}
               </li>
@@ -80,7 +80,7 @@ export function InstancesScreen() {
         <KpiTile label="Profiles imported" value={profiles} unit="live profiles"
           note={profiles ? `across ${list.filter((i) => i.live_profile_count).length} instance(s)` : "Run an import to read live profiles"} />
         <KpiTile label="Drift from blueprint" value={drifting.length} unit={drifting.length === 1 ? "instance" : "instances"}
-          note={drifting.length ? `Changed outside Fleet Control · ${drifting.map((i) => i.id).join(", ")}` : "Nothing changed outside Fleet Control"}
+          note={drifting.length ? `Changed outside Fleet Studio · ${drifting.map((i) => i.id).join(", ")}` : "Nothing changed outside Fleet Studio"}
           tone={drifting.length ? "warning" : "success"} />
         <KpiTile label="Hermes versions" value={versions.length} unit="in use"
           note={versions.length ? versions.map(([v, n]) => `${v} (×${n})`).join(", ") : "Reported once an agent pairs"} />
@@ -167,7 +167,7 @@ function InstanceRail({ inst, now, onChanged }: { inst: Instance; now: number; o
         <Chip tone={status.tone}>{status.label}</Chip>
       </div>
 
-      <Label className="mt-5 mb-2">What Fleet Control can do here</Label>
+      <Label className="mt-5 mb-2">What Fleet Studio can do here</Label>
       <div className="border border-hairline rounded-control divide-y divide-hairline">
         {rows.map((r) => (
           <div key={r.label} className="flex justify-between gap-3 px-3 py-2.5 text-[13px]">
@@ -196,7 +196,7 @@ function InstanceRail({ inst, now, onChanged }: { inst: Instance; now: number; o
             Review drift ({inst.open_drift} field{inst.open_drift === 1 ? "" : "s"})
           </Button>
         )}
-        {can("instances.operate") && <Button icon="download" disabled={!agentReady || busy !== null} title={agentReady ? undefined : "Needs a paired Fleet Control Agent"}
+        {can("instances.operate") && <Button icon="download" disabled={!agentReady || busy !== null} title={agentReady ? undefined : "Needs a paired Fleet Studio Agent"}
           onClick={() => void run("import", () => api.importProfiles(inst.id), "Import queued. The agent reads live profiles on its next poll.")}>
           {busy === "import" && <Spinner />}Import live profiles
         </Button>}
@@ -229,8 +229,8 @@ function InstanceRail({ inst, now, onChanged }: { inst: Instance; now: number; o
           </p>
           <Button variant="danger" icon="close" disabled={busy !== null} onClick={() => {
             const warning = inst.applied
-              ? `Forget ${inst.id}?\n\nIt has ${inst.applied.name} v${inst.applied.version} applied. Fleet Control stops tracking it and its agent can no longer report.\n\nNothing on the host changes: the Hermes profiles and the agent keep running there. History (audit, plans, test runs) is kept.`
-              : `Forget ${inst.id}?\n\nFleet Control stops tracking it and its agent can no longer report.\n\nNothing on the host changes. History is kept.`;
+              ? `Forget ${inst.id}?\n\nIt has ${inst.applied.name} v${inst.applied.version} applied. Fleet Studio stops tracking it and its agent can no longer report.\n\nNothing on the host changes: the Hermes profiles and the agent keep running there. History (audit, plans, test runs) is kept.`
+              : `Forget ${inst.id}?\n\nFleet Studio stops tracking it and its agent can no longer report.\n\nNothing on the host changes. History is kept.`;
             if (!window.confirm(warning)) return;
             void run("remove", () => api.removeInstance(inst.id), `${inst.id} is no longer tracked. Connect it again to resume.`);
           }}>

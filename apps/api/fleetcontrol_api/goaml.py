@@ -3,12 +3,12 @@
 goAML is UNODC's reporting system; Egypt's FIU (EMLCU) has required suspicious transaction reports through it since
 2022. Every FIU publishes its own XSD: the element names and their order are the UNODC standard (the tables below;
 checked against a published FIU schema), while code lists, required fields and business rules (XSD 1.1 asserts)
-are the FIU's own. So Fleet Control builds the report in the standard order and **the FIU's XSD decides**: the bank
+are the FIU's own. So Fleet Studio builds the report in the standard order and **the FIU's XSD decides**: the bank
 downloads it from its goAML portal and loads it (``validate``); a report is ready to file only when it passes.
 
-Fleet Control never files. A person (the MLRO) prepares the report from a room whose decision is in, is recorded
+Fleet Studio never files. A person (the MLRO) prepares the report from a room whose decision is in, is recorded
 as its reporting person, downloads the XML, uploads it to goAML and records the FIU's reference back. No goAML
-credential ever reaches Fleet Control.
+credential ever reaches Fleet Studio.
 
 The draft an agent writes (``fleetcontrol.goaml-draft/v1``) uses goAML's own element names, so the mapping is
 mechanical and the FIU's error messages name the same fields the agent wrote::

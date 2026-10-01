@@ -103,6 +103,26 @@ class WorkflowsApiTest(unittest.TestCase):
         for a in ("workflow.started", "workflow.gate_sent_back", "workflow.gate_approved", "workflow.room_opened"):
             self.assertIn(a, actions)
 
+    def test_a_room_that_decides_filing_offers_file_or_not_and_only_people_set_that(self):
+        with open(EXAMPLE, encoding="utf-8") as f:
+            text = f.read().replace("name: aml-investigation", f"name: {self.bp}-f")
+        self.assertEqual(self.admin.post("/api/v1/blueprints", json={"yaml": text}).status_code, 201)
+        store.set_blueprint_status(f"{self.bp}-f", 3, "applied")
+        run_id = self.start(blueprint=f"{self.bp}-f").json()["id"]
+        for out in ("brief", "0 matches", "UBO", "memo"):
+            self.answer(out)
+        self.approver.post(f"/api/v1/workflows/runs/{run_id}/gates/3", json={"approve": True})
+        self.answer("SAR draft text")
+        room = self.admin.get(f"/api/v1/rooms/{store.get_workflow_run(run_id)['room_id']}").json()
+        self.assertEqual([o["label"] for o in room["options"]], ["File the report", "Send it back for more work", "Do not file"])
+        self.assertEqual(room["filing_option"], "file-the-report")
+        # an agent opening its own room cannot say which option authorizes filing
+        r = self.admin.post(f"/agent/v1/instances/{self.inst}/rooms", headers=self.agent,
+                            json={"question": "Should we file an STR for Alpha Trading?", "zone": self.zone, "options": ["File", "Do not file"],
+                                  "authorizes_filing": "File"})
+        self.assertEqual(r.status_code, 422)
+        self.assertIn("agent cannot mark", r.json()["detail"])
+
     def test_an_overdue_gate_escalates_on_the_next_heartbeat(self):
         run_id = self.start().json()["id"]
         for out in ("brief", "0 matches", "UBO", "memo"):

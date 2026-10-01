@@ -27,15 +27,22 @@ class GoamlApiTest(unittest.TestCase):
         self.admin.post("/api/v1/content/zones", json={"id": self.zone, "name": "SAR cases", "read_roles": ["approver"]})
         self.addCleanup(lambda: store.delete_zone(self.zone))
         self.assertEqual(self.admin.put("/api/v1/goaml/settings", json=PROFILE).status_code, 200)
-        self.room = self.admin.post("/api/v1/rooms", json={"question": "Should we file an STR for Alpha Trading LLC?", "zone": self.zone,
-                                                           "options": ["File with EMLCU", "Do not file"], "case": "AML-2026-0412"}).json()
+        self.room = self.open_room()
         self.draft = self.admin.post("/api/v1/outputs", json={"zone": self.zone, "name": "str-draft.json", "kind": "structured",
                                                               "text": "Here is the draft:\n```json\n" + json.dumps(DRAFT) + "\n```"}).json()
         self.admin.post(f"/api/v1/rooms/{self.room['id']}/evidence", json={"kind": "output", "ref": self.draft["id"], "label": "STR draft"})
 
-    def decide(self):
-        r = self.approver.post(f"/api/v1/rooms/{self.room['id']}/decide",
-                               json={"option": self.room["options"][0]["id"], "rationale": "Structuring below the threshold, then offshore."})
+    def open_room(self, **extra):
+        body = {"question": "Should we file an STR for Alpha Trading LLC?", "zone": self.zone, "options": ["File with EMLCU", "Do not file"],
+                "case": "AML-2026-0412", "authorizes_filing": "File with EMLCU", **extra}
+        r = self.admin.post("/api/v1/rooms", json={k: v for k, v in body.items() if v is not None})
+        self.assertEqual(r.status_code, 201, r.text)
+        return r.json()
+
+    def decide(self, option=0, room=None, who=None):
+        room = room or self.room
+        r = (who or self.approver).post(f"/api/v1/rooms/{room['id']}/decide",
+                                        json={"option": room["options"][option]["id"], "rationale": "Structuring below the threshold, then offshore."})
         self.assertEqual(r.status_code, 200, r.text)
 
     def prepare(self, client=None):
@@ -63,6 +70,8 @@ class GoamlApiTest(unittest.TestCase):
         self.assertEqual((report["status"], report["errors"], report["problems"]), ("ready", [], []), report)
         self.assertEqual((report["reporter"]["email"], report["schema"]["name"]), (report["prepared_by"], "goaml-test.xsd"))
         self.assertEqual(report["decision"]["option"]["label"], "File with EMLCU")
+        self.assertEqual(report["decision"]["authorization"], "the deciders agreed on “File with EMLCU”")
+        self.assertEqual(report["decision"]["deciders"], [report["prepared_by"]])
         xml = self.approver.get(f"/api/v1/goaml/reports/{report['id']}/xml")
         self.assertEqual((xml.status_code, xml.headers["content-type"].split(";")[0]), (200, "application/xml"))
         self.assertIn(report["entity_reference"], xml.headers["content-disposition"])
@@ -100,6 +109,51 @@ class GoamlApiTest(unittest.TestCase):
         self.load_schema()
         rechecked = self.approver.post(f"/api/v1/goaml/reports/{report['id']}/check").json()
         self.assertEqual(rechecked["status"], "ready")
+
+    def test_only_an_agreed_decision_to_file_authorizes_a_report(self):
+        self.load_schema()
+        self.decide(option=1)  # "Do not file"
+        refused = self.prepare()
+        self.assertEqual(refused.status_code, 409)
+        self.assertIn("“Do not file”, which does not authorize filing", refused.json()["detail"])
+        seen = self.approver.get(f"/api/v1/goaml/rooms/{self.room['id']}").json()
+        self.assertFalse(seen["may_prepare"])
+        self.assertIn("does not authorize filing", seen["why"])
+
+    def test_a_split_decision_authorizes_nothing(self):
+        second = signed_in("approver")
+        me = second.get("/api/v1/auth/me").json()["email"]
+        room = self.open_room(second_approver=me)
+        self.admin.post(f"/api/v1/rooms/{room['id']}/evidence", json={"kind": "output", "ref": self.draft["id"], "label": "STR draft"})
+        self.decide(option=0, room=room)
+        self.decide(option=1, room=room, who=second)
+        r = self.approver.post("/api/v1/goaml/reports", json={"room_id": room["id"], "output_id": self.draft["id"], "reporter": REPORTER})
+        self.assertEqual(r.status_code, 409)
+        self.assertIn("did not agree", r.json()["detail"])
+
+    def test_a_room_without_a_filing_option_authorizes_nothing(self):
+        room = self.open_room(authorizes_filing=None)
+        self.admin.post(f"/api/v1/rooms/{room['id']}/evidence", json={"kind": "output", "ref": self.draft["id"], "label": "STR draft"})
+        self.decide(option=0, room=room)
+        r = self.approver.post("/api/v1/goaml/reports", json={"room_id": room["id"], "output_id": self.draft["id"], "reporter": REPORTER})
+        self.assertEqual(r.status_code, 409)
+        self.assertIn("not opened with an option that authorizes filing", r.json()["detail"])
+        bad = self.admin.post("/api/v1/rooms", json={"question": "Should we file an STR for Beta Ltd?", "zone": self.zone,
+                                                     "options": ["File", "Wait"], "authorizes_filing": "Maybe"})
+        self.assertEqual(bad.status_code, 422)
+
+    def test_a_ready_report_checked_against_an_older_schema_cannot_be_recorded_as_filed(self):
+        self.load_schema()
+        self.decide()
+        report = self.prepare().json()
+        self.assertEqual(report["status"], "ready")
+        newer = self.admin.post("/api/v1/goaml/schema", json={"name": "goaml-test-v2.xsd", "xsd": XSD.replace("STR-TBML", "STR-TF")})
+        self.assertEqual(newer.status_code, 201, newer.text)
+        refused = self.approver.post(f"/api/v1/goaml/reports/{report['id']}/filed", json={"fiu_ref_number": "EMLCU-1"})
+        self.assertEqual(refused.status_code, 409)
+        self.assertIn("older FIU schema", refused.json()["detail"])
+        self.assertEqual(self.approver.post(f"/api/v1/goaml/reports/{report['id']}/check").json()["schema"]["name"], "goaml-test-v2.xsd")
+        self.assertEqual(self.approver.post(f"/api/v1/goaml/reports/{report['id']}/filed", json={"fiu_ref_number": "EMLCU-1"}).status_code, 200)
 
     def test_who_may_do_what(self):
         self.decide()

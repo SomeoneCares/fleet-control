@@ -230,7 +230,8 @@ function DecisionRail({ room, onDecided }: { room: DecisionRoom; onDecided: () =
               <label key={o.id}
                 className={`flex items-center gap-2.5 px-3 py-2.5 rounded-control border cursor-pointer text-[13px] ${option === o.id ? "border-primary bg-primary-tint font-medium" : "border-hairline bg-white"}`}>
                 <input type="radio" name="room-option" className="accent-primary" checked={option === o.id} onChange={() => setOption(o.id)} />
-                {o.label}
+                <span className="flex-1">{o.label}</span>
+                {room.filing_option === o.id && <Chip tone="warning">Authorizes filing</Chip>}
               </label>
             ))}
           </div>
@@ -242,6 +243,11 @@ function DecisionRail({ room, onDecided }: { room: DecisionRoom; onDecided: () =
         </>
       ) : (
         <Banner tone={room.status === "open" ? "info" : "success"}>{room.reason ?? "This room is closed."}</Banner>
+      )}
+      {room.filing_option && (
+        <div className="text-small text-text-secondary">
+          Only an agreed “{room.options.find((o) => o.id === room.filing_option)?.label}” authorizes filing a report with the FIU.
+        </div>
       )}
 
       {/* Whoever is looking — including the person who has just decided — an open room says who it waits for. */}
@@ -363,6 +369,7 @@ function OpenRoomModal({ onClose, onOpened }: { onClose: () => void; onOpened: (
   const [caseId, setCaseId] = useState("");
   const [due, setDue] = useState("");
   const [second, setSecond] = useState("");
+  const [filing, setFiling] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const optionList = options.split("\n").map((o) => o.trim()).filter(Boolean);
@@ -379,6 +386,7 @@ function OpenRoomModal({ onClose, onOpened }: { onClose: () => void; onOpened: (
         case: caseId.trim() || undefined,
         due_at: due ? Date.parse(due + "T17:00:00") / 1000 : undefined,
         second_approver: second.trim() || undefined,
+        authorizes_filing: filing && optionList.includes(filing) ? filing : undefined,
       });
       await onOpened();
       navigate(`/rooms/${room.id}`);
@@ -418,6 +426,12 @@ function OpenRoomModal({ onClose, onOpened }: { onClose: () => void; onOpened: (
         </Field>
         <Field label="Second approver" hint="Optional. The room stays open until this person has decided too.">
           <input className={INPUT} value={second} onChange={(e) => setSecond(e.target.value)} placeholder="marcus.okafor@fleetcontrol.local" />
+        </Field>
+        <Field label="Authorizes filing with the FIU" hint="Optional. Only when every decider chooses this option may a goAML report be prepared. It cannot be changed later.">
+          <select className={INPUT} value={optionList.includes(filing) ? filing : ""} onChange={(e) => setFiling(e.target.value)}>
+            <option value="">No option: this room never authorizes filing</option>
+            {optionList.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
         </Field>
         {error && <Banner tone="error">{error}</Banner>}
       </form>

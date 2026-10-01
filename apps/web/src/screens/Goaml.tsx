@@ -60,8 +60,9 @@ export function GoamlRoomPanel({ roomId, decided }: { roomId: string; decided: b
           <div className="text-small text-text-secondary">For the FIU, from this room's decision. Nothing is sent: a person files it in goAML.</div>
         </div>
         {data.may_prepare ? <Button variant="primary" icon="file" onClick={() => setPreparing(true)}>Prepare goAML report</Button>
-          : data.why && <span className="text-small text-text-secondary">{data.why}</span>}
+          : data.why && <span className="text-small text-text-secondary max-w-[420px] text-right">{data.why}</span>}
       </div>
+      {data.authorization && <div className="text-small text-success">Filing authorized: {data.authorization}.</div>}
       {data.reports.map((r) => (
         <button key={r.id} type="button" onClick={() => setOpen(r.id)}
           className="flex items-center gap-3 px-3 py-2.5 border border-hairline rounded-control text-left text-[13px] hover:bg-container-low cursor-pointer">
@@ -158,7 +159,7 @@ function ReportModal({ id, onClose, onChanged }: { id: string; onClose: () => vo
           {checkedAgainstOlderSchema(r, settings ?? null) && <Banner tone="warning">A newer FIU schema was loaded since this was checked: check it again.</Banner>}
           <div className="grid grid-cols-[160px_minmax(0,1fr)] gap-y-1.5">
             <span className="text-text-secondary">Reporting person</span><span>{r.reporter.first_name} {r.reporter.last_name} ({r.reporter.email})</span>
-            <span className="text-text-secondary">Decision</span><span>{r.decision?.option?.label ?? "—"}{r.decision && r.decision.agreed === false ? " (the deciders disagreed)" : ""}</span>
+            <span className="text-text-secondary">Decision</span><span>{r.decision?.option?.label ?? "—"}{r.decision?.deciders?.length ? ` · decided by ${r.decision.deciders.join(", ")}` : ""}</span>
             <span className="text-text-secondary">From</span><span>{r.output_name}</span>
             <span className="text-text-secondary">Checked against</span><span>{r.schema ? <>{r.schema.name} <Mono className="text-[11px]">{r.schema.sha256.slice(0, 12)}</Mono></> : "no FIU schema loaded"} · {formatDateTime(r.checked_at)}</span>
             {r.filed && <><span className="text-text-secondary">Filed</span><span>by {r.filed.by}, {formatDateTime(r.filed.at)} · FIU ref <Mono>{r.filed.fiu_ref_number}</Mono>{r.filed.note ? ` · ${r.filed.note}` : ""}</span></>}

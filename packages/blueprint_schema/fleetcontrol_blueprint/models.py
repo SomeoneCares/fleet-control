@@ -232,6 +232,9 @@ class HumanGate(_Strict):
 class OpenDecisionRoom(_Strict):
     open_decision_room: bool = True
     question_template: Optional[str] = None
+    # The room decides whether to file a report with the FIU: its options become "File the report", "Send it back for
+    # more work" and "Do not file", and only an agreed "File the report" authorizes preparing a goAML report.
+    authorizes_filing: bool = False
 
 
 WorkflowStep = Union[AgentStep, ParallelStep, HumanGate, OpenDecisionRoom]

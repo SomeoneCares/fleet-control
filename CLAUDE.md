@@ -221,8 +221,10 @@ Hermes stays the runtime; we never re-implement its primitives. Product name is 
   room panel and Settings → goAML (`docs/goaml.md`). A decided room's `fleetcontrol.goaml-draft/v1` draft (goAML's own
   element names) becomes the XML in the UNODC order (checked against a published FIU XSD); **the FIU's own XSD, loaded
   by an Admin, decides** (`xmlschema`, XSD 1.1 so asserts count). Admins/Approvers prepare (named as reporting person),
-  download, re-check, and record the FIU reference after a person files in goAML; only a report that passed can be
-  recorded as filed. Never files, holds no goAML credential. EMLCU's real XSD is not public: load the bank's copy and
+  download, re-check, and record the FIU reference after a person files in goAML. A report is prepared only when the
+  room authorizes filing (`rooms.filing_authorized`: the room named its filing option when it opened, people or an
+  applied blueprint's `authorizes_filing: true` set it, never an agent, and every decider chose it), and recorded as
+  filed only if it passed the schema loaded now (an older pass must be checked again). Never files, holds no goAML credential. EMLCU's real XSD is not public: load the bank's copy and
   run an acceptance case before calling a bank "EMLCU-ready". Customer guide: `~/Documents/Fleet Control - Product
   Overview and Deployment Guide (goAML Egypt).docx`.
 - PLAN (Basem, 2026-09-16): complete the whole portal before Docker, every screen working end to end (real backend,

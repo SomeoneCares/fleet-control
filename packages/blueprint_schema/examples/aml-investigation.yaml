@@ -106,7 +106,7 @@ workflows:
       - { agent: challenger, artifact: challenge-memo.md }
       - { human_gate: approver, timeout: 24h, escalate_to: mlro, on_reject: challenger }
       - { agent: sar-drafter, artifact: sar-draft.docx }
-      - { open_decision_room: true, question_template: "Should we file a SAR for {counterparty}?" }
+      - { open_decision_room: true, authorizes_filing: true, question_template: "Should we file a SAR for {counterparty}?" }
     tests: [workflow-smoke]
 
 tests:

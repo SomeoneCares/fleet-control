@@ -47,7 +47,9 @@ def option_id(label: str) -> str:
 
 def new_room(*, room_id: str, question: str, zone: str, options: list[str], opened_by: str, opened_by_kind: str, at: float,
              case: Optional[str] = None, due_at: Optional[float] = None, second_approver: Optional[str] = None,
-             instance_id: Optional[str] = None) -> dict:
+             instance_id: Optional[str] = None, authorizes_filing: Optional[str] = None) -> dict:
+    """``authorizes_filing`` names the one option (by its label) that authorizes filing a report with the FIU. It is
+    fixed when the room opens: a decision is only an authorization when everyone who decided chose that option."""
     question = (question or "").strip()
     if not (10 <= len(question) <= 300):
         raise RoomError("a question is between 10 and 300 characters")
@@ -59,6 +61,12 @@ def new_room(*, room_id: str, question: str, zone: str, options: list[str], open
         raise RoomError("two options are too alike to tell apart")
     if opened_by_kind not in ("person", "agent"):
         raise RoomError("a room is opened by a person or an agent")
+    filing_option = None
+    if authorizes_filing is not None:
+        wanted = (authorizes_filing or "").strip().lower()
+        filing_option = next((i for i, label in zip(ids, labels) if wanted in (label.lower(), i)), None)
+        if not filing_option:
+            raise RoomError("the option that authorizes filing must be one of the room's options")
     return {
         "id": room_id,
         "question": question,
@@ -66,6 +74,7 @@ def new_room(*, room_id: str, question: str, zone: str, options: list[str], open
         "zone": zone,
         "status": "open",
         "options": [{"id": i, "label": label} for i, label in zip(ids, labels)],
+        "filing_option": filing_option,
         "second_approver": (second_approver or "").strip().lower() or None,
         "opened_by": opened_by,
         "opened_by_kind": opened_by_kind,
@@ -179,6 +188,24 @@ def outcome(room: dict) -> Optional[dict]:
     chosen = {d["option"] for d in room["decisions"]}
     option = next((o for o in room["options"] if o["id"] == room["decisions"][0]["option"]), None)
     return {"option": option, "agreed": len(chosen) == 1, "decisions": len(room["decisions"])}
+
+
+def filing_authorized(room: dict) -> tuple[bool, str]:
+    """Whether this room's decision authorizes filing a report with the FIU, and why (or why not). Only a decided room
+    whose deciders all chose the option it named, when it opened, as the one that authorizes filing."""
+    if room["status"] != "decided":
+        return False, "the room's decision is not in yet"
+    filing = room.get("filing_option")
+    if not filing:
+        return False, "this room was not opened with an option that authorizes filing, so no decision in it does"
+    chosen = {d["option"] for d in room["decisions"]}
+    if len(chosen) != 1:
+        return False, "the deciders did not agree, so the room does not authorize filing"
+    if chosen != {filing}:
+        label = next((o["label"] for o in room["options"] if o["id"] in chosen), "another option")
+        return False, f"the room decided “{label}”, which does not authorize filing"
+    label = next((o["label"] for o in room["options"] if o["id"] == filing), filing)
+    return True, f"the deciders agreed on “{label}”"
 
 
 def waiting_for(room: dict) -> list[str]:

@@ -65,7 +65,7 @@ from .goaml import DRAFT_SCHEMA as GOAML_DRAFT, GoamlError, build_xml as goaml_x
 from .importer import LiveImportError, blueprint_from_live
 from .integrations import aggregate, login_status, mcp_config
 from .outputs import KINDS, OutputError, new_output, output_row, provenance
-from .rooms import RoomError, check_tool, decide, new_evidence, new_finding, new_room, room_row, room_view
+from .rooms import RoomError, check_tool, decide, filing_authorized, new_evidence, new_finding, new_room, room_row, room_view
 from .planner import compute_plan, mcp_sources, to_agent_job
 from .settings import DEFAULTS as SETTING_DEFAULTS
 from .settings import SettingsUpdate, approval_floor, effective as effective_settings
@@ -568,6 +568,8 @@ class RoomCreate(BaseModel):
     case: Optional[str] = None
     due_at: Optional[float] = None
     second_approver: Optional[str] = None
+    authorizes_filing: Optional[str] = Field(None, max_length=120, description=(
+        "The option (its label) whose agreed choice authorizes filing a report with the FIU. Fixed once the room opens."))
 
 
 def _open_room(body: RoomCreate, *, opened_by: str, kind: str, actor: str, instance_id: Optional[str] = None) -> dict:
@@ -579,7 +581,7 @@ def _open_room(body: RoomCreate, *, opened_by: str, kind: str, actor: str, insta
     try:
         room = new_room(room_id="room_" + uuid.uuid4().hex[:10], question=body.question, zone=zone["id"], options=body.options,
                         opened_by=opened_by, opened_by_kind=kind, at=time.time(), case=body.case, due_at=body.due_at,
-                        second_approver=body.second_approver, instance_id=instance_id)
+                        second_approver=body.second_approver, instance_id=instance_id, authorizes_filing=body.authorizes_filing)
     except RoomError as exc:
         raise HTTPException(422, str(exc))
     store.save_room(room)
@@ -1466,6 +1468,7 @@ def test_my_notifications(user: dict = Depends(current_user)) -> dict:
 
 WF_STEP_TIMEOUT = 900  # seconds one agent step may take on the instance
 WF_ROOM_OPTIONS = ["Approve the outcome", "Send it back for more work", "Reject"]
+WF_FILING_OPTIONS = ["File the report", "Send it back for more work", "Do not file"]  # a room that authorizes filing
 
 
 def _wf_agents(parsed: dict) -> dict[str, dict]:
@@ -1669,8 +1672,10 @@ def _wf_open_room(run: dict, index: int) -> None:
     question = question_for(run, step.get("question_template"), {"case": run.get("case") or "this case", "workflow": run["workflow_id"],
                                                                      "input": (run.get("input") or "")[:120]})
     question = question[:300]
+    filing = bool(step.get("authorizes_filing"))
     body = RoomCreate(question=question if len(question) >= 10 else f"Approve the outcome of {run['workflow_id']}?", zone=zone,
-                      options=WF_ROOM_OPTIONS, case=run.get("case"))
+                      options=WF_FILING_OPTIONS if filing else WF_ROOM_OPTIONS, case=run.get("case"),
+                      authorizes_filing=WF_FILING_OPTIONS[0] if filing else None)
     room = _open_room(body, opened_by=f"workflow:{run['workflow_id']}", kind="agent", actor="fleetcontrol", instance_id=run["instance_id"])
     for name, art in run["artifacts"].items():
         if art.get("artifact_id"):
@@ -2013,9 +2018,12 @@ def _goaml_drafts(room: dict) -> list[dict]:
 def goaml_for_room(room_id: str, user: dict = Depends(require("goaml.read"))) -> dict:
     """What a room offers goAML: its drafts, the reports prepared from it, and whether one may be prepared now."""
     room = _room(room_id, user)
-    why = None if room["status"] == "decided" else "a report is prepared once the room's decision is in"
-    return {"room_id": room["id"], "drafts": _goaml_drafts(room), "may_prepare": why is None and allowed(user["role"], "goaml.prepare"),
-            "why": why or (None if allowed(user["role"], "goaml.prepare") else "Admins and Approvers prepare goAML reports"),
+    ok, reason = filing_authorized(room)
+    why = None if ok else f"No report: {reason}."
+    if ok and not allowed(user["role"], "goaml.prepare"):
+        why = "Admins and Approvers prepare goAML reports"
+    return {"room_id": room["id"], "drafts": _goaml_drafts(room), "may_prepare": why is None, "why": why,
+            "authorization": reason if ok else None,
             "reports": [_goaml_row(r) for r in store.list_goaml_reports(room_id=room["id"])]}
 
 
@@ -2048,8 +2056,9 @@ def prepare_goaml_report(body: GoamlPrepare, user: dict = Depends(require("goaml
     """Turn a decided room's goAML draft into the FIU's XML. Nothing is sent: the person downloads it, files it in
     goAML and records the FIU's reference here."""
     room = _room(body.room_id, user)
-    if room["status"] != "decided":
-        raise HTTPException(409, "the room's decision is not in yet: a goAML report is prepared after the people decide")
+    ok, reason = filing_authorized(room)
+    if not ok:
+        raise HTTPException(409, f"this room does not authorize filing: {reason}")
     if body.output_id not in {e.get("ref") for e in room["evidence"] if e.get("kind") == "output"}:
         raise HTTPException(404, "that output is not evidence in this room")
     output = store.get_output(body.output_id)
@@ -2065,7 +2074,8 @@ def prepare_goaml_report(body: GoamlPrepare, user: dict = Depends(require("goaml
     doc = {"id": report_id, "room_id": room["id"], "case": room.get("case"), "zone": room["zone"], "output_id": output["id"],
            "output_name": output["name"], "report_code": draft.get("report_code"), "entity_reference": reference,
            "reporter": reporter, "prepared_by": user["email"], "created_at": time.time(), "xml": xml.decode("utf-8"),
-           "decision": (room_view(room, email=user["email"], role=user["role"]).get("outcome") or {}), "filed": None}
+           "decision": {**(room_view(room, email=user["email"], role=user["role"]).get("outcome") or {}),
+                        "authorization": reason, "deciders": [d["by"] for d in room["decisions"]]}, "filed": None}
     _goaml_check(doc, xml, problems)
     store.save_goaml_report(doc)
     store.record(user["email"], "goaml.prepared", report_id,
@@ -2132,12 +2142,17 @@ def goaml_report_filed(report_id: str, body: GoamlFiled, user: dict = Depends(re
     """Record that a person filed the report in goAML, with the FIU's reference. Only a report that passed the
     FIU's schema can be recorded as filed."""
     _goaml_report(report_id, user)
+    current = store.goaml_schema()
     refused: list[str] = []
 
     def change(d: dict) -> None:
         if d["status"] != "ready":
             refused.append("already recorded as filed" if d["status"] == "filed"
                            else "only a report that passed the FIU's schema is filed; fix it and prepare it again")
+            return
+        if not current or (d.get("schema") or {}).get("sha256") != current["sha256"]:
+            # a newer FIU schema may reject what an older one accepted: only a pass against the schema loaded now counts
+            refused.append("this report was checked against an older FIU schema than the one loaded now: check it again first")
             return
         d.update(status="filed", filed={"by": user["email"], "at": time.time(), "fiu_ref_number": body.fiu_ref_number.strip(),
                                         "note": body.note.strip() or None})
@@ -3482,6 +3497,9 @@ def agent_open_room(instance_id: str, body: RoomCreate, agent_profile: Optional[
     if inst != instance_id:
         raise HTTPException(403)
     who = (agent_profile or "agent").strip()[:120]
+    if body.authorizes_filing:
+        # which decision authorizes a filing is governance: people and applied blueprints set it, never an agent
+        raise HTTPException(422, "an agent cannot mark an option as authorizing filing")
     room = _open_room(body, opened_by=who, kind="agent", actor="agent:" + instance_id, instance_id=instance_id)
     return {"id": room["id"], "status": room["status"], "zone": room["zone"]}
 

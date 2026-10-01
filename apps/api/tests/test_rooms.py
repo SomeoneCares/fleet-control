@@ -17,6 +17,32 @@ def room(**kw):
     return new_room(**base)
 
 
+class FilingAuthorizationTest(unittest.TestCase):
+    """A decision authorizes filing only when everyone who decided chose the option the room named for it."""
+
+    def room(self, **kw):
+        from fleetcontrol_api.rooms import new_room
+        return new_room(room_id="room_f", question="Should we file an STR for Alpha Trading?", zone="z", options=["File", "Do not file"],
+                        opened_by="a@x", opened_by_kind="person", at=1.0, **kw)
+
+    def decided(self, room, *options):
+        room["decisions"] = [{"by": f"p{i}@x", "option": o, "rationale": "r", "at": 2.0} for i, o in enumerate(options)]
+        room["status"] = "decided"
+        return room
+
+    def test_the_four_answers(self):
+        from fleetcontrol_api.rooms import RoomError, filing_authorized
+        self.assertEqual(filing_authorized(self.room(authorizes_filing="File"))[0], False)  # not decided yet
+        self.assertEqual(filing_authorized(self.decided(self.room(authorizes_filing="File"), "file")), (True, "the deciders agreed on “File”"))
+        no, why = filing_authorized(self.decided(self.room(authorizes_filing="File"), "do-not-file"))
+        self.assertFalse(no)
+        self.assertIn("“Do not file”", why)
+        self.assertIn("did not agree", filing_authorized(self.decided(self.room(authorizes_filing="File"), "file", "do-not-file"))[1])
+        self.assertIn("not opened with an option", filing_authorized(self.decided(self.room(), "file"))[1])
+        with self.assertRaises(RoomError):
+            self.room(authorizes_filing="Escalate")
+
+
 class RoomShapeTest(unittest.TestCase):
     def test_a_room_asks_one_question_with_options(self):
         r = room()

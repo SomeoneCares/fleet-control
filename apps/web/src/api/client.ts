@@ -349,6 +349,7 @@ export interface DecisionRoomRow extends RoomBase {
 /** GET /api/v1/rooms/{id}: the same room with its contents. */
 export interface DecisionRoom extends RoomBase {
   options: RoomOption[];
+  filing_option?: string | null;  // the option whose agreed choice authorizes filing a report with the FIU
   evidence: RoomEvidence[];
   findings: RoomFinding[];
   decisions: RoomDecision[];
@@ -869,12 +870,13 @@ export interface GoamlReportRow {
   id: string; room_id: string; case: string | null; zone: string; output_id: string; output_name: string; report_code: string | null;
   entity_reference: string; reporter: { first_name: string; last_name: string; email: string; occupation?: string };
   prepared_by: string; created_at: number; status: GoamlStatus; problems: string[]; errors: string[]; checked_at: number;
-  schema: { name: string; sha256: string } | null; decision: { option?: { id: string; label: string } | null; agreed?: boolean } | null;
+  schema: { name: string; sha256: string } | null;
+  decision: { option?: { id: string; label: string } | null; agreed?: boolean; authorization?: string; deciders?: string[] } | null;
   filed: { by: string; at: number; fiu_ref_number: string; note: string | null } | null;
 }
 export interface GoamlReport extends GoamlReportRow { xml: string }
 export interface GoamlDraftInfo { output_id: string; name: string; produced_by: string | null; report_code: string | null; transactions: number; parties: number; problems: string[] }
-export interface GoamlRoom { room_id: string; drafts: GoamlDraftInfo[]; may_prepare: boolean; why: string | null; reports: GoamlReportRow[] }
+export interface GoamlRoom { room_id: string; drafts: GoamlDraftInfo[]; may_prepare: boolean; why: string | null; authorization: string | null; reports: GoamlReportRow[] }
 export const goamlXmlUrl = (id: string) => `/api/v1/goaml/reports/${encodeURIComponent(id)}/xml`;
 
 export interface PlanRow {
@@ -1074,7 +1076,8 @@ export const api = {
     call<DecisionRoomRow[]>("GET", "/api/v1/rooms", undefined,
       params({ status: q.status, case: q.case, mine: q.mine ? "true" : undefined })),
   room: (id: string) => call<DecisionRoom>("GET", `/api/v1/rooms/${enc(id)}`),
-  openRoom: (body: { question: string; zone: string; options: string[]; case?: string; due_at?: number; second_approver?: string }) =>
+  openRoom: (body: { question: string; zone: string; options: string[]; case?: string; due_at?: number; second_approver?: string;
+                     authorizes_filing?: string }) =>
     call<DecisionRoom>("POST", "/api/v1/rooms", body),
   addEvidence: (id: string, body: { kind: EvidenceKind; label: string; ref?: string; source?: string; verdict?: Verdict; basis?: Basis }) =>
     call<DecisionRoom>("POST", `/api/v1/rooms/${enc(id)}/evidence`, body),

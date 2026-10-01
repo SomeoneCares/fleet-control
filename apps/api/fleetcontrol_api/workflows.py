@@ -56,7 +56,7 @@ def normalize_step(raw: dict, index: int) -> dict:
                 "gate": None, "escalated_at": None, "label": "Approval by " + str(role)}
     if raw.get("open_decision_room"):
         return {**base, "kind": "decision_room", "question_template": raw.get("question_template"),
-                "room_id": None, "label": "Open a Decision Room"}
+                "authorizes_filing": bool(raw.get("authorizes_filing")), "room_id": None, "label": "Open a Decision Room"}
     member = _member(raw)
     return {**base, "kind": "agent", "members": [member], "jobs": {}, "results": {}, "label": member["agent"]}
 
